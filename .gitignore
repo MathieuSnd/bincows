@@ -2,3 +2,4 @@
 img_moint
 *.o
 include_cp
+*.elf
