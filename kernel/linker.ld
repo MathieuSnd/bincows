@@ -3,8 +3,7 @@ ENTRY(_start)
  
 SECTIONS
 {
-    /* We wanna be placed in the higher half, 2MiB above 0 in physical memory. */
-    . = 0xffffffff80200000;
+    . = 0x00100000;
  
     /* We place the .stivalehdr section containing the header in its own section, */
     /* and we use the KEEP directive on it to make sure it doesn't get discarded. */
@@ -13,19 +12,19 @@ SECTIONS
     }
  
     /* Then let's place all the other traditional executable sections afterwards. */
-    .text : {
+    .text : ALIGN(0x1000) {
         *(.text*)
     }
  
-    .rodata : {
+    .rodata : ALIGN(0x1000) {
         *(.rodata*)
     }
  
-    .data : {
+    .data : ALIGN(0x1000) {
         *(.data*)
     }
  
-    .bss : {
+    .bss : ALIGN(0x1000) {
         *(COMMON)
         *(.bss*)
     }

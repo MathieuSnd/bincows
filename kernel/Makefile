@@ -1,42 +1,57 @@
-KERNEL := ../disk_root/boot/kernel.elf
-CC = x86_64-elf-gcc
+KERNEL 		:= ../disk_root/boot/kernel.elf
+CC  		:= x86_64-elf-gcc
+ASM			:= nasm
+ASM_FLAGS 	:= -felf64
  
 CFLAGS = -Wall -Wextra -O2 -pipe
  
 INTERNALLDFLAGS :=     \
-	-fno-pic -fpie \
-	-Wl,-static,-pie,--no-dynamic-linker,-ztext \
-	-static-pie    \
+	-fno-pic  \
+	-Wl,-static,--no-dynamic-linker,-ztext \
+	-znocombreloc    \
 	-nostdlib      \
 	-Tlinker.ld    \
 	-z max-page-size=0x1000
  
+
 INTERNALCFLAGS  :=           \
+	-znocombreloc \
 	-I/opt/cross/include/ \
 	-H \
 	-std=gnu11           \
 	-ffreestanding       \
 	-fno-stack-protector \
-	-fno-pic -fpie       \
+	-fno-pic             \
 	-mno-80387           \
 	-mno-mmx             \
 	-mno-3dnow           \
 	-mno-sse             \
 	-mno-sse2            \
-	-mno-red-zone
+	-mno-red-zone \
+	-m64
  
 CFILES := $(shell find ./ -type f -name '*.c')
-OBJ    := $(CFILES:.c=.o)
- 
+SFILES := $(shell find ./ -type f -name '*.s')
+OBJ    :=  $(SFILES:.s=.s.o) $(CFILES:.c=.c.o) charmap.bmp.o
 .PHONY: all clean
  
 all: $(KERNEL)
+
+
  
 $(KERNEL): $(OBJ)
+	echo $(OBJ)
 	$(CC) $(INTERNALLDFLAGS) $(OBJ) -o $@
  
-%.o: %.c
+%.bmp.o: ../resources/bmp/%.bmp
+	$(LD) -r -b binary -o $@ $<
+
+%.c.o: %.c
 	$(CC) $(CFLAGS) $(INTERNALCFLAGS) -c $< -o $@
+
+%.s.o: %.s
+	echo "$(ASM) $(ASM_FLAGS) $< -o $@"
+	$(ASM) $(ASM_FLAGS) $< -o $@
  
 clean:
 	rm -rf $(KERNEL) $(OBJ)

@@ -1,5 +1,5 @@
 
-.PHONY: clean all disk kernel force_look
+.PHONY: clean all disk kernel force_look threaded_build
 
 HDD_ROOT := disc_root 
 HDD_FILE := disk.hdd
@@ -8,6 +8,8 @@ USED_LOOPBACK := /dev/loop6
 
 all: disk
 
+threaded_build:
+	make -j all
 
 disk: kernel
 	dd if=/dev/zero bs=1M count=0 seek=64 of=$(HDD_FILE)

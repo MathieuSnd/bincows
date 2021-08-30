@@ -1,15 +1,18 @@
-
 #include <stivale2.h>
 #include <stddef.h>
 #include <stdint.h>
+
+#include "memory/gdt.h"
+#include "video/video.h"
+#include "klib/sprintf.h"
+#include "klib/string.h"
+#include "video/terminal.h"
+#include "common.h"
+#include "regs.h"
  
-// We need to tell the stivale bootloader where we want our stack to be.
-// We are going to allocate our stack as an uninitialised array in .bss.
-static uint8_t stack[4096];
- 
-// stivale2 uses a linked list of tags for both communicating TO the
-// bootloader, or receiving info FROM it. More information about these tags
-// is found in the stivale2 specification.
+// 8K stack
+static uint8_t stack[8192] __align(16);
+
  
 // stivale2 offers a runtime terminal service which can be ditched at any
 // time, but it provides an easy way to print out to graphical terminal,
@@ -92,7 +95,17 @@ void *stivale2_get_tag(struct stivale2_struct *stivale2_struct, uint64_t id) {
         current_tag = (void *)current_tag->next;
     }
 }
- 
+
+
+#define PRINT_VAL(v) kprintf(#v "=%ld\n", v);
+#define PRINT_HEX(v) kprintf(#v "=%lx\n", v);
+
+extern void _binary____resources_bmp_charmap_bmp_start;
+
+extern uint64_t test(void);
+extern int64_t test_size;
+
+// Registers %rbp, %rbx and %r12 through %r15 “belong” to the calling functio
 // The following will be our kernel's entry point.
 void _start(struct stivale2_struct *stivale2_struct) {
     // Let's get the terminal structure tag from the bootloader.
@@ -109,15 +122,69 @@ void _start(struct stivale2_struct *stivale2_struct) {
  
     // Let's get the address of the terminal write function.
     void *term_write_ptr = (void *)term_str_tag->term_write;
+    
+    
  
-    // Now, let's assign this pointer to a function pointer which
-    // matches the prototype described in the stivale2 specification for
-    // the stivale2_term_write function.
-    void (*term_write)(const char *string, size_t length) = term_write_ptr;
+    set_terminal_handler(term_write_ptr);
+
+    struct stivale2_struct_tag_framebuffer fbtag;
+    struct stivale2_struct_tag_framebuffer* _fbtag = stivale2_get_tag(stivale2_struct,0x506461d2950408fa);
+
+    memcpy(&fbtag, _fbtag, sizeof(fbtag));
+
+    PRINT_VAL(fbtag.memory_model);
+    PRINT_VAL(fbtag.framebuffer_pitch);
+    PRINT_VAL(fbtag.framebuffer_width);
+    PRINT_VAL(fbtag.framebuffer_height);
+    PRINT_VAL(fbtag.framebuffer_bpp);
+    PRINT_HEX(fbtag.framebuffer_addr);
+    PRINT_VAL(fbtag.  red_mask_shift);
+    PRINT_VAL(fbtag.green_mask_shift);
+    PRINT_VAL(fbtag. blue_mask_shift);
+    PRINT_VAL(fbtag.  red_mask_size);
+    PRINT_VAL(fbtag.green_mask_size);
+    PRINT_VAL(fbtag. blue_mask_size);
+    PRINT_VAL(test_size);
+
+    Image sc = {.w    =        fbtag.framebuffer_width,
+                .h    =        fbtag.framebuffer_height,
+                .pitch=        fbtag.framebuffer_pitch,
+                .bpp  =        fbtag.framebuffer_bpp,
+                .pix  = (void*)fbtag.framebuffer_addr};
+
+    
+    initVideo(&sc);
+
+    Image* image = loadBMP(&_binary____resources_bmp_charmap_bmp_start);
+    PRINT_VAL(image);
+
+    
  
     // We should now be able to call the above function pointer to print out
     // a simple "Hello World" to screen.
-    term_write("Bincows beta", 12);
+    char buf[128];
+    kprintf("ds=0x%x\nss=0x%x\ncs=%x\nes=%x\nfs=%x\ngs=%x\n\n", 
+            _ds(), _ss(), _cs(),_es(),_fs(),_gs());
+    kprintf("print=0x%lx\n\n", kprintf);//0x00ea60
+                                        //0x100a60
+    init_gdt_table();
+
+    blit(image, NULL, NULL);
+    //*ptr = 0xfffa24821;
+    asm("hlt");
+
+    for(size_t i = 0; i < fbtag.framebuffer_height; i++) {
+        uint8_t* base = fbtag.framebuffer_addr + fbtag.framebuffer_pitch*i;
+        for(size_t j = 0; j < fbtag.framebuffer_width; j++) {
+            uint32_t* px = (uint32_t*)&base[4*j];
+            *px = 0xffffff00;
+
+        }
+    }
+    //*(uint64_t*)(term_write_ptr) = 0xfeac;
+    //print_fun(buf, 2);
+
+//    kprintf("Bincows beta");
  
     // We're done, just hang...
     for (;;) {

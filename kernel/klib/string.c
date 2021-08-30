@@ -48,10 +48,11 @@ char* strncpy(char* dst, const char* src, size_t n) {
         n--;
     }
     while(c != '\0' && n > 0);
-
-    *pdst = '\0';
-
-    return dst;
+    
+    if(c != '\0')
+        *pdst = '\0';
+    dst = '\0';
+    return NULL;
 }
 
 
@@ -88,7 +89,8 @@ int   strncmp(const char* str1, const char* str2, size_t n) {
 }
 
 
-char* strchr (const char *s, int c) {
+const char* strchr (const char *_s, int c) {
+    const char* s=_s;
     char curr;
 
     while(1) {
@@ -96,7 +98,7 @@ char* strchr (const char *s, int c) {
 
         if(curr == c)
             return s;
-        else if(curr = '\0')
+        else if(curr == '\0')
             break;
         
         s++;
@@ -106,17 +108,17 @@ char* strchr (const char *s, int c) {
 }
 
 
-char* strrchr(const char *s, int c) {
+const char* strrchr(const char *s, int c) {
     char curr;
 
-    char* found = NULL;
+    const char* found = NULL;
 
     while(1) {
         curr = *s;
 
         if(curr == c)
             found = s;
-        else if(curr = '\0')
+        else if(curr == '\0')
             break;
         
         s++;
@@ -126,13 +128,12 @@ char* strrchr(const char *s, int c) {
 }
 
 
-char *strstr(const char *haystack, const char *needle) {
-    char* ptr = haystack;
+const char *strstr(const char *haystack, const char *needle) {
 
     int i = 0;
     char c, ci;
 
-    do {
+    while(1) {
 
         ci = needle[i];
 
@@ -148,9 +149,7 @@ char *strstr(const char *haystack, const char *needle) {
             return NULL;
         else
             i = 0;
-        
     }
-    
 }
 
 
@@ -161,7 +160,92 @@ char* strcat(char *dest, const char *src) {
 }
 
 char *strncat(char *dest, const char *src, size_t n) {
-    while(*(dest++)) ;
+    char* ret = dest;
 
-    return strncpy(dest, src, n);
+    while(*(dest++)) ;
+    strncpy(--dest, src, n);
+    
+    return ret;
+}
+
+
+void * memccpy (void* dst, const void *src, int c, size_t n) {
+
+
+    for(; n > 0; n--) {
+        char d = *(char*)(src++) = *(char*)(dst++);
+
+        if(d == c)
+            return dst;
+    }
+
+    return NULL;
+}
+
+const void* memchr (const void *_buf, int _ch, size_t n) {
+    uint8_t ch = *(uint8_t*)(&_ch);
+    const uint8_t* buf=_buf;
+
+    for(;n > 0; n--) {
+        if(*buf == ch)
+            return buf;
+        buf++;
+    }
+    return NULL;
+}
+
+int memcmp (const void* _buf1, const void* _buf2, size_t n) {
+    const uint8_t* buf1=_buf1;
+    const uint8_t* buf2=_buf2;
+
+    for(; n > 0; n--) {
+        int d = *(buf1++) - *(buf2++);
+
+        if(d != 0)
+            return d;
+    }
+
+    return 0;
+}
+
+
+void * memcpy (void * _dest, const void *_src, size_t n) {
+    uint8_t* src=_src,*dest=_dest;
+
+    for(;n > 0; --n)
+        *(dest++) = *(src++);
+    
+    return dest;
+}
+
+void * memset (void * _buf, int _ch, size_t n) {
+    uint8_t ch = *(uint8_t*)(&_ch);
+    uint8_t* buf = _buf;
+
+    // first unaligned bytes
+    for(;n > 0 && (uint64_t)buf % 8 != 0; --n)
+        *(buf++) = ch;
+
+
+    if(!n) return buf;
+
+    if(n >= 8) {
+        uint64_t ch64 = ch | (ch << 8);
+        ch64 = ch64 | (ch64 << 16);
+
+        for(;n > 0; n -= 8) {
+            *(uint64_t*)buf = ch64;
+            buf += 8;
+        }
+    }
+
+
+
+
+
+    // last unaligned bytes
+    for(;n > 0 && (uint64_t)buf % 8 != 0; --n)
+        *(buf++) = ch;
+
+    return buf;
 }
