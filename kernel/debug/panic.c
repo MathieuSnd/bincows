@@ -1,4 +1,5 @@
 #include "panic.h"
+#include "../klib/sprintf.h"
 #include "../video/terminal.h"
 
 

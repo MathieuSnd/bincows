@@ -100,7 +100,8 @@ void *stivale2_get_tag(struct stivale2_struct *stivale2_struct, uint64_t id) {
 #define PRINT_VAL(v) kprintf(#v "=%ld\n", v);
 #define PRINT_HEX(v) kprintf(#v "=%lx\n", v);
 
-extern void _binary____resources_bmp_charmap_bmp_start;
+// "int" but designates a binary file 
+extern int _binary____resources_bmp_charmap_bmp_start;
 
 extern uint64_t test(void);
 extern int64_t test_size;
@@ -162,23 +163,21 @@ void _start(struct stivale2_struct *stivale2_struct) {
  
     // We should now be able to call the above function pointer to print out
     // a simple "Hello World" to screen.
-    char buf[128];
     kprintf("ds=0x%x\nss=0x%x\ncs=%x\nes=%x\nfs=%x\ngs=%x\n\n", 
             _ds(), _ss(), _cs(),_es(),_fs(),_gs());
     kprintf("print=0x%lx\n\n", kprintf);//0x00ea60
                                         //0x100a60
-    init_gdt_table();
 
-    blit(image, NULL, NULL);
+    draw(image, NULL, NULL);
+    init_gdt_table();
     //*ptr = 0xfffa24821;
     asm("hlt");
 
     for(size_t i = 0; i < fbtag.framebuffer_height; i++) {
-        uint8_t* base = fbtag.framebuffer_addr + fbtag.framebuffer_pitch*i;
+        uint8_t* base = (uint8_t*)fbtag.framebuffer_addr + fbtag.framebuffer_pitch*i;
         for(size_t j = 0; j < fbtag.framebuffer_width; j++) {
             uint32_t* px = (uint32_t*)&base[4*j];
             *px = 0xffffff00;
-
         }
     }
     //*(uint64_t*)(term_write_ptr) = 0xfeac;

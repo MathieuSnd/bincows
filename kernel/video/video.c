@@ -38,13 +38,18 @@ inline void lower_blit(const Image* src, const Image* dst,
     size_t dst_skip = dst->pitch;
 
     size_t copy_size = width * BPP;
+
+    kprintf("copy_size: %lu\n"
+            "dst_skip:  %lu", copy_size, dst_skip);
                             
 
     for(size_t i = height+1; i > 0 ; i--) {
+        /*
         memcpy(dst_line_start, 
                src_line_start,
                copy_size);
-
+        */
+       memset(dst_line_start, 0xffffffff, copy_size);
         src_line_start += src_skip;
         dst_line_start += dst_skip;
     }
@@ -121,7 +126,6 @@ void blit(const Image* restrict src, Image* restrict dst,
 }
 
 
-
 Image* alloc_image(uint32_t width, uint32_t height, uint32_t bpp) {
     Image* ret = kmalloc(sizeof(Image));
 
@@ -188,17 +192,20 @@ Image* loadBMP(const void* rawFile) {
 
     int32_t w = header->w;
     int32_t h = header->h;
-    uint8_t* srcpix24  = rawFile + header->body_offset;
+    const uint8_t* srcpix24  = (const uint8_t*)rawFile + header->body_offset;
 
     Image* ret = alloc_image(w,h, 32);
 
     size_t bpitch = ret->pitch / 4;
     uint32_t* pix32 = ret->pix;
 
-    for(int32_t y = 0; y < ret->h; y++) {
-        for(int32_t x = 0; x < ret->w; x++) {
-            uint32_t* src_ptr  = srcpix24 + 3 * x + (ret->h-1-y) * 3 * h;
-            pix32[x + y * bpitch] = (*(uint32_t *)src_ptr) & 0x00ffffff;
+    for(size_t y = 0; y < ret->h; y++) {
+        for(size_t x = 0; x < ret->w; x++) {
+            const uint32_t* src_ptr  = (const uint32_t *)srcpix24 
+                        + 3 * x + (ret->h-1-y) * 3 * h;
+
+                        
+            pix32[x + y * bpitch] = (*(const uint32_t *)src_ptr) & 0x00ffffff;
            
         }
 
