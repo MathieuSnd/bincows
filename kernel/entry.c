@@ -100,9 +100,6 @@ void *stivale2_get_tag(struct stivale2_struct *stivale2_struct, uint64_t id) {
 #define PRINT_VAL(v) kprintf(#v "=%ld\n", v);
 #define PRINT_HEX(v) kprintf(#v "=%lx\n", v);
 
-// "int" but designates a binary file 
-extern int _binary____resources_bmp_charmap_bmp_start;
-
 extern uint64_t test(void);
 extern int64_t test_size;
 
@@ -156,9 +153,6 @@ void _start(struct stivale2_struct *stivale2_struct) {
     
     initVideo(&sc);
 
-    Image* image = loadBMP(&_binary____resources_bmp_charmap_bmp_start);
-    PRINT_VAL(image);
-
     
  
     // We should now be able to call the above function pointer to print out
@@ -168,7 +162,6 @@ void _start(struct stivale2_struct *stivale2_struct) {
     kprintf("print=0x%lx\n\n", kprintf);//0x00ea60
                                         //0x100a60
 
-    draw(image, NULL, NULL);
     init_gdt_table();
     //*ptr = 0xfffa24821;
     asm("hlt");

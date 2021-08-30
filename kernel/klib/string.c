@@ -252,3 +252,27 @@ void * memset (void * _buf, int _ch, size_t n) {
 
     return buf;
 }
+
+
+void * memmove (void* _dest, const void* _src, size_t n) {
+    uint8_t*       dest=_dest;
+    const uint8_t* src=_src;
+    
+    // check for overlapping
+    if((dest < src && dest + n > src)
+    || (src < dest && src + n > dest)) {
+        dest += n;
+        src  += n;
+
+        
+        // backward copy
+        for(;n > 0; --n)
+            *(--dest) = *(--src);
+
+        return _dest;
+    }
+    // not overlapping: just call memcpy
+    else {
+        return memcpy(dest, src, n);
+    }
+}

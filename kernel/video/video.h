@@ -23,7 +23,7 @@ typedef struct {
 } Rect;
 
 
-
+const Image* getScreenImage(void);
 
 void initVideo(const Image* srceen);
 void draw(const Image* img, const Pos* srcpos, const Rect* dstrect);

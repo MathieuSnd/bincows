@@ -16,7 +16,7 @@ int memcmp (const void *, const void *, size_t) __ATTR_PURE__;
 void * memcpy (void * __restrict__, const void * __restrict__, size_t);
 void * memset (void *, int, size_t);
 //void * memmem (const void *, size_t, const void *, size_t) __ATTR_PURE__;
-//void * memmove (void *, const void *, size_t);
+void * memmove (void *, const void *, size_t);
 //void * memrchr (const void *, int, size_t) __ATTR_PURE__;
 
 

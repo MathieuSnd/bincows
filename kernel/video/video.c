@@ -34,8 +34,8 @@ inline void lower_blit(const Image* src, const Image* dst,
     uint8_t* src_line_start = src->pix + srcy * src->pitch
                                        + srcx * BPP;
 
-    size_t src_skip = src->pitch;
     size_t dst_skip = dst->pitch;
+    size_t src_skip = src->pitch;
 
     size_t copy_size = width * BPP;
 
@@ -44,15 +44,17 @@ inline void lower_blit(const Image* src, const Image* dst,
                             
 
     for(size_t i = height+1; i > 0 ; i--) {
-        /*
+
         memcpy(dst_line_start, 
                src_line_start,
                copy_size);
-        */
-       memset(dst_line_start, 0xffffffff, copy_size);
+        
+       
+       //memset(dst_line_start, 0xffffffff, copy_size);
         src_line_start += src_skip;
         dst_line_start += dst_skip;
     }
+
 }
 
 void draw(const Image* img, const Pos* srcpos, const Rect* dstrect) {
@@ -182,6 +184,10 @@ inline bool check_BMP_header(const struct BMPFileHeader* header) {
                             (size_t)&v-(size_t)s, v);
 
 
+const Image* getScreenImage(void) {
+    return &screen;
+}
+
 Image* loadBMP(const void* rawFile) {
     // the header should be at the beginning
     const struct BMPFileHeader* header = rawFile;
@@ -190,8 +196,8 @@ Image* loadBMP(const void* rawFile) {
     if(check_BMP_header(header))
         return NULL;
 
-    int32_t w = header->w;
-    int32_t h = header->h;
+    uint32_t w = header->w;
+    uint32_t h = header->h;
     const uint8_t* srcpix24  = (const uint8_t*)rawFile + header->body_offset;
 
     Image* ret = alloc_image(w,h, 32);
@@ -199,13 +205,15 @@ Image* loadBMP(const void* rawFile) {
     size_t bpitch = ret->pitch / 4;
     uint32_t* pix32 = ret->pix;
 
-    for(size_t y = 0; y < ret->h; y++) {
-        for(size_t x = 0; x < ret->w; x++) {
-            const uint32_t* src_ptr  = (const uint32_t *)srcpix24 
-                        + 3 * x + (ret->h-1-y) * 3 * h;
-
+    for(size_t y = 0; y < h; y++) {
+        for(size_t x = 0; x < w; x++) {
+            const uint32_t* src_ptr  = (const uint32_t *)(srcpix24 
+                        + x * 3
+                        + (h+1 - y) * 3 * w);
+                        /// the image is reversed along
+                        /// the y axis
                         
-            pix32[x + y * bpitch] = (*(const uint32_t *)src_ptr) & 0x00ffffff;
+            pix32[x + y * bpitch] =  (*(const uint32_t *)src_ptr) & 0x00ffffff;
            
         }
 

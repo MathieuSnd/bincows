@@ -3,6 +3,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+struct stivale2_struct_tag_framebuffer;
 typedef void (*terminal_handler_t)(const char *string, size_t length);
 
 /**
@@ -11,6 +12,9 @@ typedef void (*terminal_handler_t)(const char *string, size_t length);
 terminal_handler_t get_terminal_handler(void);
 
 
+void setup_terminal(void);
+
+// no use another terminal handler
 void set_terminal_handler(terminal_handler_t h);
 
-void termina_set_colors(uint32_t foreground, uint32_t background);
+void terminal_set_colors(uint32_t foreground, uint32_t background);
