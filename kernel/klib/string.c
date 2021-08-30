@@ -210,7 +210,8 @@ int memcmp (const void* _buf1, const void* _buf2, size_t n) {
 
 
 void * memcpy (void * _dest, const void *_src, size_t n) {
-    uint8_t* src=_src,*dest=_dest;
+    const uint8_t* src=_src;
+    uint8_t*       dest=_dest;
 
     for(;n > 0; --n)
         *(dest++) = *(src++);
@@ -232,6 +233,7 @@ void * memset (void * _buf, int _ch, size_t n) {
     if(n >= 8) {
         uint64_t ch64 = ch | (ch << 8);
         ch64 = ch64 | (ch64 << 16);
+        ch64 = ch64 | (ch64 << 32);
 
         for(;n > 0; n -= 8) {
             *(uint64_t*)buf = ch64;

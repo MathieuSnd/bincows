@@ -1,5 +1,6 @@
 #include "sprintf.h"
 #include "string.h"
+#include "../video/terminal.h"
 
 #define SIGN(X) X > 0 ? 1 : -1
 #define ARG(TYPE) (TYPE)va_arg(ap, TYPE)
@@ -174,17 +175,13 @@ int sprintf(char* str, const char* format, ...) {
 //
 //}
 
-static void (*print_fun)(const char *string, size_t length) = NULL;
-
-
-void set_print_fun(void* fun) {
-    print_fun = fun;
-}
 int kprintf(const char* format, ...) {
     va_list ap;
     int ret;
 
     va_start(ap, format);
+
+    terminal_handler_t print_fun = get_terminal_handler();
 
     if(!print_fun)
         ret = -1;
