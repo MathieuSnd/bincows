@@ -209,7 +209,8 @@ int memcmp (const void* _buf1, const void* _buf2, size_t n) {
 }
 
 
-void * memcpy (void * _dest, const void *_src, size_t n) {
+void * memcpy (void* restrict _dest, 
+         const void* restrict _src, size_t n) {
     const uint8_t* src=_src;
     uint8_t*       dest=_dest;
 
