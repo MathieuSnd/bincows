@@ -1,4 +1,5 @@
 .vscode
+disk.hdd
 img_moint
 *.o
 include_cp
