@@ -17,7 +17,6 @@ INTERNALLDFLAGS :=     \
 INTERNALCFLAGS  :=           \
 	-znocombreloc \
 	-I/opt/cross/include/ \
-	-H \
 	-std=gnu11           \
 	-ffreestanding       \
 	-fno-stack-protector \
@@ -40,7 +39,6 @@ all: $(KERNEL)
 
  
 $(KERNEL): $(OBJ)
-	echo $(OBJ)
 	$(CC) $(INTERNALLDFLAGS) $(OBJ) -o $@
  
 %.bmp.o: ../resources/bmp/%.bmp
@@ -50,7 +48,6 @@ $(KERNEL): $(OBJ)
 	$(CC) $(CFLAGS) $(INTERNALCFLAGS) -c $< -o $@
 
 %.s.o: %.s
-	echo "$(ASM) $(ASM_FLAGS) $< -o $@"
 	$(ASM) $(ASM_FLAGS) $< -o $@
  
 clean:

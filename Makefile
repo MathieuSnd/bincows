@@ -11,12 +11,14 @@ all: disk
 threaded_build:
 	make -j all
 
-disk: kernel
+$(HDD_FILE): kernel/entry.c
 	dd if=/dev/zero bs=1M count=0 seek=64 of=$(HDD_FILE)
 	sudo /sbin/parted -s $(HDD_FILE) mklabel gpt
 	sudo /sbin/parted -s $(HDD_FILE) mkpart ESP fat32 2048s 100%
 	sudo /sbin/parted -s $(HDD_FILE) set 1 esp on
 	./limine-bootloader/limine-install $(HDD_FILE)
+
+disk: kernel $(HDD_FILE)
 
 	sudo losetup -P $(USED_LOOPBACK) $(HDD_FILE)
 	
@@ -27,7 +29,9 @@ disk: kernel
 	sudo cp -r disk_root/* img_mount/
 	sync
 	sudo umount img_mount
+	
 	sudo /sbin/losetup -d $(USED_LOOPBACK)
+	rm -rf img_mount
 
 
 kernel: force_look
