@@ -8,7 +8,7 @@ void __assert(const char* __restrict__ expression,
               const int                line) {
     char buffer[1024];
 
-    sprintf("assertion '%s' failed at: %s:%d", expression, file, line);
+    sprintf(buffer, "assertion '%s' failed at: %s:%d", expression, file, line);
     
-    panic(buffer);
+    panic("buffer");
 }

@@ -6,18 +6,18 @@
 __attribute__((noreturn)) void panic(const char* panic_string) {
     // checks if video is operationnal
     if(get_terminal_handler() != NULL) {
-        termina_set_colors(0xa0a0a0, 0x0000ff);
+        terminal_set_colors(0xa0a0a0, 0x0000ff);
 
         if(panic_string == NULL)
-            panic_string = "";
+            panic_string = "(null)";
 
         kprintf(
             "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n"
             "!!!!!!!!!!!!!   KERNL PANIC   !!!!!!!!!!!!!\n"
             "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n"
-            "%s\n\n\n"
-            "you may manually shutdown the machine.\n"
-            
+            "%s\n\n"
+            "you may manually shutdown the machine.\n",
+            panic_string
         );
     }
     for(;;)
