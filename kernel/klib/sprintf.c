@@ -175,6 +175,13 @@ int sprintf(char* str, const char* format, ...) {
 //
 //}
 
+void kputs(const char* s) {
+    terminal_handler_t print_fun = get_terminal_handler();
+
+    if(print_fun)
+        print_fun(s, strlen(s));
+}
+
 int kprintf(const char* format, ...) {
     va_list ap;
     int ret;

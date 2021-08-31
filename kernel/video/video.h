@@ -26,10 +26,12 @@ typedef struct {
 const Image* getScreenImage(void);
 
 void initVideo(const Image* srceen);
-void draw(const Image* img, const Pos* srcpos, const Rect* dstrect);
-void blit(const Image* __restrict__  src, 
-                Image* __restrict__ dst, 
-          const Pos* srcpos, const Rect* dstrect);
+void imageDraw(const Image* img, const Pos* srcpos, const Rect* dstrect);
+void imageBlit(const Image* __restrict__  src, 
+                     Image* __restrict__ dst, 
+               const Pos* srcpos, const Rect* dstrect);
+
+void imageFillRect(uint32_t color, const Rect* rect);
 
 Image* loadBMP(const void* rawFile);
 

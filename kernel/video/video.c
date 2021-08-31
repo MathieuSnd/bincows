@@ -39,8 +39,8 @@ inline void lower_blit(const Image* src, const Image* dst,
 
     size_t copy_size = width * BPP;
 
-    kprintf("copy_size: %lu\n"
-            "dst_skip:  %lu", copy_size, dst_skip);
+    //kprintf("copy_size: %lu\n"
+    //        "dst_skip:  %lu", copy_size, dst_skip);
                             
 
     for(size_t i = height+1; i > 0 ; i--) {
@@ -54,14 +54,41 @@ inline void lower_blit(const Image* src, const Image* dst,
         src_line_start += src_skip;
         dst_line_start += dst_skip;
     }
-
 }
 
-void draw(const Image* img, const Pos* srcpos, const Rect* dstrect) {
-    blit(img, &screen, srcpos, dstrect);
+void imageFillRect(uint32_t color, const Rect* rect) {
+    uint32_t beginx, beginy, endx, endy;
+
+    if(rect != NULL) {
+        beginx = rect->x;
+        beginy = rect->y;
+        endx   = rect->x + rect->w;
+        endy   = rect->y + rect->h;
+    }
+    else {
+        beginx = 0;
+        beginy = 0;
+        endx   = screen.w;
+        endy   = screen.h;
+    }
+
+    for(size_t y = beginy; y < endy; y++) {
+
+        uint32_t* px = (uint32_t *) (
+                   screen.pix
+                 + y * screen.pitch
+                 + beginx * 4);
+            
+        for(size_t x = 0; x <= endx - beginx ; x++)
+            *(px++) = color;
+    }
 }
 
-void blit(const Image* restrict src, Image* restrict dst, 
+void imageDraw(const Image* img, const Pos* srcpos, const Rect* dstrect) {
+    imageBlit(img, &screen, srcpos, dstrect);
+}
+
+void imageBlit(const Image* restrict src, Image* restrict dst, 
           const Pos*  srcpos, const Rect* dstrect) {
     uint32_t sxbegin,
              sybegin,
@@ -128,12 +155,14 @@ void blit(const Image* restrict src, Image* restrict dst,
 }
 
 
+
 Image* alloc_image(uint32_t width, uint32_t height, uint32_t bpp) {
     Image* ret = kmalloc(sizeof(Image));
 
     ret->w     = width;
     ret->h     = height;
     ret->pitch = (uint32_t)allign16(width * (bpp/8));
+    ret->bpp   = bpp;
 
     ret->pix   = kmalloc(ret->pitch * height);
 
@@ -209,20 +238,13 @@ Image* loadBMP(const void* rawFile) {
         for(size_t x = 0; x < w; x++) {
             const uint32_t* src_ptr  = (const uint32_t *)(srcpix24 
                         + x * 3
-                        + (h+1 - y) * 3 * w);
+                        + (h-1 - y) * 3 * w);
                         /// the image is reversed along
                         /// the y axis
                         
-            pix32[x + y * bpitch] =  (*(const uint32_t *)src_ptr) & 0x00ffffff;
-           
+            pix32[x + y * bpitch] =  (*(const uint32_t *)src_ptr) & 0x00ffffff;  
         }
-
     }
-
-    PRINT_VAL(ret->w);
-    PRINT_VAL(ret->h);
-    PRINT_VAL(ret->pix);
-    PRINT_VAL(ret->pitch);
     return ret;
 }
 

@@ -103,6 +103,9 @@ void *stivale2_get_tag(struct stivale2_struct *stivale2_struct, uint64_t id) {
 extern uint64_t test(void);
 extern int64_t test_size;
 
+// const char but represents a big string
+extern const char _binary_bootmessage_txt;
+
 // Registers %rbp, %rbx and %r12 through %r15 “belong” to the calling functio
 // The following will be our kernel's entry point.
 void _start(struct stivale2_struct *stivale2_struct) {
@@ -161,8 +164,11 @@ void _start(struct stivale2_struct *stivale2_struct) {
             _ds(), _ss(), _cs(),_es(),_fs(),_gs());
     kprintf("print=0x%lx\n\n", kprintf);//0x00ea60
                                         //0x100a60
-
+    setup_terminal();
     init_gdt_table();
+
+    kputs(&_binary_bootmessage_txt);
+
     //*ptr = 0xfffa24821;
     asm("hlt");
 

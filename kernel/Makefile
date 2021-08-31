@@ -43,6 +43,8 @@ $(KERNEL): $(OBJ)
  
 %.bmp.o: ../resources/bmp/%.bmp
 	$(LD) -r -b binary -o $@ $<
+%.txt.o: ../resources/ascii/%.txt
+	$(LD) -r -b binary -o $@ $<
 
 %.c.o: %.c
 	$(CC) $(CFLAGS) $(INTERNALCFLAGS) -c $< -o $@
