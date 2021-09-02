@@ -242,10 +242,6 @@ void * memset (void * _buf, int _ch, size_t n) {
         }
     }
 
-
-
-
-
     // last unaligned bytes
     for(;n > 0 && (uint64_t)buf % 8 != 0; --n)
         *(buf++) = ch;

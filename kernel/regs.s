@@ -1,11 +1,9 @@
-bits 64
-
-global _ss
-global _cs
-global _ds
-global _es
-global _fs
-global _gs
+[global _ss]
+[global _cs]
+[global _ds]
+[global _es]
+[global _fs]
+[global _gs]
 
 section .text
 

@@ -100,9 +100,6 @@ void *stivale2_get_tag(struct stivale2_struct *stivale2_struct, uint64_t id) {
 #define PRINT_VAL(v) kprintf(#v "=%ld\n", v);
 #define PRINT_HEX(v) kprintf(#v "=%lx\n", v);
 
-extern uint64_t test(void);
-extern int64_t test_size;
-
 // const char but represents a big string
 extern const char _binary_bootmessage_txt;
 
@@ -132,7 +129,31 @@ void _start(struct stivale2_struct *stivale2_struct) {
     struct stivale2_struct_tag_framebuffer* _fbtag = stivale2_get_tag(stivale2_struct,0x506461d2950408fa);
 
     memcpy(&fbtag, _fbtag, sizeof(fbtag));
+    
 
+
+    Image sc = {.w    =        fbtag.framebuffer_width,
+                .h    =        fbtag.framebuffer_height,
+                .pitch=        fbtag.framebuffer_pitch,
+                .bpp  =        fbtag.framebuffer_bpp,
+                .pix  = (void*)fbtag.framebuffer_addr};
+
+
+    initVideo(&sc);
+
+
+    setup_terminal();
+
+    
+    set_terminal_fgcolor(0x00ff00);
+    set_terminal_bgcolor(0xff0000);
+
+    kputs(&_binary_bootmessage_txt);
+
+    
+    set_terminal_fgcolor(0xff0000);
+    set_terminal_bgcolor(0x00ff00);
+    
     PRINT_VAL(fbtag.memory_model);
     PRINT_VAL(fbtag.framebuffer_pitch);
     PRINT_VAL(fbtag.framebuffer_width);
@@ -145,32 +166,19 @@ void _start(struct stivale2_struct *stivale2_struct) {
     PRINT_VAL(fbtag.  red_mask_size);
     PRINT_VAL(fbtag.green_mask_size);
     PRINT_VAL(fbtag. blue_mask_size);
-    PRINT_VAL(test_size);
-
-    Image sc = {.w    =        fbtag.framebuffer_width,
-                .h    =        fbtag.framebuffer_height,
-                .pitch=        fbtag.framebuffer_pitch,
-                .bpp  =        fbtag.framebuffer_bpp,
-                .pix  = (void*)fbtag.framebuffer_addr};
-
-    
-    initVideo(&sc);
-
     
  
-    // We should now be able to call the above function pointer to print out
-    // a simple "Hello World" to screen.
     kprintf("ds=0x%x\nss=0x%x\ncs=%x\nes=%x\nfs=%x\ngs=%x\n\n", 
             _ds(), _ss(), _cs(),_es(),_fs(),_gs());
-    kprintf("print=0x%lx\n\n", kprintf);//0x00ea60
-                                        //0x100a60
-    setup_terminal();
+
+
     init_gdt_table();
 
-    kputs(&_binary_bootmessage_txt);
 
+    
     //*ptr = 0xfffa24821;
-    asm("hlt");
+    asm volatile ("sti");
+    asm volatile ("hlt");
 
     for(size_t i = 0; i < fbtag.framebuffer_height; i++) {
         uint8_t* base = (uint8_t*)fbtag.framebuffer_addr + fbtag.framebuffer_pitch*i;

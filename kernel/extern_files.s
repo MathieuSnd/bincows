@@ -1,6 +1,6 @@
-section .rodata
-global _binary_charmap_bmp
-global _binary_bootmessage_txt
+[section .rodata]
+[global _binary_charmap_bmp]
+[global _binary_bootmessage_txt]
 
 _binary_charmap_bmp:
     incbin "../resources/bmp/charmap.bmp"

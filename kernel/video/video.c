@@ -12,11 +12,90 @@
 
 static Image screen;
 
+inline void lower_blit(const Image* src, const Image* dst,
+            uint16_t srcx,  uint16_t srcy,
+            uint16_t dstx,  uint16_t dsty,
+            uint16_t width, uint16_t height);
+
 void initVideo(const Image* s) {
     assert(s != NULL);
     assert(s->bpp == 32);
 
     memcpy(&screen,s, sizeof(Image));
+}
+
+
+void imageLower_blit(const Image* img,
+                     uint16_t     srcx,  uint16_t srcy,
+                     uint16_t     dstx,  uint16_t dsty,
+                     uint16_t     width, uint16_t height) {
+
+    lower_blit(img, &screen, srcx,srcy,dstx,dsty,width,height);
+}
+
+void imageLower_blitBinaryMask(
+    const Image* img,
+    uint16_t srcx,  uint16_t srcy,
+    uint16_t dstx,  uint16_t dsty,
+    uint16_t width, uint16_t height,
+    uint32_t black, uint32_t white) {
+    
+    
+    assert(img->bpp == 32);
+
+// begining of the first line
+    uint8_t* dst_ptr = screen.pix + dsty * screen.pitch
+                                  + dstx * BPP;
+
+    uint8_t* src_ptr = img->pix   + srcy * img->pitch
+                                  + srcx * BPP;
+
+    size_t copy_size = width * BPP;
+
+
+    size_t dst_skip = screen.pitch - copy_size;
+    size_t src_skip = img -> pitch - copy_size;
+
+
+
+// assert that everything are 2-aligned
+// so that we can process faster
+    assert((size_t)dst_ptr   % 8 == 0);
+    assert((size_t)src_ptr   % 8 == 0);
+
+    assert((size_t)copy_size % 8 == 0);
+    assert((size_t)dst_skip  % 8 == 0);
+    assert((size_t)src_skip  % 8 == 0);
+    
+
+    uint32_t* src_ptr32 = (uint32_t *)src_ptr;
+    uint32_t* dst_ptr32 = (uint32_t *)dst_ptr;
+
+
+    
+    for(size_t i = height+1; i > 0 ; i--) {
+
+    // allow GCC to perform eco+ vectorization
+        src_ptr32 = __builtin_assume_aligned(src_ptr32, 8);
+        dst_ptr32 = __builtin_assume_aligned(dst_ptr32, 8);
+
+        for(int i = copy_size / 4; i > 0; i--) {
+             
+            if((uint8_t) *(src_ptr32++) != 0) {
+                *(dst_ptr32++) = white;
+            }
+            else
+                *(dst_ptr32++) = black;
+        }
+        //memcpy(dst_ptr, src_ptr, copy_size);
+       
+        src_ptr32 += src_skip / 4;
+        dst_ptr32 += dst_skip / 4;
+        //src_ptr += img->pitch;
+        //dst_ptr += screen.pitch;
+        
+    }
+
 }
 
 /**
@@ -38,9 +117,6 @@ inline void lower_blit(const Image* src, const Image* dst,
     size_t src_skip = src->pitch;
 
     size_t copy_size = width * BPP;
-
-    //kprintf("copy_size: %lu\n"
-    //        "dst_skip:  %lu", copy_size, dst_skip);
                             
 
     for(size_t i = height+1; i > 0 ; i--) {
@@ -87,6 +163,7 @@ void imageFillRect(uint32_t color, const Rect* rect) {
 void imageDraw(const Image* img, const Pos* srcpos, const Rect* dstrect) {
     imageBlit(img, &screen, srcpos, dstrect);
 }
+
 
 void imageBlit(const Image* restrict src, Image* restrict dst, 
           const Pos*  srcpos, const Rect* dstrect) {
@@ -161,8 +238,16 @@ Image* alloc_image(uint32_t width, uint32_t height, uint32_t bpp) {
 
     ret->w     = width;
     ret->h     = height;
-    ret->pitch = (uint32_t)allign16(width * (bpp/8));
     ret->bpp   = bpp;
+
+    assert(bpp % 8 == 0 || bpp == 1);
+
+    if(bpp == 1) {
+        // align on 8 byte
+        ret->pitch = ((width * bpp +7) / 8) * 8;
+    }
+    else
+        ret->pitch = (uint32_t)allign16(width * (bpp/8));
 
     ret->pix   = kmalloc(ret->pitch * height);
 
@@ -206,28 +291,22 @@ inline bool check_BMP_header(const struct BMPFileHeader* header) {
 }
 
 
-
-#define PRINT_VAL(v) kprintf(__FILE__ ":%d:%s::" \
-                            #v "=%4lx\n", __LINE__,__func__,v);
-#define PRINT_struct(v,s) kprintf("%x:\t" #v "=%ld\n", \
-                            (size_t)&v-(size_t)s, v);
-
-
 const Image* getScreenImage(void) {
     return &screen;
 }
 
-Image* loadBMP(const void* rawFile) {
-    // the header should be at the beginning
-    const struct BMPFileHeader* header = rawFile;
 
+// assert that the checks are already performed
+static Image* loadBMP_24(const struct BMPFileHeader* restrict header, const void* restrict body) {
+    assert(header->bpp == 24);
 
-    if(check_BMP_header(header))
-        return NULL;
 
     uint32_t w = header->w;
     uint32_t h = header->h;
-    const uint8_t* srcpix24  = (const uint8_t*)rawFile + header->body_offset;
+    
+    const uint8_t* srcpix  = body;
+    
+    const size_t bpp = 3;
 
     Image* ret = alloc_image(w,h, 32);
 
@@ -236,15 +315,124 @@ Image* loadBMP(const void* rawFile) {
 
     for(size_t y = 0; y < h; y++) {
         for(size_t x = 0; x < w; x++) {
-            const uint32_t* src_ptr  = (const uint32_t *)(srcpix24 
-                        + x * 3
-                        + (h-1 - y) * 3 * w);
+            
+            const uint32_t* src_ptr  = (const uint32_t *)(srcpix
+                        + x * bpp
+                        + (h-1 - y) * bpp * w);
                         /// the image is reversed along
                         /// the y axis
                         
-            pix32[x + y * bpitch] =  (*(const uint32_t *)src_ptr) & 0x00ffffff;  
+            pix32[x + y * bpitch] = (*(const uint32_t *)src_ptr) & 0x00ffffff;  
         }
     }
     return ret;
 }
 
+// assert that the checks are already performed
+static Image* loadBMP_8(const struct BMPFileHeader* restrict header, const void* restrict body) {
+    assert(header->bpp == 8);
+
+
+    uint32_t w = header->w;
+    uint32_t h = header->h;
+    
+    const uint8_t* srcpix  = body;
+    
+    Image* ret = alloc_image(w,h, 8);
+
+    size_t bpitch = ret->pitch;
+    uint32_t* pix32 = ret->pix;
+
+
+
+    for(size_t y = 0; y < h; y++) {
+        const uint8_t* src_ptr  = (srcpix + (h-1 - y) * w);
+        
+        for(size_t x = 0; x < w; x++) {
+            /// the image is reversed along
+            /// the y axis
+                        
+            pix32[x + y * bpitch] =  *(src_ptr++);  
+        }
+    }
+    return ret;
+}
+
+
+
+Image* loadBMP(const void* restrict rawFile) {
+    // the header should be at the beginning
+    const struct BMPFileHeader* header = rawFile;
+
+
+    if(check_BMP_header(header))
+        return NULL;
+    
+// only handle 32bit and 8bit image
+    assert(header->bpp == 8 || header->bpp == 24);
+
+    const void* body = (uint8_t *)header + header->body_offset;
+
+    switch(header->bpp) {
+        case 24:
+            return loadBMP_24(header, body);
+            break;
+        case 8:
+            assert(0);
+            return loadBMP_8 (header, body);
+            break;
+        default:
+            assert(0);
+            __builtin_unreachable();
+    }
+}
+
+/*
+(00): black black
+(01): black white
+(10): white black
+(11): white white
+*/
+
+Image* loadBMP_24b_1b(const void* rawFile) {
+    
+    const struct BMPFileHeader* header = rawFile;
+
+
+    if(check_BMP_header(header))
+        return NULL;
+
+        assert(header->bpp == 24);
+
+        
+
+    uint32_t w = header->w;
+    uint32_t h = header->h;
+    
+    const uint8_t* srcpix  = (const uint8_t *)header + header->body_offset;
+    
+    
+    Image* ret = alloc_image(w,h, 1);
+
+    size_t bpitch = ret->pitch;
+    uint32_t* pix32 = ret->pix;
+
+    
+    for(size_t y = 0; y < h; y++) {
+        const uint8_t* src_ptr  = (srcpix + (h-1 - y) * w);
+        
+        uint8_t byte = 0;
+        
+        for(size_t x = 0; x < w; x++) {
+            byte <<= 1;
+            // put 1 iif r channel > 128
+            byte |= *(src_ptr++) >> 7;
+            
+
+            if((x % 8 == 0 && x != 0) || x == w-1) {
+                pix32[x/8 + y * bpitch] = byte;
+                byte = 0;
+            }            
+        }
+    }
+}

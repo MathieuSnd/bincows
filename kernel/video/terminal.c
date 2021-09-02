@@ -32,14 +32,18 @@ struct Char {
 #define INTERLINE 4
 #define LINE_HEIGHT (FONTHEIGHT + INTERLINE)
 
+#define N_PAGES 4
+
 
 static Image* charmap = NULL;
 static struct Char* buffer = NULL;
 
 static uint16_t ncols, nlines;
+static uint16_t term_nlines;
+static uint16_t first_line = 0;
 static uint16_t cur_col, cur_line;
 
-static uint32_t current_fgcolor = 0xffffff;
+static uint32_t current_fgcolor = 0xa0a0a0;
 static uint32_t current_bgcolor = 0;
 
 
@@ -62,25 +66,40 @@ void setup_terminal(void) {
     
 // dynamicly create the terminal
 // with right size
-    ncols  = screenImage->w / FONTWIDTH;
-    nlines = screenImage->h / LINE_HEIGHT;
 
-    size_t buffer_len = screenImage->w * screenImage->h;
+    ncols       = screenImage->w / FONTWIDTH;
+    term_nlines = (screenImage->h / LINE_HEIGHT);
+    nlines      = N_PAGES * term_nlines;
+
                                 
     
-    buffer = kmalloc(buffer_len * sizeof(struct Char));
+    buffer = kmalloc(nlines * ncols * sizeof(struct Char));
+
+    clear_terminal();
+
+
+    set_terminal_handler(write_string);
+}
+
+
+void clear_terminal(void) {
+    cur_col    = 0;
+    cur_line   = 0;
+    first_line = 0;
+    
+    size_t buffer_len = nlines * ncols;
 
     struct Char* ptr = buffer;
     for(;buffer_len > 0; --buffer_len)
         *(ptr++) = make_Char(0);
+}
 
 
-    cur_col = 0;
-    cur_line= 0;
-
-
-    set_terminal_handler(write_string);
-
+void set_terminal_fgcolor(uint32_t c) {
+    current_fgcolor = c;
+}
+void set_terminal_bgcolor(uint32_t c) {
+    current_bgcolor = c;
 }
 
 /*
@@ -90,8 +109,13 @@ static struct Char* get_Char_at(int l, int c) {
 }
 */
 
-static void scroll(int lines) {
+static void move_buffer(int lines) {
     need_refresh = true;
+
+    if(lines > 0) {// scroll backward
+        size_t bytes = ncols * lines;
+        memmove(buffer, buffer + bytes, bytes);
+    }
 }
 
 static void next_line(void) {
@@ -100,16 +124,20 @@ static void next_line(void) {
     if(cur_line >= nlines) {
         cur_line = nlines;
 
-        scroll(1);
+        move_buffer(1);
+    }
+    else if(cur_line > first_line + term_nlines) {
+        first_line++;
+        need_refresh = true;
     }
 }
 
 // create the char struct
 static struct Char make_Char(char c) {
     return (struct Char) {
-        current_fgcolor,
-        c,
-        current_bgcolor
+        .fg_color = current_fgcolor,
+        .c        = c,
+        .bg_color = current_bgcolor
     };
 }
 
@@ -147,12 +175,12 @@ static void emplace_char(char c) {
     advance_cursor(c); 
 }
 
-static void print_char(const struct Char* c, int line, int col) {
+static void print_char(const struct Char* restrict c, int line, int col) {
     uint16_t c_x = c->c % 16,
              c_y = c->c / 16;
-
+/*
     Pos srcpos = {
-        FONTWIDTH  * c_x ,
+        FONTWIDTH  * c_x,
         FONTHEIGHT * c_y,
     };
     Rect dstrect = {
@@ -162,12 +190,19 @@ static void print_char(const struct Char* c, int line, int col) {
         .w = FONTWIDTH,
         .h = FONTHEIGHT,
     };
-    imageDraw(charmap, &srcpos, &dstrect);
-
+*/
+    //imageDrawMask(charmap, &srcpos, &dstrect, c->fg_color, c->bg_color);
+    //imageLower_draw(charmap, &srcpos, &dstrect);
+    imageLower_blitBinaryMask(
+        charmap,
+        FONTWIDTH * c_x,  FONTHEIGHT * c_y,
+        col  * FONTWIDTH, line * LINE_HEIGHT,
+        FONTWIDTH, FONTHEIGHT,
+        c->bg_color, c->fg_color);
     
     Rect interlineRect = {
-        .x = dstrect.x, 
-        .y = dstrect.y + FONTHEIGHT,
+        .x = col  * FONTWIDTH, 
+        .y = line * LINE_HEIGHT + FONTHEIGHT,
 
         .w = FONTWIDTH,
         .h = INTERLINE,
@@ -178,12 +213,10 @@ static void print_char(const struct Char* c, int line, int col) {
 }
 
 static void flush_screen(void) {
-//    if(need_refresh)
+        // begins at the terminal's first line
+    const struct Char* curr = buffer + first_line * ncols;
 
-//    imageDraw(charmap, NULL, NULL);
-
-    const struct Char* curr = buffer;
-    for(size_t l = 0; l < nlines; l++) {
+    for(size_t l = 0; l < term_nlines; l++) {
         for(size_t c = 0; c < ncols; c++) {
             print_char(curr++, l, c);
         }
@@ -203,12 +236,7 @@ static void write_string(const char *string, size_t length) {
     }
     
     flush_screen();
-
-    //imageDraw(charmap, NULL, NULL);
-
 }
-
-
 
 
 terminal_handler_t get_terminal_handler(void) {
@@ -224,4 +252,3 @@ void terminal_set_colors(uint32_t foreground, uint32_t background) {
     terminal_foreground = foreground;
     terminal_background = background;
 }
-
