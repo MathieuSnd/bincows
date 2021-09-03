@@ -8,8 +8,17 @@
 
 #define TAB_SPACE 6
 
+
+struct Char {
+    uint32_t fg_color: 24;
+    char c;
+    uint32_t bg_color;
+};
+
+
 static void write_string(const char *string, size_t length);
 static struct Char make_Char(char c);
+static void print_char(const struct Char* restrict c, int line, int col);
 
 static terminal_handler_t terminal_handler = NULL;
 static uint32_t terminal_foreground = 0xa0a0a0;
@@ -18,21 +27,7 @@ static uint32_t terminal_background = 0x00;
 // need to redraw the entire terminal
 static bool need_refresh = false;
 
-struct Char {
-    uint32_t fg_color: 24;
-    char c;
-    uint32_t bg_color;
-};
 
-#define CHARMAP_W 192
-#define CHARMAP_H 256
-
-#define FONTWIDTH (CHARMAP_W / 16)
-#define FONTHEIGHT (CHARMAP_H / 16)
-#define INTERLINE 4
-#define LINE_HEIGHT (FONTHEIGHT + INTERLINE)
-
-#define N_PAGES 4
 
 
 static Image* charmap = NULL;
@@ -55,10 +50,11 @@ extern int _binary_charmap_bmp;
 void setup_terminal(void) {
     assert(charmap == NULL);
     
-    charmap = loadBMP(&_binary_charmap_bmp);
+    charmap = loadBMP_24b_1b(&_binary_charmap_bmp);
 
     assert(charmap      != NULL);
-    assert(charmap->bpp == 32);
+    assert(charmap->bpp   == 1);
+    assert(charmap->pitch == 2);
     assert(charmap->w   == CHARMAP_W);
     assert(charmap->h   == CHARMAP_H);
     
@@ -114,7 +110,9 @@ static void move_buffer(int lines) {
 
     if(lines > 0) {// scroll backward
         size_t bytes = ncols * lines;
-        memmove(buffer, buffer + bytes, bytes);
+        size_t buff_size = nlines * ncols;
+
+        memmove(buffer, buffer + bytes, sizeof(struct Char)*(buff_size - bytes));        
     }
 }
 
@@ -122,7 +120,7 @@ static void next_line(void) {
     cur_col = 0;
     cur_line++;
     if(cur_line >= nlines) {
-        cur_line = nlines;
+        cur_line = nlines-1;
 
         move_buffer(1);
     }
@@ -141,16 +139,24 @@ static struct Char make_Char(char c) {
     };
 }
 
-static void advance_cursor(char c) {
+
+// emplace the char in the buffer, dosn't draw anything
+static void emplace_char(char c) {
     switch(c) {
         // any character
     default:
+
         buffer[ncols * cur_line + cur_col] = make_Char(c);
+        
+        const struct Char* ch = &buffer[ncols * cur_line + cur_col];
 
         cur_col += 1;
 
+        print_char(ch, cur_line, cur_col);
+
         if(cur_col >= ncols)
             next_line();
+        
         break;
     
     case '\n':
@@ -170,14 +176,8 @@ static void advance_cursor(char c) {
     }
 }
 
-// emplace the char in the buffer, dosn't draw anything
-static void emplace_char(char c) {
-    advance_cursor(c); 
-}
 
 static void print_char(const struct Char* restrict c, int line, int col) {
-    uint16_t c_x = c->c % 16,
-             c_y = c->c / 16;
 /*
     Pos srcpos = {
         FONTWIDTH  * c_x,
@@ -193,22 +193,27 @@ static void print_char(const struct Char* restrict c, int line, int col) {
 */
     //imageDrawMask(charmap, &srcpos, &dstrect, c->fg_color, c->bg_color);
     //imageLower_draw(charmap, &srcpos, &dstrect);
-    imageLower_blitBinaryMask(
-        charmap,
-        FONTWIDTH * c_x,  FONTHEIGHT * c_y,
-        col  * FONTWIDTH, line * LINE_HEIGHT,
-        FONTWIDTH, FONTHEIGHT,
-        c->bg_color, c->fg_color);
-    
+    //imageLower_blitBinaryMask(
+    //    charmap,
+    //    FONTWIDTH * c_x,  FONTHEIGHT * c_y,
+    //    col  * FONTWIDTH, line * LINE_HEIGHT,
+    //    FONTWIDTH, FONTHEIGHT,
+    //    c->bg_color, c->fg_color);
+    //
+    /*
     Rect interlineRect = {
         .x = col  * FONTWIDTH, 
         .y = line * LINE_HEIGHT + FONTHEIGHT,
-
         .w = FONTWIDTH,
         .h = INTERLINE,
     };
+*/
+    
+    blitchar(charmap, c->c, c->fg_color, c->bg_color,
+                col  * FONTWIDTH, line * LINE_HEIGHT);
 
-    imageFillRect(c->bg_color, &interlineRect);
+
+    //imageFillRect(c->bg_color, &interlineRect);
     
 }
 
@@ -225,7 +230,9 @@ static void flush_screen(void) {
 
 
 static void write_string(const char *string, size_t length) {
-    
+
+    need_refresh = false;
+
     for(;length>0;--length) {
         char c = *string++;
         
@@ -234,8 +241,8 @@ static void write_string(const char *string, size_t length) {
         emplace_char(c);
 
     }
-    
-    flush_screen();
+    if(need_refresh)
+        flush_screen();
 }
 
 

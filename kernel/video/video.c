@@ -2,6 +2,7 @@
 #include "../klib/string.h"
 #include "../klib/sprintf.h"
 #include "video.h"
+#include "terminal.h"
 #include "../common.h"
 #include "../memory/kalloc.h"
 #include "../debug/assert.h"
@@ -243,8 +244,9 @@ Image* alloc_image(uint32_t width, uint32_t height, uint32_t bpp) {
     assert(bpp % 8 == 0 || bpp == 1);
 
     if(bpp == 1) {
-        // align on 8 byte
-        ret->pitch = ((width * bpp +7) / 8) * 8;
+        int words = (width + 15) / 16;
+        // align on 2 byte
+        ret->pitch = words * 2;
     }
     else
         ret->pitch = (uint32_t)allign16(width * (bpp/8));
@@ -388,11 +390,81 @@ Image* loadBMP(const void* restrict rawFile) {
 }
 
 /*
+
+map[] = {
 (00): black black
 (01): black white
 (10): white black
 (11): white white
+}
+
+for line
+in = 
+
+for(ptr = col; ; ptr += 2px) {
+    
+    in >>= 2;
+    
+    in' = in or 0b11
+
+    *ptr = map+4*in'
+}
 */
+
+void blitchar(const struct Image* charset,
+              char c, uint32_t fg_color, uint32_t bg_color,
+              uint16_t dstx, uint16_t dsty) {
+
+    const uint64_t colormap[] = {
+        ((uint64_t) bg_color << 32) | bg_color,
+        ((uint64_t) bg_color << 32) | fg_color,
+        ((uint64_t) fg_color << 32) | bg_color,
+        ((uint64_t) fg_color << 32) | fg_color,  
+    };
+
+    
+    
+    uint16_t srcy = c * FONTHEIGHT;
+     
+
+    uint64_t* dst_ptr = (uint64_t *)(screen.pix + screen.pitch * dsty + 4 * dstx);
+    uint16_t dst_skip = screen.pitch - FONTWIDTH * 4;
+
+    // 4 2-byte lines = 4*16 = 64 (1 access every 4 lines)
+
+    // 1st line address for the selected char
+    uint64_t* lines_ptr = charset->pix + srcy * 2;
+
+    // loop over 4-line chunks
+    for(size_t n_lines = FONTHEIGHT / 4; n_lines > 0; --n_lines) {
+
+        uint64_t lines = *(lines_ptr++);
+
+        // 64 bit = 4 lines
+        for(size_t n_line = 4; n_line > 0; n_line--) {
+            uint16_t line = lines;
+            // lines are 16bit aligned
+            
+            lines >>= 16;
+            
+            for(size_t n_col2 = FONTWIDTH / 2 ; n_col2 > 0 ; n_col2--) {
+                uint16_t index = line & 0b11;
+
+                
+                *(dst_ptr++) = colormap[index];
+                line >>= 2;
+            }
+            dst_ptr += dst_skip / sizeof(dst_ptr);
+        }
+
+    }
+}
+// else this func wont work 
+static_assert(FONTWIDTH  % 2 == 0);
+static_assert(FONTHEIGHT % 4 == 0);
+
+
+
 
 Image* loadBMP_24b_1b(const void* rawFile) {
     
@@ -402,7 +474,7 @@ Image* loadBMP_24b_1b(const void* rawFile) {
     if(check_BMP_header(header))
         return NULL;
 
-        assert(header->bpp == 24);
+    assert(header->bpp == 24);
 
         
 
@@ -414,25 +486,33 @@ Image* loadBMP_24b_1b(const void* rawFile) {
     
     Image* ret = alloc_image(w,h, 1);
 
-    size_t bpitch = ret->pitch;
-    uint32_t* pix32 = ret->pix;
+    size_t bpitch = ret->pitch / 2;
+    uint16_t* pix = ret->pix;
 
     
     for(size_t y = 0; y < h; y++) {
-        const uint8_t* src_ptr  = (srcpix + (h-1 - y) * w);
         
-        uint8_t byte = 0;
+        uint16_t word = 0;
+
+        uint16_t _x = 0;
         
         for(size_t x = 0; x < w; x++) {
-            byte <<= 1;
+            const uint8_t* src_ptr  = (srcpix + 3 * (h-1 - y) * w + 3 * (w-1-x));
+
+            word <<= 1;
             // put 1 iif r channel > 128
-            byte |= *(src_ptr++) >> 7;
+            word |= *(src_ptr) >> 7;
+
             
 
-            if((x % 8 == 0 && x != 0) || x == w-1) {
-                pix32[x/8 + y * bpitch] = byte;
-                byte = 0;
+            if((x % 16 == 0 && x != 0) || x == w-1) {
+
+                pix[_x + y * bpitch] = word;
+                ++_x;
+                word = 0;
             }            
         }
     }
+
+    return ret;
 }
