@@ -3,7 +3,7 @@ CC  		:= x86_64-elf-gcc
 ASM			:= nasm
 ASM_FLAGS 	:= -felf64
  
-CFLAGS = -Wall -Wextra -O1 -pipe
+CFLAGS = -Wall -Wextra -O3 -pipe
  
 INTERNALLDFLAGS :=     \
 	-fno-pic  \
