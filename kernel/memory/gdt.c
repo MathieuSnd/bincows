@@ -82,7 +82,5 @@ struct GDTDescriptor gdt_descriptor = {
     volatile int y = 5421;
 
 void init_gdt_table() {
-    PRINT_STRUCT(gdt);
-    PRINT_STRUCT(gdt[0]);
     _lgdt(&gdt_descriptor);
 }
