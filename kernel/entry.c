@@ -103,6 +103,20 @@ void *stivale2_get_tag(struct stivale2_struct *stivale2_struct, uint64_t id) {
 // const char but represents a big string
 extern const char _binary_bootmessage_txt;
 
+
+// print all chars
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-function"
+static void debug_terminal() {
+    char buff[256];
+    for(int i = 0; i < 256; i++)
+        buff[i] = i+1;
+    kputs(buff);
+}
+#pragma GCC diagnostic pop
+
+
 // Registers %rbp, %rbx and %r12 through %r15 “belong” to the calling functio
 // The following will be our kernel's entry point.
 void _start(struct stivale2_struct *stivale2_struct) {
@@ -114,8 +128,9 @@ void _start(struct stivale2_struct *stivale2_struct) {
     if (term_str_tag == NULL) {
         // It wasn't found, just hang...
         for (;;) {
-            asm ("hlt");
+            asm volatile("hlt");
         }
+        __builtin_unreachable();
     }
  
     // Let's get the address of the terminal write function.
@@ -168,13 +183,16 @@ void _start(struct stivale2_struct *stivale2_struct) {
     PRINT_VAL(fbtag. blue_mask_size);
     
  
-    kprintf("ds=0x%x\nss=0x%x\ncs=%x\nes=%x\nfs=%x\ngs=%x\n\n", 
+    kprintf("ds=0x%x\nss=0x%x\ncs=%x\nes=%x\nfs=%x\ngs=%x\n\n\n\npppppppppppppppppp\n\n", 
             _ds(), _ss(), _cs(),_es(),_fs(),_gs());
 
 
     init_gdt_table();
 
 
+    for(int i = 0;;i++) {
+        kprintf("%d\n", i);
+    }
     
     //*ptr = 0xfffa24821;
     asm volatile ("sti");
