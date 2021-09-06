@@ -9,6 +9,8 @@
 #include "video/terminal.h"
 #include "common.h"
 #include "regs.h"
+
+#include "int/idt.h"
  
 // 8K stack
 static uint8_t stack[8192] __align(16);
@@ -106,15 +108,17 @@ extern const char _binary_bootmessage_txt;
 
 // print all chars
 
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-function"
+//#pragma GCC diagnostic push
+//#pragma GCC diagnostic ignored "-Wunused-function"
+/*
 static void debug_terminal() {
     char buff[256];
     for(int i = 0; i < 256; i++)
         buff[i] = i+1;
     kputs(buff);
 }
-#pragma GCC diagnostic pop
+*/
+//#pragma GCC diagnostic pop
 
 
 // Registers %rbp, %rbx and %r12 through %r15 “belong” to the calling functio
@@ -158,42 +162,19 @@ void _start(struct stivale2_struct *stivale2_struct) {
 
 
     setup_terminal();
-
-    
-    set_terminal_fgcolor(0x00ff00);
-    set_terminal_bgcolor(0xff0000);
-
-    kputs(&_binary_bootmessage_txt);
-
-    
-    set_terminal_fgcolor(0xff0000);
-    set_terminal_bgcolor(0x00ff00);
-    
-    PRINT_VAL(fbtag.memory_model);
-    PRINT_VAL(fbtag.framebuffer_pitch);
-    PRINT_VAL(fbtag.framebuffer_width);
-    PRINT_VAL(fbtag.framebuffer_height);
-    PRINT_VAL(fbtag.framebuffer_bpp);
-    PRINT_HEX(fbtag.framebuffer_addr);
-    PRINT_VAL(fbtag.  red_mask_shift);
-    PRINT_VAL(fbtag.green_mask_shift);
-    PRINT_VAL(fbtag. blue_mask_shift);
-    PRINT_VAL(fbtag.  red_mask_size);
-    PRINT_VAL(fbtag.green_mask_size);
-    PRINT_VAL(fbtag. blue_mask_size);
-    
  
-    kprintf("ds=0x%x\nss=0x%x\ncs=%x\nes=%x\nfs=%x\ngs=%x\n\n\n\npppppppppppppppppp\n\n", 
-            _ds(), _ss(), _cs(),_es(),_fs(),_gs());
-
-
-    init_gdt_table();
-
-
-    for(int i = 0;;i++) {
-        kprintf("%d\n", i);
-    }
+    setup_isr();
     
+    asm volatile("sti");
+
+    asm volatile("int $0");
+
+    //kprintf("%u\n", y);
+
+   for(;;) {
+       asm volatile ("hlt");
+    }
+
     //*ptr = 0xfffa24821;
     asm volatile ("sti");
     asm volatile ("hlt");

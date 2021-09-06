@@ -54,17 +54,16 @@ static struct GDTentry gdt[] = {
     {0},//  null descriptor
     {0,0,0,  0,0,0,1,1,0,1,   0,  0,1,0,1,  0}, // kernel code segment
     {0,0,0,  0,1,0,0,1,0,1,   0,  0,0,1,1,  0}, // kernel data segment
-    {0,0,0,  0,0,0,1,1,0,1,   0,  0,1,0,1,  0}, // kernel code segment
-    {0,0,0,  0,1,0,0,1,0,1,   0,  0,0,1,1,  0}, // kernel data segment
-    {0,0,0,  0,0,0,1,1,0,1,   0,  0,1,0,1,  0}, // kernel code segment
-    {0,0,0,  0,1,0,0,1,0,1,   0,  0,0,1,1,  0}, // kernel data segment
-    {0,0,0,  0,0,0,1,1,0,1,   0,  0,1,0,1,  0}, // kernel code segment
-    {0,0,0,  0,1,0,0,1,0,1,   0,  0,0,1,1,  0}, // kernel data segment
+    
+    {0,0,0,  0,0,0,1,1,3,1,   0,  0,1,0,1,  0}, // user code segment
+    {0,0,0,  0,1,0,0,1,3,1,   0,  0,0,1,1,  0}, // user data segment
+
+    {0,0,0,  0,1,0,0,1,3,1,   0,  0,0,1,1,  0}, // user data segment
     /// 98a0
     //  92a0
 };
 
-static_assert(sizeof(gdt) == 9 * sizeof(struct GDTentry));
+static_assert(sizeof(gdt) == 6 * sizeof(struct GDTentry));
 
 // from gdt.s
 void _lgdt(void* gdt_desc_ptr);
