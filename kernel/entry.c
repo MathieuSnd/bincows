@@ -7,6 +7,7 @@
 #include "klib/sprintf.h"
 #include "klib/string.h"
 #include "video/terminal.h"
+#include "acpi/acpi.h"
 #include "common.h"
 #include "regs.h"
 
@@ -15,12 +16,6 @@
 // 8K stack
 static uint8_t stack[8192] __align(16);
 
- 
-// stivale2 offers a runtime terminal service which can be ditched at any
-// time, but it provides an easy way to print out to graphical terminal,
-// especially during early boot.
-// Read the notes about the requirements for using this feature below this
-// code block.
 static struct stivale2_header_tag_terminal terminal_hdr_tag = {
     // All tags need to begin with an identifier and a pointer to the next tag.
     .tag = {
@@ -95,7 +90,7 @@ void *stivale2_get_tag(struct stivale2_struct *stivale2_struct, uint64_t id) {
  
         // Get a pointer to the next tag in the linked list and repeat.
         current_tag = (void *)current_tag->next;
-    }
+    }    
 }
 
 
@@ -105,20 +100,19 @@ void *stivale2_get_tag(struct stivale2_struct *stivale2_struct, uint64_t id) {
 // const char but represents a big string
 extern const char _binary_bootmessage_txt;
 
-
 // print all chars
 
-//#pragma GCC diagnostic push
-//#pragma GCC diagnostic ignored "-Wunused-function"
-/*
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-function"
+
 static void debug_terminal() {
     char buff[256];
     for(int i = 0; i < 256; i++)
         buff[i] = i+1;
     kputs(buff);
 }
-*/
-//#pragma GCC diagnostic pop
+
+#pragma GCC diagnostic pop
 
 
 // Registers %rbp, %rbx and %r12 through %r15 “belong” to the calling functio
@@ -146,8 +140,14 @@ void _start(struct stivale2_struct *stivale2_struct) {
 
     struct stivale2_struct_tag_framebuffer fbtag;
     struct stivale2_struct_tag_framebuffer* _fbtag = stivale2_get_tag(stivale2_struct,0x506461d2950408fa);
+    memcpy(&fbtag,    _fbtag,       sizeof(fbtag));
 
-    memcpy(&fbtag, _fbtag, sizeof(fbtag));
+    struct stivale2_struct_tag_rsdp* rsdp_tag_ptr = stivale2_get_tag(stivale2_struct, STIVALE2_STRUCT_TAG_RSDP_ID);
+
+    assert(rsdp_tag_ptr != NULL);
+
+    uint64_t rsdp_location = rsdp_tag_ptr->rsdp;
+
     
 
 
@@ -156,7 +156,8 @@ void _start(struct stivale2_struct *stivale2_struct) {
                 .pitch=        fbtag.framebuffer_pitch,
                 .bpp  =        fbtag.framebuffer_bpp,
                 .pix  = (void*)fbtag.framebuffer_addr};
-
+    
+    init_gdt_table();
 
     initVideo(&sc);
 
@@ -164,16 +165,20 @@ void _start(struct stivale2_struct *stivale2_struct) {
     setup_terminal();
  
     setup_isr();
+    read_acpi_tables((void*)rsdp_location);
     
     asm volatile("sti");
 
-    asm volatile("int $0");
+    kputs(&_binary_bootmessage_txt);
 
-    //kprintf("%u\n", y);
+
+
 
    for(;;) {
        asm volatile ("hlt");
     }
+    __builtin_unreachable();
+
 
     //*ptr = 0xfffa24821;
     asm volatile ("sti");

@@ -69,7 +69,7 @@ static IDTE make_idte(void* handler, type_attr_t type_attr) {
 
     return (IDTE) {
         .offset_1  = h & 0xffff,
-        .selector  = 0x28,
+        .selector  = 0x08, // kernel code segment
         .ist       = 0,
         .type_attr = type_attr,
         .offset_2  = (h >> 16) & 0xffff,

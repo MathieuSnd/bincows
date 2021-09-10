@@ -1,7 +1,7 @@
 #include "../klib/sprintf.h"
 #include "../debug/assert.h"
+#include "../debug/panic.h"
 #include "idt.h"
-
 
 
 
@@ -33,8 +33,10 @@ __attribute__((interrupt)) void ISR_error_handler(struct IFrame* interrupt_frame
 
 
 __attribute__((interrupt)) void ISR_div_by_zero_handler(struct IFrame* interrupt_frame) {
-    kprintf("ISR_div_by_zero_handler():\n");
     print_frame(interrupt_frame);
+    panic("ISR_div_by_zero_handler():\n");
+    asm volatile("cli");
+    asm volatile("hlt");
 }
 
 
@@ -60,8 +62,10 @@ __attribute__((interrupt)) void ISR_bound_handler(struct IFrame* interrupt_frame
     kprintf("ISR_bound_handler()\n");
 }
 __attribute__((interrupt)) void ISR_invalid_opcode_handler(struct IFrame* interrupt_frame) {
-    (void) interrupt_frame;
     kprintf("ISR_invalid_opcode_handler()\n");
+    print_frame(interrupt_frame);
+    asm volatile("cli");
+    asm volatile("hlt");
 }
 __attribute__((interrupt)) void ISR_device_not_available_handler(struct IFrame* interrupt_frame) {
     (void) interrupt_frame;
@@ -69,6 +73,7 @@ __attribute__((interrupt)) void ISR_device_not_available_handler(struct IFrame* 
 }
 __attribute__((interrupt)) void ISR_double_fault_handler(struct IFrame* interrupt_frame, uint64_t error_code) {
     (void) interrupt_frame;
+    (void) error_code;
     kprintf("ISR_double_fault_handler()\n");
 }
 __attribute__((interrupt)) void ISR_coproc_segment_overrun_handler(struct IFrame* interrupt_frame) {
@@ -77,21 +82,27 @@ __attribute__((interrupt)) void ISR_coproc_segment_overrun_handler(struct IFrame
 }
 __attribute__((interrupt)) void ISR_invalid_TSS_handler(struct IFrame* interrupt_frame, uint64_t error_code) {
     (void) interrupt_frame;
+    (void) error_code;
+
     kprintf("ISR_invalid_TSS_handler()\n");
 }
 __attribute__((interrupt)) void ISR_segment_not_present_handler(struct IFrame* interrupt_frame, uint64_t error_code) {
+    (void) error_code;
     (void) interrupt_frame;
     kprintf("ISR_segment_not_present_handler()\n");
 }
 __attribute__((interrupt)) void ISR_stack_segment_fault_handler(struct IFrame* interrupt_frame, uint64_t error_code) {
+    (void) error_code;
     (void) interrupt_frame;
     kprintf("ISR_stack_segment_fault_handler()\n");
 }
 __attribute__((interrupt)) void ISR_general_protection_fault_handler(struct IFrame* interrupt_frame, uint64_t error_code) {
+    (void) error_code;
     (void) interrupt_frame;
     kprintf("ISR_general_protection_fault_handler()\n");
 }
 __attribute__((interrupt)) void ISR_page_fault_handler(struct IFrame* interrupt_frame, uint64_t error_code) {
+    (void) error_code;
     (void) interrupt_frame;
     kprintf("ISR_page_fault_handler()\n");
 }
@@ -124,10 +135,6 @@ void setup_isr(void) {
 
     for(int i = 15; i <= 255; i++)
         set_interrupt_handler(i, ISR_spurious);
-
-    for(size_t i = 0; i < 16; i++) {
-        kprintf("entry %d:\t%16lx %16lx\n", i, idt[2*i], idt[2*i+1]);
-    }
 
     setup_idt();
     _sti();

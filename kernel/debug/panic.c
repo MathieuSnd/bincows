@@ -3,6 +3,9 @@
 #include "../video/terminal.h"
 
 
+int zero = 0;
+
+
 __attribute__((noreturn)) void panic(const char* panic_string) {
     // checks if video is operationnal
     if(get_terminal_handler() != NULL) {
@@ -11,16 +14,20 @@ __attribute__((noreturn)) void panic(const char* panic_string) {
         if(panic_string == NULL)
             panic_string = "(null)";
 
-        kprintf(
+        kputs(
             "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n"
             "!!!!!!!!!!!!!   KERNL PANIC   !!!!!!!!!!!!!\n"
-            "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n"
-            "%s\n\n"
-            "you may manually shutdown the machine.\n",
-            panic_string
+            "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
+        
+        kputs(panic_string);
+        kputs(
+            "\n\n"
+            "you may manually shutdown the machine.\n"
         );
     }
-    for(;;)
-        asm volatile("hlt");
+    
+    asm volatile("cli");
+    asm volatile("hlt");
+    
     __builtin_unreachable();
 }

@@ -1,10 +1,16 @@
 
-.PHONY: clean all disk kernel force_look threaded_build
+.PHONY: clean all run disk kernel force_look threaded_build
 
 HDD_ROOT := disc_root 
 HDD_FILE := disk.hdd
 
 USED_LOOPBACK := /dev/loop6
+
+QEMU_PATH := "/mnt/d/Program Files/qemu/qemu-system-x86_64.exe"
+QEMU_ARGS := -monitor stdio -d cpu_reset -bios "d:/Program Files/qemu/bios/OVMF.fd"
+
+run: all
+	$(QEMU_PATH) $(QEMU_ARGS) $(HDD_FILE)
 
 all: disk
 
