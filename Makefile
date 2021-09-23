@@ -3,14 +3,17 @@
 
 HDD_ROOT := disc_root 
 HDD_FILE := disk.hdd
-
+ 
 USED_LOOPBACK := /dev/loop6
 
+LIMINE_INSTALL := ./limine-bootloader/limine-install-linux-x86_64
+
 QEMU_PATH := "/mnt/d/Program Files/qemu/qemu-system-x86_64.exe"
-QEMU_ARGS := -monitor stdio -d cpu_reset -bios "d:/Program Files/qemu/bios/OVMF.fd"
+QEMU_ARGS := -monitor stdio -bios "d:/Program Files/qemu/bios/OVMF.fd" -m 256 -vga std -no-reboot 
+# -bios "d:/Program Files/qemu/bios/OVMF.fd"
 
 run: all
-	$(QEMU_PATH) $(QEMU_ARGS) $(HDD_FILE)
+	$(QEMU_PATH) $(QEMU_ARGS) -drive format=raw,file=$(HDD_FILE)
 
 all: disk
 
@@ -22,7 +25,7 @@ $(HDD_FILE): kernel/entry.c
 	sudo /sbin/parted -s $(HDD_FILE) mklabel gpt
 	sudo /sbin/parted -s $(HDD_FILE) mkpart ESP fat32 2048s 100%
 	sudo /sbin/parted -s $(HDD_FILE) set 1 esp on
-	./limine-bootloader/limine-install $(HDD_FILE)
+	$(LIMINE_INSTALL) $(HDD_FILE)
 
 disk: kernel $(HDD_FILE)
 

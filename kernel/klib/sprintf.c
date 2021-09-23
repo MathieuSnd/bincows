@@ -1,11 +1,12 @@
 #include "sprintf.h"
+#include "math.h"
 #include "string.h"
 #include "../video/terminal.h"
 
 #define SIGN(X) X > 0 ? 1 : -1
 #define ARG(TYPE) (TYPE)va_arg(ap, TYPE)
 
-char* utohex(char* str, uint64_t x, size_t min_digits) {
+static char* utohex(char* str, uint64_t x, int min_digits) {
     size_t digits = 1;
 
     uint64_t _x = x;
@@ -16,7 +17,7 @@ char* utohex(char* str, uint64_t x, size_t min_digits) {
         digits++;
     }
     
-    if(digits < min_digits)
+    if((int)digits < min_digits)
         digits = min_digits;
 
     char* end = str+digits;
@@ -41,7 +42,7 @@ char* utohex(char* str, uint64_t x, size_t min_digits) {
 
 // unsigned to string
 // return a ptr to the end of the string
-char* utos(char* str, uint64_t x, size_t min_digits) {
+static char* utos(char* str, uint64_t x, int min_digits) {
     size_t digits = 1;
 
     uint64_t _x = x;
@@ -50,7 +51,7 @@ char* utos(char* str, uint64_t x, size_t min_digits) {
         digits++;
     }
 
-    if(digits < min_digits)
+    if((int)digits < min_digits)
         digits = min_digits;
 
     char* end = str+digits;
@@ -68,7 +69,7 @@ char* utos(char* str, uint64_t x, size_t min_digits) {
 }
 
 // signed to string
-char* itos(char* str, int64_t x, size_t min_digits) {
+static char* itos(char* str, int64_t x, int min_digits) {
     if(x < 0) {
         *(str++) = '-';
         x *= -1;
@@ -82,7 +83,7 @@ int vsprintf(char *str, const char *format, va_list ap) {
     char cf;
     int args_put = 0;
     int persent = 0;
-    int digits = 0;
+    int digits = -1;
 
 // bool value: '%l..' 
     int _long = 0;
@@ -101,8 +102,11 @@ int vsprintf(char *str, const char *format, va_list ap) {
             }
 
             int i = cf - '0';
-            if(i >= 0 && i <= 9)
+            if(i >= 0 && i <= 9) {
+                if(digits < 0)
+                    digits = 0;
                 digits = 10 * digits + i;
+            }
             else {
                 switch(cf) {
                     default:
@@ -131,15 +135,24 @@ int vsprintf(char *str, const char *format, va_list ap) {
                     case 's':
                         {
                             const char* arg = ARG(const char*);
-                            strcpy(str, arg);
-                            str += strlen(arg);
+                            if(digits >= 0) {
+                                strncpy(str, arg, digits);
+                                if((int) strlen(arg) > digits)
+                                    str += strlen(arg);
+                                else
+                                    str += digits;
+                            }
+                            else {
+                                strcpy(str, arg);
+                                str += strlen(arg);
+                            }
                         }
                         break;
                     case 'c':
                         *(str++) = (char)ARG(int);
                         break;
                 }
-                digits = 0;
+                digits = -1;
                 persent = 0;
                 _long = 0;
                 args_put++;
@@ -147,6 +160,11 @@ int vsprintf(char *str, const char *format, va_list ap) {
         }
 
         else if(cf == '%') {
+            if(persent) {
+                // allow %% in fmt to print '%'
+                persent = 0;
+                *(str++) = '%';
+            }
             persent = 1;
         }
         else {

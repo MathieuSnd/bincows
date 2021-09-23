@@ -10,6 +10,7 @@
 #include "acpi/acpi.h"
 #include "common.h"
 #include "regs.h"
+#include "int/apic.h"
 
 #include "int/idt.h"
  
@@ -44,9 +45,9 @@ static struct stivale2_header_tag_framebuffer framebuffer_hdr_tag = {
     },
     // We set all the framebuffer specifics to 0 as we want the bootloader
     // to pick the best it can.
-    .framebuffer_width  = 0,
-    .framebuffer_height = 0,
-    .framebuffer_bpp    = 0
+    .framebuffer_width  = 1152,
+    .framebuffer_height = 864,
+    .framebuffer_bpp    = 32
 };
  
 // The stivale2 specification says we need to define a "header structure".
@@ -94,8 +95,8 @@ void *stivale2_get_tag(struct stivale2_struct *stivale2_struct, uint64_t id) {
 }
 
 
-#define PRINT_VAL(v) kprintf(#v "=%ld\n", v);
-#define PRINT_HEX(v) kprintf(#v "=%lx\n", v);
+#define PRINT_VAL(v) kprintf(#v "=%ld\n", (uint64_t)v);
+#define PRINT_HEX(v) kprintf(#v "=%lx\n", (uint64_t)v);
 
 // const char but represents a big string
 extern const char _binary_bootmessage_txt;
@@ -110,6 +111,14 @@ static void debug_terminal() {
     for(int i = 0; i < 256; i++)
         buff[i] = i+1;
     kputs(buff);
+}
+
+static void print_fb_infos(struct stivale2_struct_tag_framebuffer* fbtag) {
+    PRINT_VAL(fbtag->framebuffer_width);
+    PRINT_VAL(fbtag->framebuffer_height);
+    PRINT_VAL(fbtag->framebuffer_pitch);
+    PRINT_VAL(fbtag->framebuffer_bpp);
+    PRINT_HEX(fbtag->framebuffer_addr);
 }
 
 #pragma GCC diagnostic pop
@@ -148,7 +157,7 @@ void _start(struct stivale2_struct *stivale2_struct) {
 
     uint64_t rsdp_location = rsdp_tag_ptr->rsdp;
 
-    
+
 
 
     Image sc = {.w    =        fbtag.framebuffer_width,
@@ -165,13 +174,24 @@ void _start(struct stivale2_struct *stivale2_struct) {
     setup_terminal();
  
     setup_isr();
-    read_acpi_tables((void*)rsdp_location);
-    
-    asm volatile("sti");
-
+    terminal_set_colors(0xf0f0f0, 0x007000);
+    terminal_clear();
     kputs(&_binary_bootmessage_txt);
+    read_acpi_tables((void*)rsdp_location);
+    kputs("DONE\n");
 
 
+
+    apic_setup_clock();
+
+
+    
+
+
+    for(;;) {
+        asm volatile("hlt");
+        kprintf("%lu\t", clock());
+    }
 
 
    for(;;) {

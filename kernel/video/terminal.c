@@ -21,8 +21,6 @@ static struct Char make_Char(char c);
 static void print_char(const struct Char* restrict c, int line, int col);
 
 static terminal_handler_t terminal_handler = NULL;
-static uint32_t terminal_foreground = 0xa0a0a0;
-static uint32_t terminal_background = 0x00;
 
 // need to redraw the entire terminal
 static bool need_refresh = false;
@@ -54,7 +52,7 @@ void setup_terminal(void) {
 
     assert(charmap      != NULL);
     assert(charmap->bpp   == 1);
-    assert(charmap->pitch == 2);
+    assert(charmap->pitch == 1);
     assert(charmap->w   == CHARMAP_W);
     assert(charmap->h   == CHARMAP_H);
     
@@ -71,14 +69,14 @@ void setup_terminal(void) {
     
     buffer = kmalloc(nlines * ncols * sizeof(struct Char));
 
-    clear_terminal();
+    terminal_clear();
 
 
     set_terminal_handler(write_string);
 }
 
 
-void clear_terminal(void) {
+void terminal_clear(void) {
     cur_col    = 0;
     cur_line   = 0;
     first_line = 0;
@@ -164,7 +162,7 @@ static void emplace_char(char c) {
         break;
     
     case '\t':
-        cur_col = (cur_col / TAB_SPACE) * TAB_SPACE;
+        cur_col = ((cur_col + TAB_SPACE - 1) / TAB_SPACE) * TAB_SPACE;
         
         if(cur_col >= ncols)
             next_line();
@@ -209,9 +207,12 @@ static void print_char(const struct Char* restrict c, int line, int col) {
     };
 */
     
-    blitchar(charmap, c->c, c->fg_color, c->bg_color,
+    blitcharX2(charmap, c->c, c->fg_color, c->bg_color,
                 col  * FONTWIDTH, line * LINE_HEIGHT);
+    
 
+
+    //imageDraw(charmap, NULL, NULL);
 
     //imageFillRect(c->bg_color, &interlineRect);
     
@@ -256,6 +257,6 @@ void set_terminal_handler(terminal_handler_t h) {
 }
 
 void terminal_set_colors(uint32_t foreground, uint32_t background) {
-    terminal_foreground = foreground;
-    terminal_background = background;
+    current_fgcolor = foreground;
+    current_bgcolor = background;
 }

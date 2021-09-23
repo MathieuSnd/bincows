@@ -6,6 +6,7 @@
 #include "../common.h"
 #include "../memory/kalloc.h"
 #include "../debug/assert.h"
+#include "../debug/dump.h"
 
 #define MAX(X,Y) X > Y ? X : Y
 
@@ -244,9 +245,8 @@ Image* alloc_image(uint32_t width, uint32_t height, uint32_t bpp) {
     assert(bpp % 8 == 0 || bpp == 1);
 
     if(bpp == 1) {
-        int words = (width + 15) / 16;
-        // align on 2 byte
-        ret->pitch = words * 2;
+        // align on 1 byte
+        ret->pitch = (width + 7) / 8;
     }
     else
         ret->pitch = (uint32_t)allign16(width * (bpp/8));
@@ -277,8 +277,8 @@ struct BMPFileHeader {
     uint16_t reserved2;  //
     uint32_t body_offset;// byte offset of the pixel body
     uint32_t header_size;// should be eq to sizeof(BMPFileHeader)
-    int32_t w;           // BMP width in pixels
-    int32_t h;           // BMP height in pixels
+    int32_t  w;          // BMP width in pixels
+    int32_t  h;          // BMP height in pixels
     uint16_t one;        // should be eq to 1
     uint16_t bpp;        // bits per pixel
 } __packed;
@@ -421,47 +421,97 @@ void blitchar(const struct Image* charset,
         ((uint64_t) fg_color << 32) | bg_color,
         ((uint64_t) fg_color << 32) | fg_color,  
     };
-
-    
     
     uint16_t srcy = c * FONTHEIGHT;
      
 
     uint64_t* dst_ptr = (uint64_t *)(screen.pix + screen.pitch * dsty + 4 * dstx);
-    uint16_t dst_skip = screen.pitch - FONTWIDTH * 4;
+    uint16_t  dst_skip = screen.pitch - FONTWIDTH * 4;
 
-    // 4 2-byte lines = 4*16 = 64 (1 access every 4 lines)
+    // 4 2-byte lines = 8*8 = 64 (1 access every 4 lines)
 
     // 1st line address for the selected char
-    uint64_t* lines_ptr = charset->pix + srcy * 2;
+    uint64_t* lines_ptr = (uint64_t*)charset->pix + c;
+
+
 
     // loop over 4-line chunks
-    for(size_t n_lines = FONTHEIGHT / 4; n_lines > 0; --n_lines) {
+//    for(size_t n_lines = FONTHEIGHT / 4; n_lines > 0; --n_lines) {
 
-        uint64_t lines = *(lines_ptr++);
+    uint64_t lines = *lines_ptr;
 
-        // 64 bit = 4 lines
-        for(size_t n_line = 4; n_line > 0; n_line--) {
-            uint16_t line = lines;
-            // lines are 16bit aligned
-            
-            lines >>= 16;
-            
-            for(size_t n_col2 = FONTWIDTH / 2 ; n_col2 > 0 ; n_col2--) {
-                uint16_t index = line & 0b11;
+    // 64 bit = 8 lines
+#pragma GCC unroll 8
+    for(size_t n_line = 8; n_line > 0; n_line--) {
+        // lines are 8bit aligned
+        
+#pragma GCC unroll 3
+        for(size_t n_col2 = FONTWIDTH / 2 ; n_col2 > 0 ; n_col2--) {
+            uint16_t index = lines & 0b11;
 
-                
-                *(dst_ptr++) = colormap[index];
-                line >>= 2;
-            }
-            dst_ptr += dst_skip / sizeof(dst_ptr);
+            *(dst_ptr++) = colormap[index];
+            lines >>= 2;
         }
-
+        dst_ptr += dst_skip / 8;
+        
+        lines >>= 8 - FONTWIDTH;
     }
+
 }
+
+
+
+
+void blitcharX2(const struct Image* charset,
+              char c, uint32_t fg_color, uint32_t bg_color,
+              uint16_t dstx, uint16_t dsty) {
+
+    const uint64_t colormap[] = {
+        ((uint64_t) bg_color << 32) | bg_color,
+        ((uint64_t) bg_color << 32) | fg_color,
+        ((uint64_t) fg_color << 32) | bg_color,
+        ((uint64_t) fg_color << 32) | fg_color,  
+    };
+    
+    uint16_t srcy = c * FONTHEIGHT;
+
+    uint64_t* dst_ptr = (uint64_t *)(screen.pix + screen.pitch * dsty + 4 * dstx);
+    uint16_t  dst_skip = screen.pitch - FONTWIDTH * 4;
+
+/// second line to modify
+    uint64_t* dst_ptr2 = dst_ptr + dst_skip / 8;
+
+    uint64_t* lines_ptr = (uint64_t*)charset->pix + c;
+    uint64_t lines = *lines_ptr;
+#pragma GCC unroll 8
+    for(size_t n_line = 8; n_line > 0; n_line--) {
+#pragma GCC unroll 3
+        
+        uint64_t lines0 = lines;
+
+        for(size_t n_col2 = FONTWIDTH / 2 ; n_col2 > 0 ; n_col2--) {
+            uint16_t index = lines0 & 0b11;
+
+            register uint64_t pixs_val = colormap[index];
+
+            *(dst_ptr++)  = pixs_val;
+            *(dst_ptr2++) = pixs_val;
+            // x2
+            lines0 >>= 2;
+        }
+        dst_ptr += dst_skip / 8;
+        dst_ptr2 += dst_skip / 8;
+        
+        
+        lines >>= 8 - FONTWIDTH;
+    }
+
+}
+
 // else this func wont work 
-static_assert(FONTWIDTH  % 2 == 0);
-static_assert(FONTHEIGHT % 4 == 0);
+static_assert(FONTWIDTH     == 6);
+static_assert(FONTWIDTH % 2 == 0);
+static_assert(FONTHEIGHT    == 8);
 
 
 
@@ -474,44 +524,51 @@ Image* loadBMP_24b_1b(const void* rawFile) {
     if(check_BMP_header(header))
         return NULL;
 
-    assert(header->bpp == 24);
+    //assert(header->bpp == 24); 5 -> 
 
-        
 
     uint32_t w = header->w;
     uint32_t h = header->h;
     
     const uint8_t* srcpix  = (const uint8_t *)header + header->body_offset;
+
+    kprintf("%x ; %u\n", header, header->body_offset);
+
+    dump(srcpix, 4 * 6 * 20, 4 * 5, DUMP_HEX8);
+    //asm volatile("hlt");
     
     
     Image* ret = alloc_image(w,h, 1);
+    
+    assert(ret->pitch == 1);
+    assert(w == 6);
+    assert(h == 2048);
 
-    size_t bpitch = ret->pitch / 2;
-    uint16_t* pix = ret->pix;
+    size_t bpitch = ret->pitch;
+    uint8_t* pix = ret->pix;
 
     
     for(size_t y = 0; y < h; y++) {
         
-        uint16_t word = 0;
+        uint8_t byte = 0;
 
         uint16_t _x = 0;
         
         for(size_t x = 0; x < w; x++) {
-            const uint8_t* src_ptr  = (srcpix + 3 * (h-1 - y) * w + 3 * (w-1-x));
+            const uint8_t* src_ptr  = (srcpix + 20 * (h-1 - y) + 3 * (w-1-x));
 
-            word <<= 1;
+            byte <<= 1;
             // put 1 iif r channel > 128
-            word |= *(src_ptr) >> 7;
+            byte |= *(src_ptr) >> 7;
 
             
 
-            if((x % 16 == 0 && x != 0) || x == w-1) {
-
-                pix[_x + y * bpitch] = word;
-                ++_x;
-                word = 0;
+            //if((x % 8 == 0 && x != 0) || x == w-1) {
+            if(x == w-1) {
+                //pix[_x + y * bpitch] = byte;
             }            
         }
+                pix[y] = byte;
     }
 
     return ret;

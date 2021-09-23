@@ -23,19 +23,119 @@ struct RSDPDescriptor20 {
 } __packed;
 
 
+union acpi_signature {
+    char arg[4];
+    uint32_t raw;
+} __packed;
+
+
 
 // plagia from 
 // https://github.com/DorianXGH/Lucarnel/blob/master/src/includes/acpi.h
 //
-struct ACPISDTHeader
-{
-    uint8_t signature[4]; // signature of the table
+struct ACPISDTHeader {
+    union acpi_signature signature;
+    
     uint32_t length;      // length of the table
-    uint8_t revision;
-    uint8_t checksum;
-    uint8_t OEMID[6];
-    uint8_t OEMtableID[8];
+    uint8_t  revision;
+    uint8_t  checksum;
+    uint8_t  OEMID[6];
+    uint8_t  OEMtableID[8];
     uint32_t OEMrevision;
     uint32_t creatorID;
     uint32_t creator_revision;
 } __packed;
+
+
+struct XSDT {
+    struct ACPISDTHeader header;
+    struct ACPISDTHeader* entries[];
+} __packed;
+
+
+struct RSDT {
+    struct ACPISDTHeader header;
+    uint32_t entries[];
+} __packed;
+
+
+struct MADTEntryHeader {
+    uint8_t type;
+    uint8_t length;
+} __packed;
+
+
+struct MADT_lapic_entry {
+    struct MADTEntryHeader header;
+    uint8_t  proc_apic_ID;
+    uint8_t  procID;
+    uint32_t flags; // bit0: enabled
+} __packed;
+
+
+struct MADT_ioapic_entry {
+    struct MADTEntryHeader header;
+    uint8_t  id;
+    uint8_t  reserved;
+    uint32_t address;
+    uint32_t global_system_interrupt_base;
+} __packed;
+
+
+struct MADT_ioapic_interrupt_source_override_entry {
+    struct MADTEntryHeader header;
+    uint8_t  bus_source;
+    uint8_t  irq_source;
+    uint32_t global_system_interrupt;
+    uint16_t flags;
+} __packed;
+
+
+struct MADT_IO_NMI_entry {
+    struct MADTEntryHeader header;
+    uint8_t  source;
+    uint8_t  reserved;
+    uint32_t global_system_interrupt;
+} __packed;
+
+
+struct MADT_LOCAL_NMI_entry {
+    struct MADTEntryHeader header;
+    uint8_t  procID;
+    uint16_t flags;
+    uint8_t  lint; // 0 or 1
+} __packed;
+
+
+struct MADT_LAPIC_address_override_entry {
+    struct MADTEntryHeader header;
+    uint8_t procID;
+    uint8_t flags;
+    uint32_t lint; // 0 or 1
+} __packed;
+
+
+struct MADT_lapicx2_entry {
+    struct MADTEntryHeader header;
+    uint8_t  proc_lapic_ID;
+    uint64_t flags; // bit0: enabled
+    uint32_t acpi_id;
+} __packed;
+
+
+struct MADT {
+    struct ACPISDTHeader header;
+    uint32_t lAPIC_address;
+    uint32_t flags;
+    struct MADTEntryHeader* entries[];
+} __packed;
+
+
+// MADT entry types
+#define APIC_TYPE_LAPIC 0
+#define APIC_TYPE_IO_APIC 1
+#define APIC_TYPE_IO_INTERRUPT_SOURCE_OVERRIDE 2
+#define APIC_TYPE_IO_NMI 3
+#define APIC_TYPE_LOCAL_NMI 4
+#define APIC_TYPE_LAPIC_ADDRESS_OVERRIDE 5
+#define APIC_TYPE_LAPICX2 9

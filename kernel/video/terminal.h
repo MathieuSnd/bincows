@@ -2,12 +2,14 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include "../debug/assert.h"
 
 
-
-#define CHARMAP_W 12
-#define CHARMAP_H 4096
+#define CHARMAP_W 6
+#define CHARMAP_H 2048
 // must be divisible by 4 !!!
+
+static_assert(CHARMAP_H % 4 == 0);
 
 #define FONTWIDTH CHARMAP_W
 #define FONTHEIGHT (CHARMAP_H / 256)
@@ -30,7 +32,7 @@ void set_terminal_fgcolor(uint32_t c);
 
 
 void setup_terminal(void);
-void clear_terminal(void);
+void terminal_clear(void);
 
 // no use another terminal handler
 void set_terminal_handler(terminal_handler_t h);

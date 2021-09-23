@@ -81,10 +81,36 @@ static IDTE make_idte(void* handler, type_attr_t type_attr) {
 static IDTE make_isr(void* handler) {
     return make_idte(handler, make_type_attr_t(ATTR_64_GATE));
 }
+static IDTE make_irq(void* handler) {
+    return make_idte(handler, make_type_attr_t(ATTR_64_TRAP));
+}
 
 
-void set_interrupt_handler(uint16_t number, void* handler) {
+void set_rflags(uint64_t RFLAGS);
+uint64_t get_rflags(void);
+
+
+void set_irs_handler(uint16_t number, void* handler) {
+// make sure to disable interrupts
+// while updating the idt
+// then save IF to its old state
+    uint64_t rflags = get_rflags();
+    _cli();
+
     idt[number] = make_isr(handler);
+
+    set_rflags(rflags);
+}
+
+
+void set_irq_handler(uint16_t number, void* handler) {
+// same as above
+    uint64_t rflags = get_rflags();
+    _cli();
+
+    idt[number] = make_irq(handler);
+
+    set_rflags(rflags);
 }
 
 

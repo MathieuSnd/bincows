@@ -4,6 +4,10 @@
 [global _es]
 [global _fs]
 [global _gs]
+[global inb]
+[global outb]
+[global get_rflags]
+[global set_rflags]
 
 section .text
 
@@ -36,4 +40,36 @@ _fs:
     xor rax,rax
     mov ax, fs
     ret
+
+
+get_rflags:
+    pushfq
+    pop rax
+    ret
+
+; set_rflags(uint64_t rflags)  
+set_rflags:
+    push rdi
+    popfq
+    ret
+
+
+; uint8_t inb(port)
+inb:
+    push rdx
+    mov  rdx, rdi
+    xor  rax, rax
+
+    in   al, dx
     
+    pop  rdx
+    ret
+
+outb:
+    push rdx
+    mov  al, dil
+    
+    out  dx, al
+    
+    pop  rdx
+    ret

@@ -18,7 +18,7 @@
  **/
 void dump(const void* addr, size_t size, size_t line_size, uint8_t mode) {
     
-    char row_fmt[8], last_row_fmt[8];
+    char row_fmt[16], last_row_fmt[16];
 
     size_t pitch; // sizeof word
     
@@ -26,7 +26,7 @@ void dump(const void* addr, size_t size, size_t line_size, uint8_t mode) {
     row_fmt     [i] = '%';
     last_row_fmt[i] = '%';
     i++;
-
+    
     
     // create fmts for printf
 
@@ -108,7 +108,6 @@ void dump(const void* addr, size_t size, size_t line_size, uint8_t mode) {
                 kprintf(row_fmt, *(uint64_t *)ptr & mask);
                 ptr+=pitch;
             }
-            
         }
         kprintf(last_row_fmt, *(uint64_t *)ptr & mask);
         ptr+=pitch;

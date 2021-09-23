@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include "../debug/assert.h"
+#include "../common.h"
 
 #define ATTR_64_GATE 0b1110
 #define ATTR_64_TRAP 0b1110
@@ -24,7 +25,8 @@ static_assert(sizeof(struct IFrame) == 40);
 
 void setup_idt(void);
 
-void set_interrupt_handler(uint16_t number, void* handler);
+void set_irs_handler(uint16_t number, void* handler);
+void set_irq_handler(uint16_t number, void* handler);
 void _cli(void);
 void _sti(void);
 
