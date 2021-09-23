@@ -1,6 +1,7 @@
 .vscode
 disk.hdd
 img_moint
+limine-bootloader
 *.o
 include_cp
 *.elf
