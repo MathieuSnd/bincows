@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 #include "../common.h"
+#include "../drivers/pcie.h"
 
 struct RSDPDescriptor {
     uint8_t  signature[8];
@@ -29,6 +30,11 @@ union acpi_signature {
 } __packed;
 
 
+#define MADT_SIGNATURE 0x43495041
+#define FACP_SIGNATURE 0x50434146
+#define PCIE_SIGNATURE 0x4746434d
+
+
 
 // plagia from 
 // https://github.com/DorianXGH/Lucarnel/blob/master/src/includes/acpi.h
@@ -45,6 +51,8 @@ struct ACPISDTHeader {
     uint32_t creatorID;
     uint32_t creator_revision;
 } __packed;
+
+// end
 
 
 struct XSDT {
@@ -128,6 +136,17 @@ struct MADT {
     uint32_t lAPIC_address;
     uint32_t flags;
     struct MADTEntryHeader* entries[];
+} __packed;
+
+
+static_assert(
+    sizeof(struct PCIE_config_space_descriptor) == 16);
+
+struct PCIETable {
+    struct ACPISDTHeader header;
+    uint64_t reserved0;
+
+    struct PCIE_config_space_descriptor spaces[];
 } __packed;
 
 

@@ -28,8 +28,6 @@ static void parse_madt(const struct MADT* table);
 static void parse_fadt(const struct ACPISDTHeader* table);
 
 
-#define MADT_SIGNATURE 0x43495041
-#define FACP_SIGNATURE 0x50434146
 
 void read_acpi_tables(const void* rsdp_location) {
     const struct RSDPDescriptor20* rsdpd = rsdp_location;
@@ -50,6 +48,7 @@ void read_acpi_tables(const void* rsdp_location) {
 
 
     bool madt_parsed = false,
+         pcie_parsed = false,
          fadt_parsed = false;
 
     for(size_t i = 0; i < n_entries; i++) {
@@ -64,6 +63,10 @@ void read_acpi_tables(const void* rsdp_location) {
         case FACP_SIGNATURE:
             parse_fadt(table);
             fadt_parsed = true;
+            break;
+        case PCIE_SIGNATURE:
+            parse_pcie(table);
+            pcie_parsed = true;
             break;
         default:
             break;
@@ -146,6 +149,15 @@ static void parse_madt(const struct MADT* table) {
     }
 }
 
+
+static void parse_pcie(const struct PCIETable* table) {
+    // fill the pcie driver's descriptor 
+    size_t size = (table->header.length-sizeof(table->header));
+
+    pcie_descriptor.size = size / sizeof(struct PCIE_config_space_descriptor);
+ 
+    memcpy(pcie_descriptor.array, table->spaces, size);
+}
 
 static void parse_fadt(const struct ACPISDTHeader* table) {
     (void) table;
