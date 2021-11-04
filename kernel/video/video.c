@@ -431,7 +431,7 @@ void blitchar(const struct Image* charset,
     // 4 2-byte lines = 8*8 = 64 (1 access every 4 lines)
 
     // 1st line address for the selected char
-    uint64_t* lines_ptr = (uint64_t*)charset->pix + c;
+    uint64_t* lines_ptr = (uint64_t*)charset->pix + srcy / sizeof(uint64_t);
 
 
 
@@ -476,30 +476,33 @@ void blitcharX2(const struct Image* charset,
     uint16_t srcy = c * FONTHEIGHT;
 
     uint64_t* dst_ptr = (uint64_t *)(screen.pix + screen.pitch * dsty + 4 * dstx);
-    uint16_t  dst_skip = screen.pitch - FONTWIDTH * 4;
+    uint16_t  dst_skip = 2 * screen.pitch - 2 * FONTWIDTH * 4;
 
 /// second line to modify
-    uint64_t* dst_ptr2 = dst_ptr + dst_skip / 8;
+    uint64_t* dst_ptr2 = dst_ptr + screen.pitch / 8;
 
-    uint64_t* lines_ptr = (uint64_t*)charset->pix + c;
+    uint64_t* lines_ptr = (uint64_t*)charset->pix + srcy / sizeof(uint64_t);
     uint64_t lines = *lines_ptr;
 #pragma GCC unroll 8
     for(size_t n_line = 8; n_line > 0; n_line--) {
-#pragma GCC unroll 3
         
-        uint64_t lines0 = lines;
 
+#pragma GCC unroll 3
         for(size_t n_col2 = FONTWIDTH / 2 ; n_col2 > 0 ; n_col2--) {
-            uint16_t index = lines0 & 0b11;
+            uint16_t index = lines & 0b11;
 
             register uint64_t pixs_val = colormap[index];
+            register uint64_t pixs_val_low  = pixs_val | (pixs_val << 32);
+            register uint64_t pixs_val_high = pixs_val | (pixs_val >> 32);
 
-            *(dst_ptr++)  = pixs_val;
-            *(dst_ptr2++) = pixs_val;
+            *(dst_ptr++)  = pixs_val_low;
+            *(dst_ptr++)  = pixs_val_high;
+            *(dst_ptr2++) = pixs_val_low;
+            *(dst_ptr2++) = pixs_val_high;
             // x2
-            lines0 >>= 2;
+            lines >>= 2;
         }
-        dst_ptr += dst_skip / 8;
+        dst_ptr +=  dst_skip / 8;
         dst_ptr2 += dst_skip / 8;
         
         
@@ -544,7 +547,6 @@ Image* loadBMP_24b_1b(const void* rawFile) {
     assert(w == 6);
     assert(h == 2048);
 
-    size_t bpitch = ret->pitch;
     uint8_t* pix = ret->pix;
 
     
@@ -552,7 +554,6 @@ Image* loadBMP_24b_1b(const void* rawFile) {
         
         uint8_t byte = 0;
 
-        uint16_t _x = 0;
         
         for(size_t x = 0; x < w; x++) {
             const uint8_t* src_ptr  = (srcpix + 20 * (h-1 - y) + 3 * (w-1-x));

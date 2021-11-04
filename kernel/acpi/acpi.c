@@ -25,11 +25,13 @@ static bool __ATTR_PURE__ checksum(const void* table, size_t size) {
 }
 
 static void parse_madt(const struct MADT* table);
+static void parse_hpet(const struct HPET* table);
 static void parse_fadt(const struct ACPISDTHeader* table);
 
 
 #define MADT_SIGNATURE 0x43495041
 #define FACP_SIGNATURE 0x50434146
+#define HPET_SIGNATURE 0x54455048
 
 void read_acpi_tables(const void* rsdp_location) {
     const struct RSDPDescriptor20* rsdpd = rsdp_location;
@@ -50,6 +52,7 @@ void read_acpi_tables(const void* rsdp_location) {
 
 
     bool madt_parsed = false,
+         hpet_parsed = false,
          fadt_parsed = false;
 
     for(size_t i = 0; i < n_entries; i++) {
@@ -65,15 +68,24 @@ void read_acpi_tables(const void* rsdp_location) {
             parse_fadt(table);
             fadt_parsed = true;
             break;
+        case HPET_SIGNATURE:
+            parse_hpet(table);
+            hpet_parsed = true;
+            break;
         default:
             break;
         }
         kprintf("%3u: %4s\n", i, table->signature.arg);
     }
 
-    asm volatile("hlt");
+    
     assert(madt_parsed);
+    //assert(hpet_parsed);
     assert(fadt_parsed);
+}
+
+static void parse_hpet(const struct HPET* table) {
+    
 }
 
 static void parse_madt(const struct MADT* table) {

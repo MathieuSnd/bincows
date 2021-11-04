@@ -19,6 +19,7 @@ struct Char {
 static void write_string(const char *string, size_t length);
 static struct Char make_Char(char c);
 static void print_char(const struct Char* restrict c, int line, int col);
+static void flush_screen(void);
 
 static terminal_handler_t terminal_handler = NULL;
 
@@ -62,7 +63,7 @@ void setup_terminal(void) {
 // with right size
 
     ncols       = screenImage->w / FONTWIDTH;
-    term_nlines = (screenImage->h / LINE_HEIGHT);
+    term_nlines = (screenImage->h / LINE_HEIGHT) - 3;
     nlines      = N_PAGES * term_nlines;
 
                                 
@@ -86,6 +87,8 @@ void terminal_clear(void) {
     struct Char* ptr = buffer;
     for(;buffer_len > 0; --buffer_len)
         *(ptr++) = make_Char(0);
+    
+    flush_screen();
 }
 
 
@@ -122,7 +125,7 @@ static void next_line(void) {
 
         move_buffer(1);
     }
-    else if(cur_line > first_line + term_nlines) {
+    else if(cur_line >= first_line + term_nlines) {
         first_line++;
         need_refresh = true;
     }
@@ -149,8 +152,8 @@ static void emplace_char(char c) {
         const struct Char* ch = &buffer[ncols * cur_line + cur_col];
 
         cur_col += 1;
-
-        print_char(ch, cur_line, cur_col);
+        if(!need_refresh)
+            print_char(ch, cur_line - first_line, cur_col);
 
         if(cur_col >= ncols)
             next_line();
@@ -162,7 +165,7 @@ static void emplace_char(char c) {
         break;
     
     case '\t':
-        cur_col = ((cur_col + TAB_SPACE - 1) / TAB_SPACE) * TAB_SPACE;
+        cur_col = ((cur_col + TAB_SPACE) / TAB_SPACE) * TAB_SPACE;
         
         if(cur_col >= ncols)
             next_line();
@@ -206,10 +209,15 @@ static void print_char(const struct Char* restrict c, int line, int col) {
         .h = INTERLINE,
     };
 */
-    
+  /*
     blitcharX2(charmap, c->c, c->fg_color, c->bg_color,
-                col  * FONTWIDTH, line * LINE_HEIGHT);
+                col  * FONTWIDTH * 2, 2 *line * LINE_HEIGHT);
     
+*/
+
+
+    blitchar(charmap, c->c, c->fg_color, c->bg_color,
+                col  * FONTWIDTH, line * LINE_HEIGHT);
 
 
     //imageDraw(charmap, NULL, NULL);

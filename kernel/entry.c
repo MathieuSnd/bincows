@@ -45,8 +45,8 @@ static struct stivale2_header_tag_framebuffer framebuffer_hdr_tag = {
     },
     // We set all the framebuffer specifics to 0 as we want the bootloader
     // to pick the best it can.
-    .framebuffer_width  = 1152,
-    .framebuffer_height = 864,
+    .framebuffer_width  = 800,
+    .framebuffer_height = 600,
     .framebuffer_bpp    = 32
 };
  
@@ -127,6 +127,8 @@ static void print_fb_infos(struct stivale2_struct_tag_framebuffer* fbtag) {
 // Registers %rbp, %rbx and %r12 through %r15 “belong” to the calling functio
 // The following will be our kernel's entry point.
 void _start(struct stivale2_struct *stivale2_struct) {
+
+
     // Let's get the terminal structure tag from the bootloader.
     struct stivale2_struct_tag_terminal *term_str_tag;
     term_str_tag = stivale2_get_tag(stivale2_struct, STIVALE2_STRUCT_TAG_TERMINAL_ID);
@@ -181,7 +183,6 @@ void _start(struct stivale2_struct *stivale2_struct) {
     kputs("DONE\n");
 
 
-
     apic_setup_clock();
 
 
@@ -190,7 +191,7 @@ void _start(struct stivale2_struct *stivale2_struct) {
 
     for(;;) {
         asm volatile("hlt");
-        kprintf("%lu\t", clock());
+        kprintf("%lu\r", clock());
     }
 
 

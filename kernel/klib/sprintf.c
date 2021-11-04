@@ -137,7 +137,7 @@ int vsprintf(char *str, const char *format, va_list ap) {
                             const char* arg = ARG(const char*);
                             if(digits >= 0) {
                                 strncpy(str, arg, digits);
-                                if((int) strlen(arg) > digits)
+                                if((int) strlen(arg) < digits)
                                     str += strlen(arg);
                                 else
                                     str += digits;

@@ -117,9 +117,14 @@ void setup_isr(void) {
     set_irs_handler(12, (void *) ISR_stack_segment_fault_handler);
     set_irs_handler(13, (void *) ISR_general_protection_fault_handler);
     set_irs_handler(14, (void *) ISR_page_fault_handler);
+// >= 32 &&  < 38
 
-    for(int i = 15; i <= 255; i++)
+    for(int i = 15; i <= 0xff; i++)
         set_irs_handler(i, ISR_spurious);
+
+    set_irs_handler(32, ISR_coproc_segment_overrun_handler);
+    //for(int i = d; i <= 0xff; i++)
+    //    set_irs_handler(i, ISR_coproc_segment_overrun_handler);
 
     setup_idt();
     _sti();

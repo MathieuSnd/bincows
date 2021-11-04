@@ -8,8 +8,10 @@
 [global outb]
 [global get_rflags]
 [global set_rflags]
+[global read_msr]
+[global write_msr]
 
-section .text
+[section .text]
 
 _ds:
     xor rax,rax
@@ -65,11 +67,47 @@ inb:
     pop  rdx
     ret
 
-outb:
+
+; read_msr(uint32_t addr)
+read_msr:
+    push rbp
+    mov rbp, rsp
+    
+    push rcx
     push rdx
-    mov  al, dil
+
+    mov ecx, edi
+    rdmsr
+
+    shl rdx, 32
+    or rax, rdx
+
+    pop rcx
+    pop rdx
     
-    out  dx, al
+    mov rsp, rbp
+    pop rbp
+    ret
+
     
-    pop  rdx
+; read_msr(uint32_t addr, uint64_t value)
+write_msr:
+    push rbp
+    mov rbp, rsp
+    
+    push rcx
+    push rdx
+
+    mov   ecx, edi
+    mov   eax, esi
+    mov   rdx, rsi
+    shr   rdx, 32
+
+    wrmsr
+
+    pop rcx
+    pop rdx
+    
+    mov rsp, rbp
+    pop rbp
     ret
