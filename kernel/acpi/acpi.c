@@ -26,7 +26,7 @@ static bool __ATTR_PURE__ checksum(const void* table, size_t size) {
 
 static void parse_madt(const struct MADT* table);
 static void parse_fadt(const struct ACPISDTHeader* table);
-
+static void parse_pcie(const struct PCIETable* table);
 
 
 void read_acpi_tables(const void* rsdp_location) {
@@ -65,7 +65,7 @@ void read_acpi_tables(const void* rsdp_location) {
             fadt_parsed = true;
             break;
         case PCIE_SIGNATURE:
-            parse_pcie(table);
+            parse_pcie((const struct PCIETable *)table);
             pcie_parsed = true;
             break;
         default:
@@ -77,6 +77,7 @@ void read_acpi_tables(const void* rsdp_location) {
     asm volatile("hlt");
     assert(madt_parsed);
     assert(fadt_parsed);
+    assert(pcie_parsed);
 }
 
 static void parse_madt(const struct MADT* table) {

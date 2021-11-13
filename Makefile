@@ -8,8 +8,8 @@ USED_LOOPBACK := /dev/loop6
 
 LIMINE_INSTALL := ./limine-bootloader/limine-install-linux-x86_64
 
-QEMU_PATH := "/mnt/d/Program Files/qemu/qemu-system-x86_64.exe"
-QEMU_ARGS := -monitor stdio -bios "d:/Program Files/qemu/bios/OVMF.fd" -m 256 -vga std -no-reboot 
+QEMU_PATH := kvm
+QEMU_ARGS := -monitor stdio -bios /usr/share/ovmf/OVMF.fd -m 256 -vga std -no-reboot 
 # -bios "d:/Program Files/qemu/bios/OVMF.fd"
 
 run: all

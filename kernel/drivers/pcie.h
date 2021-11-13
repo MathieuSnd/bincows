@@ -1,7 +1,7 @@
 #pragma once
 
 #include <stdint.h>
-
+#include <stddef.h>
 
 struct PCIE_config_space_descriptor {
     void* address; // Base address 
@@ -22,8 +22,7 @@ struct PCIE_Descriptor {
 };
 
 
-#ifndef PCIE_C
+// defined in pcie.c
 extern struct PCIE_Descriptor pcie_descriptor;
-#else
-struct PCIE_Descriptor pcie_descriptor = {0, {0}};
-#endif//PCIE_C
+
+
