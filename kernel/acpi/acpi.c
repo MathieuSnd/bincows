@@ -27,11 +27,8 @@ static bool __ATTR_PURE__ checksum(const void* table, size_t size) {
 static void parse_madt(const struct MADT* table);
 static void parse_hpet(const struct HPET* table);
 static void parse_fadt(const struct ACPISDTHeader* table);
+static void parse_pcie(const struct PCIETable* table);
 
-
-#define MADT_SIGNATURE 0x43495041
-#define FACP_SIGNATURE 0x50434146
-#define HPET_SIGNATURE 0x54455048
 
 void read_acpi_tables(const void* rsdp_location) {
     const struct RSDPDescriptor20* rsdpd = rsdp_location;
@@ -53,6 +50,7 @@ void read_acpi_tables(const void* rsdp_location) {
 
     bool madt_parsed = false,
          hpet_parsed = false,
+         pcie_parsed = false,
          fadt_parsed = false;
 
     for(size_t i = 0; i < n_entries; i++) {
@@ -72,6 +70,9 @@ void read_acpi_tables(const void* rsdp_location) {
             parse_hpet(table);
             hpet_parsed = true;
             break;
+        case PCIE_SIGNATURE:
+            parse_pcie((const struct PCIETable *)table);
+            pcie_parsed = true;
         default:
             break;
         }
@@ -82,6 +83,7 @@ void read_acpi_tables(const void* rsdp_location) {
     assert(madt_parsed);
     //assert(hpet_parsed);
     assert(fadt_parsed);
+    assert(pcie_parsed);
 }
 
 static void parse_hpet(const struct HPET* table) {
@@ -158,6 +160,15 @@ static void parse_madt(const struct MADT* table) {
     }
 }
 
+
+static void parse_pcie(const struct PCIETable* table) {
+    // fill the pcie driver's descriptor 
+    size_t size = (table->header.length-sizeof(table->header));
+
+    pcie_descriptor.size = size / sizeof(struct PCIE_config_space_descriptor);
+ 
+    memcpy(pcie_descriptor.array, table->spaces, size);
+}
 
 static void parse_fadt(const struct ACPISDTHeader* table) {
     (void) table;

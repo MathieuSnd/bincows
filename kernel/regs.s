@@ -8,6 +8,7 @@
 [global outb]
 [global get_rflags]
 [global set_rflags]
+[global _ltr]
 [global read_msr]
 [global write_msr]
 
@@ -55,6 +56,10 @@ set_rflags:
     popfq
     ret
 
+; void _ltr(uint16_t tss_selector)
+_ltr:
+    ltr di
+    ret
 
 ; uint8_t inb(port)
 inb:

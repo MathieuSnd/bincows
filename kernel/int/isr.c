@@ -36,6 +36,7 @@ __attribute__((interrupt)) void ISR_general_handler(struct IFrame* interrupt_fra
 }
 __attribute__((interrupt)) void ISR_error_handler(struct IFrame* interrupt_frame, uint64_t error_code) {
     (void) error_code;
+    kprintf("ERROR CODE: %lu\n", error_code);
     panic_handler("ISR_error_handler", interrupt_frame);
 }
 __attribute__((interrupt)) void ISR_div_by_zero_handler(struct IFrame* interrupt_frame) {
@@ -86,6 +87,7 @@ __attribute__((interrupt)) void ISR_stack_segment_fault_handler(struct IFrame* i
 }
 __attribute__((interrupt)) void ISR_general_protection_fault_handler(struct IFrame* interrupt_frame, uint64_t error_code) {
     (void) error_code;
+    kprintf("ERROR CODE: %lu\n", error_code);
     panic_handler("ISR_general_protection_fault_handler", interrupt_frame);
 }
 __attribute__((interrupt)) void ISR_page_fault_handler(struct IFrame* interrupt_frame, uint64_t error_code) {

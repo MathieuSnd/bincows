@@ -12,5 +12,8 @@ void __assert(const char* __restrict__ expression,
 #endif
 
 
-#define static_assert(EX) _Static_assert(EX,  "static assert failed")
+#define static_assert(EX) _Static_assert(EX, #EX)
+
+#define static_assert_equals(EX1,EX2) _Static_assert(EX1==EX2, #EX1 " != " #EX2)
+
 

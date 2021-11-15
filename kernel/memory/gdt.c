@@ -3,9 +3,25 @@
 #include "../klib/sprintf.h"
 #include "../debug/assert.h"
 
-/*
-typedef GDTentryAccessByte
-*/
+extern void _ltr(uint16_t tss_selector);
+
+
+// kernel stack
+extern const uint8_t stack[];
+
+struct TSS {
+    uint32_t reserved0;
+    uint64_t RSP[3]; // The full 64-bit canonical forms of the stack pointers (RSP) for privilege levels 0-2
+    uint64_t reserved1;
+    uint64_t IST[7]; // The full 64-bit canonical forms of the interrupt stack table (IST) pointers.
+    uint64_t reserved2;
+    uint16_t reserved3;
+    uint16_t IOPB_offset; // just put the size of the structure
+} __attribute__((packed));
+
+static_assert_equals(sizeof(struct TSS), 104);
+
+const struct TSS tss = {0, {(uint64_t)stack,0,0}, 0, {0}, 0,0,sizeof(struct TSS)};
 
 struct GDTentry {
     u16 limit1;             // x86_64: ignrored
@@ -58,12 +74,12 @@ static struct GDTentry gdt[] = {
     {0,0,0,  0,0,0,1,1,3,1,   0,  0,1,0,1,  0}, // user code segment
     {0,0,0,  0,1,0,0,1,3,1,   0,  0,0,1,1,  0}, // user data segment
 
-    {0,0,0,  0,1,0,0,1,3,1,   0,  0,0,1,1,  0}, // user data segment
-    /// 98a0
-    //  92a0
+// gcc is SO dumb we have to fill the struct by software
+    {0,0,0,  1,0,0,1,0,0,1,   0,  1,0,0,0,  0}, // TSS segment1
+    {0,0,0,  0,0,0,0,0,0,0,   0,  0,0,0,0,  0}, // TSS segment2
 };
 
-static_assert(sizeof(gdt) == 6 * sizeof(struct GDTentry));
+static_assert(sizeof(gdt) == 7 * sizeof(struct GDTentry));
 
 // from gdt.s
 void _lgdt(void* gdt_desc_ptr);
@@ -80,6 +96,20 @@ struct GDTDescriptor gdt_descriptor = {
 
     volatile int y = 5421;
 
+
+
+
 void init_gdt_table() {
+    // init GDT TSS entry 
+    gdt[5].base1 = (uint64_t)&tss       & 0xfffflu;
+    gdt[5].base2 = (uint64_t)&tss >> 16 & 0x00ffllu;
+    gdt[5].base3 = (uint64_t)&tss >> 24 & 0x00ffllu;
+    *(uint64_t *)(&gdt[6]) = (uint64_t)(&tss) >> 32;
+    
+    kprintf("0x%16lx = 0x%2x %2x %4x\n", &tss, gdt[5].base3, gdt[5].base2, gdt[5].base1);
     _lgdt(&gdt_descriptor);
+
+
+    // the TSS offset in the GDT table << 3 (the first 3 bits are DPL)
+    _ltr(0x28);
 }

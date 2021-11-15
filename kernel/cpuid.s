@@ -8,7 +8,8 @@
 
 ; void cpuid(uint32_t eax, struct cpuid_regs* out_regs);
 cpuid:
-    push rbp; no stack alloc
+    push rbp
+    mov rbp, rsp
     push rbx
 
     mov eax, edi
@@ -21,5 +22,5 @@ cpuid:
 
 
     pop rbx
-    pop rbp
+    leave 
     ret
