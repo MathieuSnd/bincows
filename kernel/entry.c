@@ -14,8 +14,15 @@
 
 #include "int/idt.h"
  
-// 8K stack
-static uint8_t stack[8192] __align(16);
+
+#define KERNEL_STACK_SIZE 8192
+ // 8K stack
+static uint8_t stack_base[KERNEL_STACK_SIZE] __align(16);
+
+#define INITIAL_STACK_PTR ((uintptr_t)(stack_base + KERNEL_STACK_SIZE))
+
+// initial stack pointer 
+const uintptr_t kernel_stack = INITIAL_STACK_PTR;
 
 static struct stivale2_header_tag_terminal terminal_hdr_tag = {
     // All tags need to begin with an identifier and a pointer to the next tag.
@@ -29,7 +36,8 @@ static struct stivale2_header_tag_terminal terminal_hdr_tag = {
     // as it is unused.
     .flags = 0
 };
- 
+
+
 // We are now going to define a framebuffer header tag, which is mandatory when
 // using the stivale2 terminal.
 // This tag tells the bootloader that we want a graphical framebuffer instead
@@ -63,7 +71,7 @@ static struct stivale2_header stivale_hdr = {
     // Let's tell the bootloader where our stack is.
     // We need to add the sizeof(stack) since in x86(_64) the stack grows
     // downwards.
-    .stack = (uintptr_t)stack + sizeof(stack),
+    .stack = INITIAL_STACK_PTR,
     // Bit 1, if set, causes the bootloader to return to us pointers in the
     // higher half, which we likely want.
     .flags = (1 << 1),

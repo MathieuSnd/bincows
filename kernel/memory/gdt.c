@@ -7,7 +7,7 @@ extern void _ltr(uint16_t tss_selector);
 
 
 // kernel stack
-extern const uint8_t stack[];
+extern const uint8_t kernel_stack[];
 
 struct TSS {
     uint32_t reserved0;
@@ -21,7 +21,7 @@ struct TSS {
 
 static_assert_equals(sizeof(struct TSS), 104);
 
-const struct TSS tss = {0, {(uint64_t)stack,0,0}, 0, {0}, 0,0,sizeof(struct TSS)};
+const struct TSS tss = {0, {(uint64_t)kernel_stack,0,0}, 0, {0}, 0,0,sizeof(struct TSS)};
 
 struct GDTentry {
     u16 limit1;             // x86_64: ignrored
