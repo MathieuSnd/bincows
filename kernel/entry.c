@@ -1,6 +1,6 @@
-#include <stivale2.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stivale2.h>
 
 #include "memory/gdt.h"
 #include "video/video.h"
@@ -13,6 +13,7 @@
 #include "int/apic.h"
 
 #include "int/idt.h"
+#include "memory/physical_allocator.h"
  
 
 #define KERNEL_STACK_SIZE 8192
@@ -138,9 +139,11 @@ void _start(struct stivale2_struct *stivale2_struct) {
 
 
     // Let's get the terminal structure tag from the bootloader.
-    struct stivale2_struct_tag_terminal *term_str_tag;
+    struct stivale2_struct_tag_terminal* term_str_tag;
+    struct stivale2_struct_tag_memmap*   memmap_tag;
     term_str_tag = stivale2_get_tag(stivale2_struct, STIVALE2_STRUCT_TAG_TERMINAL_ID);
- 
+    memmap_tag   = stivale2_get_tag(stivale2_struct, STIVALE2_STRUCT_TAG_MEMMAP_ID);
+
     // Check if the tag was actually found.
     if (term_str_tag == NULL) {
         // It wasn't found, just hang...
@@ -189,6 +192,8 @@ void _start(struct stivale2_struct *stivale2_struct) {
     kputs(&_binary_bootmessage_txt);
     read_acpi_tables((void*)rsdp_location);
     kputs("DONE\n");
+
+    init_physical_allocator(memmap_tag);
 
 
     apic_setup_clock();

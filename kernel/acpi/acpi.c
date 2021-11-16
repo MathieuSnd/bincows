@@ -83,7 +83,7 @@ void read_acpi_tables(const void* rsdp_location) {
     assert(madt_parsed);
     //assert(hpet_parsed);
     assert(fadt_parsed);
-    assert(pcie_parsed);
+    //assert(pcie_parsed);
 }
 
 static void parse_hpet(const struct HPET* table) {

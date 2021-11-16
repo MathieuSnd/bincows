@@ -8,6 +8,12 @@
 [global outb]
 [global get_rflags]
 [global set_rflags]
+[global set_cr0]
+[global get_cr0]
+[global _cr2]
+[global _cr3]
+[global set_cr4]
+[global get_cr4]
 [global _ltr]
 [global read_msr]
 [global write_msr]
@@ -42,6 +48,36 @@ _gs:
 _fs:
     xor rax,rax
     mov ax, fs
+    ret
+
+
+; void get_cr0(uint64_t cr3)
+get_cr0:
+    mov rax, cr0
+    ret
+; uint64_t set_cr0(void)
+set_cr0:
+    mov cr0, rdi
+    ret
+
+; uint64_t get_cr2(void)
+_cr2:
+    mov rax, cr2
+    ret
+
+; void cr3(uint64_t cr3)
+_cr3:
+    mov cr3, rax
+    ret
+
+    
+; void get_cr4(uint64_t cr3)
+get_cr4:
+    mov rax, cr4
+    ret
+; uint64_t set_cr4(void)
+set_cr4:
+    mov cr4, rdi
     ret
 
 
