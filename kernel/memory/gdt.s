@@ -26,9 +26,3 @@ far_ret:
     mov  fs, ax
     mov  gs, ax
     ret
-
-
-_cr3:
-    mov rax, rdi
-    mov cr3, rax
-    ret
