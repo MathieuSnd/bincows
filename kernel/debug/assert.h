@@ -7,10 +7,11 @@ void __assert(const char* __restrict__ expression,
               const int                line);
              
 #define assert(EX) (void)((EX) || (__assert (#EX, __FILE__, __LINE__),0))
+
+#define assert_aligned(ADDR, ALIGNMENT) assert(((uint64_t)ADDR & (ALIGNMENT-1)) == 0)
 #else 
 #define assert(EX)
 #endif
-
 
 #define static_assert(EX) _Static_assert(EX, #EX)
 

@@ -14,6 +14,7 @@
 
 #include "int/idt.h"
 #include "memory/physical_allocator.h"
+#include "memory/paging.h"
  
 
 #define KERNEL_STACK_SIZE 8192
@@ -194,7 +195,7 @@ void _start(struct stivale2_struct *stivale2_struct) {
     kputs("DONE\n");
 
     init_physical_allocator(memmap_tag);
-
+    init_paging();
 
     apic_setup_clock();
 

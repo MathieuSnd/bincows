@@ -1,6 +1,8 @@
-#include "paging.h"
-#include "../debug/assert.h"
 #include <stivale2.h>
+#include "../debug/assert.h"
+#include "physical_allocator.h"
+
+#include "paging.h"
 
 extern uint64_t get_cr0(void);
 extern void set_cr0(uint64_t cr0);
@@ -64,14 +66,23 @@ enum stivale2_mmap_type : uint32_t {
 
 */
 
-void init_paging(const struct stivale2_struct_tag_memmap* memory_map) {
+
+
+
+void physical_allocator_callback(uint64_t physical_address, 
+                                 uint64_t virtual_address,
+                                 size_t   size) {
     
-    for(unsigned i = 0; i < memory_map->entries; i++) {
-        const struct stivale2_mmap_entry* e = &memory_map->memmap[i];
+    //kprintf("%lx -> %lx\r", virtual_address, physical_address);
+}
 
-        kprintf("%0x16x - %0x16x - %d\n", e->base, e->base+e->length, e->type);
-    }
+void init_paging(void) {    
 
+    physalloc(370864, 0x0000000000, physical_allocator_callback);
+    kprintf("---------------------------------------------------\n");
+    //physalloc(17, 0xfffff800000000, physical_allocator_callback);
+
+    while(1);
 // get the physical address of the pml4 table
     uint64_t lower_half_ptr = ~0xffffffff80000000llu | (uint64_t)&pml4_table;
 

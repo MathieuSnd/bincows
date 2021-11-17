@@ -48,7 +48,7 @@ struct stivale2_struct_tag_memmap;
  * enable PML4 4K paging
  * 
  */
-void init_paging(const struct stivale2_struct_tag_memmap *);
+void init_paging(void);
 /**
  * map pages from a given physical address to a given virtual address
  * map 'count' continuous pages 

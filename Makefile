@@ -9,7 +9,7 @@ USED_LOOPBACK := /dev/loop6
 LIMINE_INSTALL := ./limine-bootloader/limine-install-linux-x86_64
 
 QEMU_PATH := qemu-system-x86_64
-QEMU_ARGS := -monitor stdio -bios /usr/share/ovmf/OVMF.fd -m 1024 -vga std -no-reboot
+QEMU_ARGS := -monitor stdio -bios /usr/share/ovmf/OVMF.fd -m 114 -vga std -no-reboot
 
 run: all
 	$(QEMU_PATH) $(QEMU_ARGS) -drive format=raw,file=$(HDD_FILE),id=disk,if=none \
