@@ -72,17 +72,16 @@ enum stivale2_mmap_type : uint32_t {
 void physical_allocator_callback(uint64_t physical_address, 
                                  uint64_t virtual_address,
                                  size_t   size) {
-    
-    //kprintf("%lx -> %lx\r", virtual_address, physical_address);
+    static int i;
+    //kprintf("allocated %d pages\n", ++i);
+    if(i++ < 10)
+        kprintf("%lx -> %lx\n", virtual_address, physical_address);
 }
 
 void init_paging(void) {    
 
-    physalloc(370864, 0x0000000000, physical_allocator_callback);
-    kprintf("---------------------------------------------------\n");
-    //physalloc(17, 0xfffff800000000, physical_allocator_callback);
+    physalloc(20, 0xfffff800000000, physical_allocator_callback);
 
-    while(1);
 // get the physical address of the pml4 table
     uint64_t lower_half_ptr = ~0xffffffff80000000llu | (uint64_t)&pml4_table;
 
@@ -93,7 +92,6 @@ void init_paging(void) {
 // [63:MAXPHYADDR] must be 0!!! as 'lower_half_ptr' is supposed to
 // be a physical address already, it should be the case 
     _cr3(lower_half_ptr);
-
 // enable  PAE in cr4 
     set_cr4(get_cr4() | CR0_PG_BIT);
 
