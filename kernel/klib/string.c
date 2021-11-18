@@ -255,8 +255,7 @@ void * memmove (void* _dest, const void* _src, size_t n) {
     const uint8_t* src=_src;
     
     // check for overlapping
-    if((dest < src && dest + n > src)
-    || (src < dest && src + n > dest)) {
+    if(src < dest && src + n > dest) {
         dest += n;
         src  += n;
 
