@@ -94,39 +94,35 @@ __attribute__((interrupt)) void ISR_page_fault_handler(struct IFrame* interrupt_
     (void) error_code;
     panic_handler("ISR_page_fault_handler", interrupt_frame);
 }
-__attribute__((interrupt)) void ISR_spurious(struct IFrame* interrupt_frame) {
+__attribute__((interrupt)) void ISR_LAPIC_spurious(struct IFrame* interrupt_frame) {
     panic_handler("ISR_spurious", interrupt_frame);
 }
 
-extern uint64_t idt[256];
 
 
-void setup_isr(void) {
+void setup_isrs(void) {
+// cli just in case the idt was already 
+// initialized
     _cli();
 
-    set_irs_handler(0,  (void *) ISR_div_by_zero_handler);
-    set_irs_handler(1,  (void *) ISR_debug_handler);
-    set_irs_handler(2,  (void *) ISR_NMI_handler);
-    set_irs_handler(3,  (void *) ISR_breakpoint_handler);
-    set_irs_handler(4,  (void *) ISR_overflow_handler);
-    set_irs_handler(5,  (void *) ISR_bound_handler);
-    set_irs_handler(6,  (void *) ISR_invalid_opcode_handler);
-    set_irs_handler(7,  (void *) ISR_device_not_available_handler);
-    set_irs_handler(8,  (void *) ISR_double_fault_handler);
-    set_irs_handler(9,  (void *) ISR_coproc_segment_overrun_handler);
-    set_irs_handler(10, (void *) ISR_invalid_TSS_handler);
-    set_irs_handler(11, (void *) ISR_segment_not_present_handler);
-    set_irs_handler(12, (void *) ISR_stack_segment_fault_handler);
-    set_irs_handler(13, (void *) ISR_general_protection_fault_handler);
-    set_irs_handler(14, (void *) ISR_page_fault_handler);
-// >= 32 &&  < 38
-
-    for(int i = 15; i <= 0xff; i++)
-        set_irs_handler(i, ISR_spurious);
+    set_irs_handler(0,  ISR_div_by_zero_handler);
+    set_irs_handler(1,  ISR_debug_handler);
+    set_irs_handler(2,  ISR_NMI_handler);
+    set_irs_handler(3,  ISR_breakpoint_handler);
+    set_irs_handler(4,  ISR_overflow_handler);
+    set_irs_handler(5,  ISR_bound_handler);
+    set_irs_handler(6,  ISR_invalid_opcode_handler);
+    set_irs_handler(7,  ISR_device_not_available_handler);
+    set_irs_handler(8,  ISR_double_fault_handler);
+    set_irs_handler(9,  ISR_coproc_segment_overrun_handler);
+    set_irs_handler(10, ISR_invalid_TSS_handler);
+    set_irs_handler(11, ISR_segment_not_present_handler);
+    set_irs_handler(12, ISR_stack_segment_fault_handler);
+    set_irs_handler(13, ISR_general_protection_fault_handler);
+    set_irs_handler(14, ISR_page_fault_handler);
+    set_irs_handler(255,ISR_LAPIC_spurious);
 
     set_irs_handler(32, ISR_coproc_segment_overrun_handler);
-    //for(int i = d; i <= 0xff; i++)
-    //    set_irs_handler(i, ISR_coproc_segment_overrun_handler);
 
     setup_idt();
     _sti();

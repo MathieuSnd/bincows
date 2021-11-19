@@ -72,19 +72,15 @@ enum stivale2_mmap_type : uint32_t {
 void physical_allocator_callback(uint64_t physical_address, 
                                  uint64_t virtual_address,
                                  size_t   size) {
-    static int i;
-    //kprintf("allocated %d pages\n", ++i);
-    if(i++ < 10)
-        kprintf("%lx -> %lx\n", virtual_address, physical_address);
 }
 
 void init_paging(void) {    
 
-    physalloc(20, 0xfffff800000000, physical_allocator_callback);
 
 // get the physical address of the pml4 table
     uint64_t lower_half_ptr = ~0xffffffff80000000llu | (uint64_t)&pml4_table;
 
+while(1);
 
 
 // Page level Write Through (PWT) 0
