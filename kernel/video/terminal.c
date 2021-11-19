@@ -27,6 +27,13 @@ static terminal_handler_t terminal_handler = NULL;
 static bool need_refresh = false;
 
 
+void default_terminal_handler(const char* s, size_t l) {
+    (void) (s + l);
+    // empty handler by default,
+    // make sure not to execute the address 0 :)
+}
+
+
 
 
 static Image* charmap = NULL;
@@ -50,21 +57,21 @@ void setup_terminal(void) {
     assert(charmap == NULL);
     
     charmap = loadBMP_24b_1b(&_binary_charmap_bmp);
-
+    assert(0);
     assert(charmap      != NULL);
     assert(charmap->bpp   == 1);
     assert(charmap->pitch == 1);
-    assert(charmap->w   == CHARMAP_W);
-    assert(charmap->h   == CHARMAP_H);
+    assert(charmap->w   == TERMINAL_CHARMAP_W);
+    assert(charmap->h   == TERMINAL_CHARMAP_H);
     
     const Image* screenImage = getScreenImage();
     
 // dynamicly create the terminal
 // with right size
 
-    ncols       = screenImage->w / FONTWIDTH;
-    term_nlines = (screenImage->h / LINE_HEIGHT) - 3;
-    nlines      = N_PAGES * term_nlines;
+    ncols       = screenImage->w / TERMINAL_FONTWIDTH;
+    term_nlines = (screenImage->h / TERMINAL_LINE_HEIGHT) - 3;
+    nlines      = TERMINAL_N_PAGES * term_nlines;
 
                                 
     
@@ -217,7 +224,7 @@ static void print_char(const struct Char* restrict c, int line, int col) {
 
 
     blitchar(charmap, c->c, c->fg_color, c->bg_color,
-                col  * FONTWIDTH, line * LINE_HEIGHT);
+                col  * TERMINAL_FONTWIDTH, line * TERMINAL_LINE_HEIGHT);
 
 
     //imageDraw(charmap, NULL, NULL);
@@ -258,6 +265,7 @@ static void write_string(const char *string, size_t length) {
 terminal_handler_t get_terminal_handler(void) {
     return terminal_handler;
 }
+
 
 
 void set_terminal_handler(terminal_handler_t h) {

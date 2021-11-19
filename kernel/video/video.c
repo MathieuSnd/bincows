@@ -1,12 +1,14 @@
 #include <stdbool.h>
+
+// for initialization
+#include <stivale2.h>
+
 #include "../klib/string.h"
-#include "../klib/sprintf.h"
+#include "../memory/kalloc.h"
+#include "../common.h"
+#include "../debug/assert.h"
 #include "video.h"
 #include "terminal.h"
-#include "../common.h"
-#include "../memory/kalloc.h"
-#include "../debug/assert.h"
-#include "../debug/dump.h"
 
 #define MAX(X,Y) X > Y ? X : Y
 
@@ -19,13 +21,21 @@ inline void lower_blit(const Image* src, const Image* dst,
             uint16_t dstx,  uint16_t dsty,
             uint16_t width, uint16_t height);
 
-void initVideo(const Image* s) {
-    assert(s != NULL);
-    assert(s->bpp == 32);
+void initVideo(const struct stivale2_struct_tag_framebuffer* fbtag) {
+    assert(fbtag != NULL);
+    
 
-    memcpy(&screen,s, sizeof(Image));
+    screen  = (Image){
+        .w    =        fbtag->framebuffer_width,
+        .h    =        fbtag->framebuffer_height,
+        .pitch=        fbtag->framebuffer_pitch,
+        .bpp  =        fbtag->framebuffer_bpp,
+        .pix  = (void*)fbtag->framebuffer_addr
+    };
+    
+    assert(screen.bpp == 32);
+
 }
-
 
 void imageLower_blit(const Image* img,
                      uint16_t     srcx,  uint16_t srcy,
@@ -410,6 +420,7 @@ for(ptr = col; ; ptr += 2px) {
     *ptr = map+4*in'
 }
 */
+__attribute__((optimize("unroll-loops")))
 
 void blitchar(const struct Image* charset,
               char c, uint32_t fg_color, uint32_t bg_color,
@@ -422,11 +433,11 @@ void blitchar(const struct Image* charset,
         ((uint64_t) fg_color << 32) | fg_color,  
     };
     
-    uint16_t srcy = c * FONTHEIGHT;
+    uint16_t srcy = c * TERMINAL_FONTHEIGHT;
      
 
     uint64_t* dst_ptr = (uint64_t *)(screen.pix + screen.pitch * dsty + 4 * dstx);
-    uint16_t  dst_skip = screen.pitch - FONTWIDTH * 4;
+    uint16_t  dst_skip = screen.pitch - TERMINAL_FONTWIDTH * 4;
 
     // 4 2-byte lines = 8*8 = 64 (1 access every 4 lines)
 
@@ -436,17 +447,14 @@ void blitchar(const struct Image* charset,
 
 
     // loop over 4-line chunks
-//    for(size_t n_lines = FONTHEIGHT / 4; n_lines > 0; --n_lines) {
 
     uint64_t lines = *lines_ptr;
 
     // 64 bit = 8 lines
-#pragma GCC unroll 8
     for(size_t n_line = 8; n_line > 0; n_line--) {
         // lines are 8bit aligned
         
-#pragma GCC unroll 3
-        for(size_t n_col2 = FONTWIDTH / 2 ; n_col2 > 0 ; n_col2--) {
+        for(size_t n_col2 = TERMINAL_FONTWIDTH / 2 ; n_col2 > 0 ; n_col2--) {
             uint16_t index = lines & 0b11;
 
             *(dst_ptr++) = colormap[index];
@@ -454,13 +462,14 @@ void blitchar(const struct Image* charset,
         }
         dst_ptr += dst_skip / 8;
         
-        lines >>= 8 - FONTWIDTH;
+        lines >>= 8 - TERMINAL_FONTWIDTH;
     }
 
 }
 
 
 
+__attribute__((optimize("unroll-loops")))
 
 void blitcharX2(const struct Image* charset,
               char c, uint32_t fg_color, uint32_t bg_color,
@@ -473,22 +482,20 @@ void blitcharX2(const struct Image* charset,
         ((uint64_t) fg_color << 32) | fg_color,  
     };
     
-    uint16_t srcy = c * FONTHEIGHT;
+    uint16_t srcy = c * TERMINAL_FONTHEIGHT;
 
     uint64_t* dst_ptr = (uint64_t *)(screen.pix + screen.pitch * dsty + 4 * dstx);
-    uint16_t  dst_skip = 2 * screen.pitch - 2 * FONTWIDTH * 4;
+    uint16_t  dst_skip = 2 * screen.pitch - 2 * TERMINAL_FONTWIDTH * 4;
 
 /// second line to modify
     uint64_t* dst_ptr2 = dst_ptr + screen.pitch / 8;
 
     uint64_t* lines_ptr = (uint64_t*)charset->pix + srcy / sizeof(uint64_t);
     uint64_t lines = *lines_ptr;
-#pragma GCC unroll 8
     for(size_t n_line = 8; n_line > 0; n_line--) {
         
 
-#pragma GCC unroll 3
-        for(size_t n_col2 = FONTWIDTH / 2 ; n_col2 > 0 ; n_col2--) {
+        for(size_t n_col2 = TERMINAL_FONTWIDTH / 2 ; n_col2 > 0 ; n_col2--) {
             uint16_t index = lines & 0b11;
 
             register uint64_t pixs_val = colormap[index];
@@ -506,15 +513,15 @@ void blitcharX2(const struct Image* charset,
         dst_ptr2 += dst_skip / 8;
         
         
-        lines >>= 8 - FONTWIDTH;
+        lines >>= 8 - TERMINAL_FONTWIDTH;
     }
 
 }
 
 // else this func wont work 
-static_assert(FONTWIDTH     == 6);
-static_assert(FONTWIDTH % 2 == 0);
-static_assert(FONTHEIGHT    == 8);
+static_assert(TERMINAL_FONTWIDTH     == 6);
+static_assert(TERMINAL_FONTWIDTH % 2 == 0);
+static_assert(TERMINAL_FONTHEIGHT    == 8);
 
 
 
@@ -527,20 +534,12 @@ Image* loadBMP_24b_1b(const void* rawFile) {
     if(check_BMP_header(header))
         return NULL;
 
-    //assert(header->bpp == 24); 5 -> 
-
 
     uint32_t w = header->w;
     uint32_t h = header->h;
     
     const uint8_t* srcpix  = (const uint8_t *)header + header->body_offset;
 
-    kprintf("%x ; %u\n", header, header->body_offset);
-
-    dump(srcpix, 4 * 6 * 20, 4 * 5, DUMP_HEX8);
-    //asm volatile("hlt");
-    
-    
     Image* ret = alloc_image(w,h, 1);
     
     assert(ret->pitch == 1);

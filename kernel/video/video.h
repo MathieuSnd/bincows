@@ -25,7 +25,7 @@ typedef struct
 
 const Image *getScreenImage(void);
 
-void initVideo(const Image *srceen);
+void initVideo(const struct stivale2_struct_tag_framebuffer* fbtag);
 void imageDraw(const Image *img, const Pos *srcpos, const Rect *dstrect);
 
 void imageLower_blit(
