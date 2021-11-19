@@ -57,7 +57,7 @@ void setup_terminal(void) {
     assert(charmap == NULL);
     
     charmap = loadBMP_24b_1b(&_binary_charmap_bmp);
-    assert(0);
+    
     assert(charmap      != NULL);
     assert(charmap->bpp   == 1);
     assert(charmap->pitch == 1);
