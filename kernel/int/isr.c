@@ -3,6 +3,8 @@
 #include "../debug/panic.h"
 #include "idt.h"
 
+// return the value of cr2
+extern uint64_t _cr2(void);
 
 
 
@@ -91,8 +93,10 @@ __attribute__((interrupt)) void ISR_general_protection_fault_handler(struct IFra
     panic_handler("ISR_general_protection_fault_handler", interrupt_frame);
 }
 __attribute__((interrupt)) void ISR_page_fault_handler(struct IFrame* interrupt_frame, uint64_t error_code) {
-    (void) error_code;
-    panic_handler("ISR_page_fault_handler", interrupt_frame);
+    char buff[128];
+    // the content of cr2 is the illegal address
+    sprintf(buff, "PAGE FAULT. illegal address: %16lx, error code %x\n", _cr2(), error_code);
+    panic_handler(buff, interrupt_frame);
 }
 __attribute__((interrupt)) void ISR_LAPIC_spurious(struct IFrame* interrupt_frame) {
     panic_handler("ISR_spurious", interrupt_frame);
