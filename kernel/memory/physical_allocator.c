@@ -8,6 +8,8 @@
 #include "../debug/assert.h"
 #include "../debug/panic.h"
 #include "physical_allocator.h"
+#include "vmap.h"
+
 /**
  * memory modeling:
  * | MR1 | MR2 | //// | MR3 | .... 
@@ -48,6 +50,7 @@
 // drop the segments that are too small
 #define MIN_SIZE 10
 
+
 //linked list element representing a 64 MB memory region
 struct memory_range {
     void* base;
@@ -69,7 +72,6 @@ struct MR_header {
     uint8_t bitmap_level0[2048];
 };
 
-// number of ranges considered
 
 
 static_assert_equals(sizeof(struct MR_header), 4096);
@@ -78,6 +80,7 @@ static_assert_equals(sizeof(struct MR_header), 4096);
 // this buffer is sorted by base address
 static struct memory_range memory_ranges_buffer[512];
 
+// number of ranges considered 
 static unsigned n_ranges = 0;
 
 static unsigned total_available_pages = 0;
@@ -87,13 +90,28 @@ static struct memory_range* mr_lists[4] = {0};
 
 
 // init memory range as a free range, ready to be allocated
+// it should only be called with early memory configuration:
+// identity mapped stuf
 static void init_memory_range(struct memory_range* range, uint64_t addr, size_t length) {
+
+    assert_aligned(addr, 0x1000);
+
 // init the linked list's structure
     range->base = (void *)addr;
     range->length = length-1;
 
 // init the MR header
     struct MR_header* header = (struct MR_header *)addr;
+
+
+
+    kprintf("%x, %x\n", header, length);
+
+    // zero all the bit maps
+    memset(((uint8_t*)header), 0, 0x1000 * (length));
+
+
+    kprintf("issse\n");
     
     // we use one page per region for the header
     header->available[0] = (length-1);
@@ -115,8 +133,7 @@ static void init_memory_range(struct memory_range* range, uint64_t addr, size_t 
     }
     
     
-    // zero all the bit maps
-    memset(((uint8_t*)header)+1152, 0, 2048+512+256+128);
+
 }
 
 
@@ -131,13 +148,22 @@ void init_physical_allocator(const struct stivale2_struct_tag_memmap* memmap) {
         
     // dont take kernel & modules or acpi reclaimable
     // memory ranges in account
-        if(e.type == STIVALE2_MMAP_USABLE || 
-           e.type == STIVALE2_MMAP_BOOTLOADER_RECLAIMABLE) {
+        if(e.type == STIVALE2_MMAP_USABLE) {
+            
 
         // ceil the size to the number of pages
-            size_t size = (e.length + 4096 - 1) / 4096;
 
             uint64_t base = e.base;
+            size_t size = e.length;
+
+            if(base & 0x0fff) {
+                uint64_t new_base = (base & 0x0fff) + 0x1000;
+                size = new_base - base;
+                base = new_base;
+            }
+
+            // floor the size 
+            size /= 4096;
 
 
             while(size > 0) {
@@ -242,6 +268,11 @@ static void* select_bitmap(struct MR_header* header,
             assert(0);
             return NULL;
         }
+}
+
+// return a pointer to the MR header
+static struct MR_header* get_header_base(const struct memory_range* range) {
+    return range->base;
 }
 
 // modifies the bitmaps to allocate
@@ -385,7 +416,7 @@ void physalloc(size_t size, void* virtual_addr, PHYSALLOC_CALLBACK callback) {
 
         const unsigned memory_range_length = range->length;
         
-        struct MR_header* header = range->base;
+        struct MR_header* header = get_header_base(range);
 
 // use the bitmap that maximizes the granularity,
 // in accordance with the getMR() result
@@ -465,6 +496,7 @@ void physalloc(size_t size, void* virtual_addr, PHYSALLOC_CALLBACK callback) {
                     for(unsigned j = 0; j < granularity; j++) {
                         void* target_address = range->base + (curr_page+1) * 0x1000;
                         callback((uint64_t)target_address, (uint64_t)virtual_addr, 0x1000);
+                        
                         alloc_page_bitmaps(header, curr_page);
 
                         
@@ -555,7 +587,20 @@ void physfree(void* physical_page_addr) {
 
     unsigned position = ((uint64_t)physical_page_addr - (uint64_t)range->base) / 0x1000;
 
-    free_page_bitmaps((struct MR_header *)range->base, position);
+    free_page_bitmaps(get_header_base(range), position);
+
+    memset(translate_address(physical_page_addr), 0, 0x1000);
     
     total_available_pages++;
+}
+
+
+static_assert_equals(
+    sizeof(struct physical_allocator_data_page_entry),
+    sizeof(struct memory_range));
+
+const struct physical_allocator_data_page_entry* 
+       physical_allocator_data_pages(size_t* size) {
+    *size = n_ranges;
+    return (struct physical_allocator_data_page_entry *)memory_ranges_buffer;
 }
