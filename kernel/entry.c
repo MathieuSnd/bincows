@@ -146,14 +146,32 @@ void _start(struct stivale2_struct *stivale2_struct) {
     init_gdt_table();
     setup_isrs();
 
-// 
     read_acpi_tables((void*)rsdp_tag_ptr->rsdp);
-    kputs("DONE\n");
+    //apic_setup_clock();
 
-    init_physical_allocator(memmap_tag);
-    init_paging();
+// initialize the memory
+// as we reclaim the bootloader memory,
+// we have to copy the structure to be able     
+// to use it still 
+    // !!!! WARNING !!!!
+    // the memory map is allocated on the stack
+    // that is not a very good idea but it seems to work
 
-    apic_setup_clock();
+    struct {
+        struct stivale2_tag tag;
+        uint64_t entries;
+        struct stivale2_mmap_entry memmap[memmap_tag->entries];        
+    } local_memmap_tag;
+
+
+    local_memmap_tag.entries = memmap_tag->entries,
+    memcpy(local_memmap_tag.memmap, memmap_tag, 
+            sizeof(struct stivale2_mmap_entry) * local_memmap_tag.entries);
+    
+    init_physical_allocator(&local_memmap_tag);
+
+    init_paging(&local_memmap_tag);
+
 
     for(;;) {
         asm volatile("hlt");
