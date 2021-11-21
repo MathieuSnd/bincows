@@ -16,7 +16,7 @@ static_assert(TERMINAL_CHARMAP_H % 4 == 0);
 #define TERMINAL_INTERLINE 0
 #define TERMINAL_LINE_HEIGHT (TERMINAL_FONTHEIGHT + TERMINAL_INTERLINE)
 
-#define TERMINAL_N_PAGES 4
+#define TERMINAL_N_PAGES 2
 
 
 struct stivale2_struct_tag_framebuffer;

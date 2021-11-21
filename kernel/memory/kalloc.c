@@ -7,17 +7,17 @@
 #include "../common.h"
 
 
-#define HEAP_SIZE_KB 16 * 1024
-#define HEAP_BEGIN 0x01000000
+#define HEAP_SIZE_KB 8 * 1024
+#define HEAP_BEGIN heap
 #define HEAP_SIZE 1024 * HEAP_SIZE_KB
 
 //(0x00EFFFFF - HEAP_BEGIN)
 
-//static const uint8_t* heap = (uint8_t*)0x00100000; //[HEAP_SIZE] __attribute__((section(".bss")));
+//static const uint8_t* heap [HEAP_SIZE] __attribute__((section(".bss")));
 
-static void* brk = (void *) HEAP_BEGIN;
+//static void* brk = (void *) HEAP_BEGIN;
 
-
+/*
 void* kmalloc(size_t size) {
     void* ptr = brk;
     brk = mallign16(brk+size);
@@ -33,3 +33,5 @@ void* kmalloc(size_t size) {
 void kfree(void* ptr) {
     (void) ptr;
 }
+
+*/

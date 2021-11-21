@@ -3,7 +3,6 @@
 #include "terminal.h"
 #include "../debug/assert.h"
 #include "video.h"
-#include "../memory/kalloc.h"
 #include "../klib/string.h"
 
 #define TAB_SPACE 6
@@ -33,11 +32,11 @@ void default_terminal_handler(const char* s, size_t l) {
     // make sure not to execute the address 0 :)
 }
 
-
-
+#define NCOLS_MAX 133
+#define TERMINAL_LINES_MAX 75
 
 static Image* charmap = NULL;
-static struct Char* buffer = NULL;
+static struct Char buffer[NCOLS_MAX * TERMINAL_LINES_MAX * TERMINAL_N_PAGES];
 
 static uint16_t ncols, nlines;
 static uint16_t term_nlines;
@@ -71,11 +70,15 @@ void setup_terminal(void) {
 
     ncols       = screenImage->w / TERMINAL_FONTWIDTH;
     term_nlines = (screenImage->h / TERMINAL_LINE_HEIGHT) - 3;
-    nlines      = TERMINAL_N_PAGES * term_nlines;
 
                                 
-    
-    buffer = kmalloc(nlines * ncols * sizeof(struct Char));
+    if(ncols > NCOLS_MAX)
+        ncols = NCOLS_MAX;
+    if(term_nlines > TERMINAL_LINES_MAX)
+        term_nlines = TERMINAL_LINES_MAX;
+
+    nlines      = TERMINAL_N_PAGES * term_nlines;
+
 
     terminal_clear();
 

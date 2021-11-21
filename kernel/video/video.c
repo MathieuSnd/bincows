@@ -4,7 +4,7 @@
 #include <stivale2.h>
 
 #include "../klib/string.h"
-#include "../memory/kalloc.h"
+//#include "../memory/kalloc.h"
 #include "../common.h"
 #include "../debug/assert.h"
 #include "video.h"
@@ -243,7 +243,7 @@ void imageBlit(const Image* restrict src, Image* restrict dst,
     lower_blit(src, dst, sxbegin, sybegin, dxbegin, dybegin, w,h);
 }
 
-
+/*
 
 Image* alloc_image(uint32_t width, uint32_t height, uint32_t bpp) {
     Image* ret = kmalloc(sizeof(Image));
@@ -266,12 +266,14 @@ Image* alloc_image(uint32_t width, uint32_t height, uint32_t bpp) {
     return ret;
 }
 
+*/
+/*
 void free_image(Image* im) {
     assert(im != NULL);
 
     kfree(im->pix);
 }
-
+*/
 
 #define BMP_MAGIC (uint16_t)0x4D42
 
@@ -308,22 +310,36 @@ const Image* getScreenImage(void) {
 }
 
 
+extern uint8_t __image_pix;
+/*
 // assert that the checks are already performed
 static Image* loadBMP_24(const struct BMPFileHeader* restrict header, const void* restrict body) {
     assert(header->bpp == 24);
 
+    static int first = 0;
+    // should use this func only once.
+    // no dynamic alloc allowed
+    assert(first++ == 0);
 
     uint32_t w = header->w;
     uint32_t h = header->h;
+
+    static Image ret;
+
+    ret.w     = w;
+    ret.h     = h;
+    ret.bpp   = 32;
+    ret.pitch = (uint32_t)allign16(w * 4);
+    ret.pix   = &__image_pix; 
     
     const uint8_t* srcpix  = body;
     
     const size_t bpp = 3;
 
-    Image* ret = alloc_image(w,h, 32);
+    //ret = alloc_image(w,h, 32);
 
-    size_t bpitch = ret->pitch / 4;
-    uint32_t* pix32 = ret->pix;
+    size_t bpitch = ret.pitch / 4;
+    uint32_t* pix32 = ret.pix;
 
     for(size_t y = 0; y < h; y++) {
         for(size_t x = 0; x < w; x++) {
@@ -337,9 +353,10 @@ static Image* loadBMP_24(const struct BMPFileHeader* restrict header, const void
             pix32[x + y * bpitch] = (*(const uint32_t *)src_ptr) & 0x00ffffff;  
         }
     }
-    return ret;
+    return &ret;
 }
-
+*/
+/*
 // assert that the checks are already performed
 static Image* loadBMP_8(const struct BMPFileHeader* restrict header, const void* restrict body) {
     assert(header->bpp == 8);
@@ -369,9 +386,10 @@ static Image* loadBMP_8(const struct BMPFileHeader* restrict header, const void*
     }
     return ret;
 }
+*/
 
 
-
+/*
 Image* loadBMP(const void* restrict rawFile) {
     // the header should be at the beginning
     const struct BMPFileHeader* header = rawFile;
@@ -391,13 +409,13 @@ Image* loadBMP(const void* restrict rawFile) {
             break;
         case 8:
             assert(0);
-            return loadBMP_8 (header, body);
-            break;
+            //return loadBMP_8 (header, body);
         default:
             assert(0);
             __builtin_unreachable();
     }
 }
+*/
 
 /*
 
@@ -524,12 +542,16 @@ static_assert(TERMINAL_FONTWIDTH % 2 == 0);
 static_assert(TERMINAL_FONTHEIGHT    == 8);
 
 
-
+static Image loadBMP_24b_1b_ret;
 
 Image* loadBMP_24b_1b(const void* rawFile) {
     
     const struct BMPFileHeader* header = rawFile;
 
+    static int first = 0;
+    // should use this func only once.
+    // no dynamic alloc allowed
+    assert(first++ == 0);
 
     if(check_BMP_header(header))
         return NULL;
@@ -540,13 +562,21 @@ Image* loadBMP_24b_1b(const void* rawFile) {
     
     const uint8_t* srcpix  = (const uint8_t *)header + header->body_offset;
 
-    Image* ret = alloc_image(w,h, 1);
     
-    assert(ret->pitch == 1);
+
+
+    loadBMP_24b_1b_ret.w     = w;
+    loadBMP_24b_1b_ret.h     = h;
+    loadBMP_24b_1b_ret.bpp   = 1;
+    loadBMP_24b_1b_ret.pitch = ((w+7) / 8);
+    loadBMP_24b_1b_ret.pix   = &__image_pix; 
+
+    kprintf("%d\n", loadBMP_24b_1b_ret.pitch);
+    assert(loadBMP_24b_1b_ret.pitch == 1);
     assert(w == 6);
     assert(h == 2048);
 
-    uint8_t* pix = ret->pix;
+    uint8_t* pix = loadBMP_24b_1b_ret.pix;
 
     
     for(size_t y = 0; y < h; y++) {
@@ -571,5 +601,6 @@ Image* loadBMP_24b_1b(const void* rawFile) {
                 pix[y] = byte;
     }
 
-    return ret;
+    return &loadBMP_24b_1b_ret;
 }
+
