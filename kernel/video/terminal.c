@@ -57,6 +57,7 @@ void setup_terminal(void) {
     
     charmap = loadBMP_24b_1b(&_binary_charmap_bmp);
     
+    
     assert(charmap      != NULL);
     assert(charmap->bpp   == 1);
     assert(charmap->pitch == 1);
@@ -79,8 +80,6 @@ void setup_terminal(void) {
 
     nlines      = TERMINAL_N_PAGES * term_nlines;
 
-
-    terminal_clear();
 
 
     set_terminal_handler(write_string);

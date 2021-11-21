@@ -26,6 +26,13 @@ typedef void (*terminal_handler_t)(const char *string, size_t length);
 terminal_handler_t get_terminal_handler(void);
 
 
+// assert everything the setup needs
+// because printing error messages
+// won't be possible between the change
+// of memory paging and the end of the
+// setup_function
+void assert_terminal(void);
+
 void setup_terminal(void);
 void terminal_clear(void);
 

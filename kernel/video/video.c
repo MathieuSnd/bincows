@@ -21,7 +21,8 @@ inline void lower_blit(const Image* src, const Image* dst,
             uint16_t dstx,  uint16_t dsty,
             uint16_t width, uint16_t height);
 
-void initVideo(const struct stivale2_struct_tag_framebuffer* fbtag) {
+void initVideo(const struct stivale2_struct_tag_framebuffer* fbtag, 
+               void* frame_buffer_virtual_address) {
     assert(fbtag != NULL);
     
 
@@ -30,7 +31,7 @@ void initVideo(const struct stivale2_struct_tag_framebuffer* fbtag) {
         .h    =        fbtag->framebuffer_height,
         .pitch=        fbtag->framebuffer_pitch,
         .bpp  =        fbtag->framebuffer_bpp,
-        .pix  = (void*)fbtag->framebuffer_addr
+        .pix  =        frame_buffer_virtual_address
     };
     
     assert(screen.bpp == 32);
@@ -571,7 +572,6 @@ Image* loadBMP_24b_1b(const void* rawFile) {
     loadBMP_24b_1b_ret.pitch = ((w+7) / 8);
     loadBMP_24b_1b_ret.pix   = &__image_pix; 
 
-    kprintf("%d\n", loadBMP_24b_1b_ret.pitch);
     assert(loadBMP_24b_1b_ret.pitch == 1);
     assert(w == 6);
     assert(h == 2048);
@@ -582,11 +582,9 @@ Image* loadBMP_24b_1b(const void* rawFile) {
     for(size_t y = 0; y < h; y++) {
         
         uint8_t byte = 0;
-
         
         for(size_t x = 0; x < w; x++) {
             const uint8_t* src_ptr  = (srcpix + 20 * (h-1 - y) + 3 * (w-1-x));
-
             byte <<= 1;
             // put 1 iif r channel > 128
             byte |= *(src_ptr) >> 7;

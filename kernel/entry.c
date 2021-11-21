@@ -15,6 +15,7 @@
 #include "int/idt.h"
 #include "memory/physical_allocator.h"
 #include "memory/paging.h"
+#include "memory/vmap.h"
  
 
 #define KERNEL_STACK_SIZE 8192
@@ -130,48 +131,53 @@ void _start(struct stivale2_struct *stivale2_struct) {
     }
         
  
+
+
+    setup_isrs();
+    read_acpi_tables((void*)rsdp_tag_ptr->rsdp);
+
+    init_physical_allocator(memmap_tag);
+
+
+    init_paging(memmap_tag);
+
+// cannot print anything around here: the framebuffer isn't mapped
+
+// map MMIOs
+    map_pages(
+        early_virtual_to_physical(fbtag->framebuffer_addr), 
+        0xffffffff00000000,
+        (fbtag->framebuffer_height * fbtag->framebuffer_pitch+0x0fff) / 0x1000,
+        PRESENT_ENTRY
+    );
+
+// map lapic registers
+
+    map_pages(
+        get_apic_configuration_physical_space(), 
+        APIC_VIRTUAL_ADDRESS,
+        1,
+        PRESENT_ENTRY | PCD
+    );
+
  // first initialize our terminal 
-    initVideo(fbtag);
-    setup_terminal();
-
-    terminal_set_colors(0xf0f0f0, 0x007000);
-    terminal_clear();
-    kputs(&_binary_bootmessage_txt);
-
+    initVideo(fbtag,         0xffffffff00000000);
+    init_gdt_table();
 
 // we cannot use stivale2 terminal
 // after loading our gdt
 // so we need to load our gdt after our
 // terminal is successfully installed 
-    init_gdt_table();
-    setup_isrs();
-
-    read_acpi_tables((void*)rsdp_tag_ptr->rsdp);
-    //apic_setup_clock();
-
-// initialize the memory
-// as we reclaim the bootloader memory,
-// we have to copy the structure to be able     
-// to use it still 
-    // !!!! WARNING !!!!
-    // the memory map is allocated on the stack
-    // that is not a very good idea but it seems to work
-
-    struct {
-        struct stivale2_tag tag;
-        uint64_t entries;
-        struct stivale2_mmap_entry memmap[memmap_tag->entries];        
-    } local_memmap_tag;
+    setup_terminal();
+    append_initialization();
 
 
-    local_memmap_tag.entries = memmap_tag->entries,
-    memcpy(local_memmap_tag.memmap, memmap_tag, 
-            sizeof(struct stivale2_mmap_entry) * local_memmap_tag.entries);
+    terminal_set_colors(0xf0f0f0, 0x007000);
+    terminal_clear();
+    kputs(&_binary_bootmessage_txt);
     
-    init_physical_allocator(&local_memmap_tag);
 
-    init_paging(&local_memmap_tag);
-
+    apic_setup_clock();
 
     for(;;) {
         asm volatile("hlt");

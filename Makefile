@@ -12,7 +12,7 @@ QEMU_PATH := qemu-system-x86_64
 
 QEMU_ARGS := -monitor stdio \
 			 -bios /usr/share/ovmf/OVMF.fd \
-			 -m 114 \
+			 -m 8192 \
 			 -vga std \
 			 -no-reboot \
 			 -D qemu.log \

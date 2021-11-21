@@ -29,7 +29,20 @@
  * 
  *  
  * 
+ * detailed MMIO address space:
+ * 
+ * 0xffffffff00000000  | ---- PCIE ---- |
+ *                     |   framebuffer  |
+ *                     |       ...      |
+ *                     | -------------- |
+ * 0xffffffff1fffe000  |      HPET      |
+ * 0xffffffff1ffff000  |      LAPIC     |
+ * 0xffffffff20000000  |----------------|
+ * 
+ * 
  */
+
+#define APIC_VIRTUAL_ADDRESS 0xffffffff20000000llu
 
 
 
@@ -77,12 +90,18 @@ static inline int is_mmio(uint64_t virtual_address) {
     return (virtual_address & KERNEL_DATA_BEGIN) == MMIO_BEGIN;
 }
 
-
 // return the physical address of a
 // stivale2 high half pointer
 static inline uint64_t early_virtual_to_physical(
         const void* virtual_address) {
-    return ~KERNEL_DATA_BEGIN & (uint64_t)virtual_address;
+    
+    if((0xfffff00000000000llu & (uint64_t)virtual_address) ==
+                         TRANSLATED_PHYSICAL_MEMORY_BEGIN)
+        return ~TRANSLATED_PHYSICAL_MEMORY_BEGIN & (uint64_t)virtual_address;
+    
+    else
+        return ~KERNEL_DATA_BEGIN & (uint64_t)virtual_address;
+    
 }
 
 

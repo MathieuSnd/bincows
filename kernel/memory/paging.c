@@ -153,7 +153,9 @@ static void map_physical_memory(const struct stivale2_struct_tag_memmap* memmap)
     for(unsigned i = 0; i < memmap->entries; i++) {
         const struct stivale2_mmap_entry* e = &memmap->memmap[i];
 
-        if(e->type ==  STIVALE2_MMAP_USABLE || e->type == STIVALE2_MMAP_BOOTLOADER_RECLAIMABLE) {
+        if(e->type ==  STIVALE2_MMAP_USABLE || e->type == STIVALE2_MMAP_BOOTLOADER_RECLAIMABLE
+          || e->type == STIVALE2_MMAP_ACPI_RECLAIMABLE || 
+          e->type == STIVALE2_MMAP_ACPI_NVS) {
             // be inclusive!
             uint64_t phys_addr = (uint64_t) (e->base / 0x1000) * 0x1000;
 
@@ -323,24 +325,22 @@ void init_paging(const struct stivale2_struct_tag_memmap* memmap) {
 
 // map the kernel 
     map_kernel(memmap);
+}
 
-// get the physical address of the pml4 table
-    uint64_t pml4_lower_half_ptr = early_virtual_to_physical(pml4);
+void append_initialization(void) {
 
-    
 // enable  PAE in cr4 
 // disable PCIDE
     set_cr4((get_cr4() | CR4_PAE_BIT) & ~CR4_PCIDE);
 
 // enable the PG bit
     set_cr0(get_cr0() | CR0_PG_BIT);
+// get the physical address of the pml4 table
+    uint64_t pml4_lower_half_ptr = early_virtual_to_physical(pml4);
+
+// finaly set the pml4 to cr3
     _cr3(pml4_lower_half_ptr);
 
-
-    *((uint64_t*)0xffff800080000000) = 40;
-    while ((1));
-
-    kprintf("hello from the future\n");
 }
 
 
@@ -357,17 +357,16 @@ static void page_table_allocator_callback(uint64_t phys_addr,
                               uint64_t virt_addr,
                               size_t    size) {
     (void)(size+virt_addr); // the size is always one whatsoever...
-    assert(phys_addr < 0x80000000);
     page_table_allocator_buffer[page_table_allocator_buffer_size++] = (void*)phys_addr;
 }
 
-/*
+
 static void zero_page_table_page(void* physical_address) {
     assert_aligned(physical_address, 0x1000);
     memset(translate_address(physical_address), 0, 0x1000);
 }
 
-*/
+
 
 // fill the page table allocator buffer
 static void fill_page_table_allocator_buffer(size_t n) {
@@ -381,8 +380,8 @@ static void fill_page_table_allocator_buffer(size_t n) {
     int old_size = page_table_allocator_buffer_size;
 
     physalloc(to_alloc, 0, page_table_allocator_callback);
-    //for(unsigned i = old_size; i < n; i++)
-    //    zero_page_table_page(page_table_allocator_buffer[i]);
+    for(unsigned i = old_size; i < n; i++)
+        zero_page_table_page(page_table_allocator_buffer[i]);
     page_table_allocator_buffer_size = n;
 }
 
@@ -399,8 +398,8 @@ static void* alloc_page_table(void) {
         physalloc(16, 0, page_table_allocator_callback);
         page_table_allocator_buffer_size = 16;
         
-        //for(int i = 0; i < 16; i++)
-        //    zero_page_table_page(page_table_allocator_buffer[i]);
+        for(int i = 0; i < 16; i++)
+            zero_page_table_page(page_table_allocator_buffer[i]);
     }
 
     return page_table_allocator_buffer[--page_table_allocator_buffer_size];
@@ -450,7 +449,13 @@ void map_pages(uint64_t physical_addr,
         while(count > 0 && pti < 512) {
             // create a new entry
             uint64_t e = create_table_entry((void*)physical_addr,flags);
-            ((void**)translate_address(pdentry))[pti] = e;
+            
+            void** entry_ptr = (void**)translate_address(pdentry) + pti;
+
+            assert(!present_entry(*entry_ptr));
+
+            
+            *entry_ptr = e;
             
             pti++;
             count--;

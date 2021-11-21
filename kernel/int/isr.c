@@ -94,6 +94,7 @@ __attribute__((interrupt)) void ISR_general_protection_fault_handler(struct IFra
 }
 __attribute__((interrupt)) void ISR_page_fault_handler(struct IFrame* interrupt_frame, uint64_t error_code) {
     char buff[128];
+    //for(;;);
     // the content of cr2 is the illegal address
     sprintf(buff, "PAGE FAULT. illegal address: %16lx, error code %x\n", _cr2(), error_code);
     panic_handler(buff, interrupt_frame);

@@ -12,7 +12,7 @@
 #include "../int/apic.h"
 
 
-extern struct APICConfig* apic_config;
+extern volatile void* physical_config_base;
 
 static bool __ATTR_PURE__ checksum(const void* table, size_t size) {
     uint8_t sum = 0;
@@ -93,7 +93,7 @@ static void parse_hpet(const struct HPET* table) {
 static void parse_madt(const struct MADT* table) {
     // checksum is already done
 
-    apic_config = (void*)(uint64_t)table->lAPIC_address;
+    physical_config_base = (void*)(uint64_t)table->lAPIC_address;
     const void* ptr = table->entries;
     const void* end = (const void*)table + table->header.length;
 

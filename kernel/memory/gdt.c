@@ -101,12 +101,12 @@ struct GDTDescriptor gdt_descriptor = {
 
 void init_gdt_table() {
     // init GDT TSS entry 
+    
     gdt[5].base1 = (uint64_t)&tss       & 0xfffflu;
     gdt[5].base2 = (uint64_t)&tss >> 16 & 0x00ffllu;
     gdt[5].base3 = (uint64_t)&tss >> 24 & 0x00ffllu;
     *(uint64_t *)(&gdt[6]) = (uint64_t)(&tss) >> 32;
     
-    kprintf("0x%16lx = 0x%2x %2x %4x\n", &tss, gdt[5].base3, gdt[5].base2, gdt[5].base1);
     _lgdt(&gdt_descriptor);
 
 

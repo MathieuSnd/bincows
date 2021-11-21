@@ -104,15 +104,9 @@ static void init_memory_range(struct memory_range* range, uint64_t addr, size_t 
     struct MR_header* header = (struct MR_header *)addr;
 
 
-
-    kprintf("%x, %x\n", header, length);
-
     // zero all the bit maps
-    memset(((uint8_t*)header), 0, 0x1000 * (length));
+    memset(header->bitmap_level3, 0, 128+256+512+2048);
 
-
-    kprintf("issse\n");
-    
     // we use one page per region for the header
     header->available[0] = (length-1);
 
@@ -131,9 +125,6 @@ static void init_memory_range(struct memory_range* range, uint64_t addr, size_t 
         mr_lists[i] = range;
         break;
     }
-    
-    
-
 }
 
 
@@ -190,9 +181,6 @@ void init_physical_allocator(const struct stivale2_struct_tag_memmap* memmap) {
 
     n_ranges = j;
     total_available_pages = total_pages - n_ranges; 
-
-    kprintf("initializeed %u MB of memory, %u ranges, %u pages\n", 
-            (total_pages - n_ranges) / 256, n_ranges, (total_pages - n_ranges));
 }
 
 

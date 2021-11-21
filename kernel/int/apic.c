@@ -4,8 +4,10 @@
 #include "idt.h"
 #include "apic.h"
 #include "../klib/sprintf.h"
+#include "../memory/vmap.h"
 
-volatile struct APICConfig* apic_config = NULL;
+volatile struct APICConfig* apic_config = APIC_VIRTUAL_ADDRESS;
+volatile void* physical_config_base = NULL;
 
 
 static inline void outb(uint16_t port, uint8_t val)
@@ -16,6 +18,11 @@ uint8_t inb(uint16_t dx);
 
 void     set_rflags(uint64_t rf);
 uint64_t get_rflags(void);
+
+
+uint64_t get_apic_configuration_physical_space(void) {
+    return physical_config_base;
+}
 
 
 static unsigned read_pit_count(void) {
