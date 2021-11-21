@@ -4,18 +4,35 @@
 HDD_ROOT := disc_root 
 HDD_FILE := disk.hdd
  
-USED_LOOPBACK := /dev/loop6
+USED_LOOPBACK := /dev/loop2
 
 LIMINE_INSTALL := ./limine-bootloader/limine-install-linux-x86_64
 
 QEMU_PATH := qemu-system-x86_64
-QEMU_ARGS := -monitor stdio -bios /usr/share/ovmf/OVMF.fd -m 114 -vga std -no-reboot
+
+QEMU_ARGS := -monitor stdio \
+			 -bios /usr/share/ovmf/OVMF.fd \
+			 -m 114 \
+			 -vga std \
+			 -no-reboot \
+			 -D qemu.log \
+			-drive format=raw,file=$(HDD_FILE),id=disk,if=none \
+			-device ahci,id=ahci \
+			-device ide-hd,drive=disk,bus=ahci.0
+
+QEMU_DEBUG_ARGS:= $(QEMU_ARGS) -no-shutdown -d int
+
+
 
 run: all
-	$(QEMU_PATH) $(QEMU_ARGS) -drive format=raw,file=$(HDD_FILE),id=disk,if=none \
-									-device ahci,id=ahci \
-									-device ide-hd,drive=disk,bus=ahci.0
+	$(QEMU_PATH) $(QEMU_ARGS) 
 
+
+
+
+debug: all
+	$(QEMU_PATH) $(QEMU_DEBUG_ARGS) 
+	
 all: disk
 
 threaded_build:
