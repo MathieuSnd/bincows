@@ -17,6 +17,7 @@
 [global _ltr]
 [global read_msr]
 [global write_msr]
+[global _rbp]
 
 [section .text]
 
@@ -50,6 +51,10 @@ _fs:
     mov ax, fs
     ret
 
+_rbp:
+    mov rax, rbp
+    ret
+
 
 ; void get_cr0(uint64_t cr3)
 get_cr0:
@@ -67,7 +72,7 @@ _cr2:
 
 ; void cr3(uint64_t cr3)
 _cr3:
-    mov cr3, rax
+    mov cr3, rdi
     ret
 
     
