@@ -22,6 +22,14 @@ extern void set_cr4(uint64_t cr4);
 #define CR4_PCIDE   (1lu << 17)
 
 
+// size of bulks of allocation
+// the page buffer is 64 long
+// so we suppose that 4096 pages
+// won't make more than 64 page
+// tables
+#define MAX_ALLOC 1024
+
+
 /**
  * 4th level table (pde) entry
  */
@@ -164,6 +172,7 @@ static void map_physical_memory(const struct stivale2_struct_tag_memmap* memmap)
 
             if(size == 0)
                 continue;
+
             
             uint64_t virtual_addr = translate_address(phys_addr);
 
@@ -174,7 +183,6 @@ static void map_physical_memory(const struct stivale2_struct_tag_memmap* memmap)
         }
 
     }
-
 }
 /*
 static void map_allocator_data(void) {
@@ -253,11 +261,11 @@ static int present_entry(void* entry) {
     return (uint64_t)entry & PRESENT_ENTRY;
 } 
 
-/*
- function for debug purposes
+
+ //function for debug purposes
 
 static void print_struct(int level, void** table, uint64_t virt) {
-    uint64_t* addr = table;
+    uint64_t* addr = translate_address(table);
 
     //if(level > 1)
       //  return ;
@@ -269,7 +277,7 @@ static void print_struct(int level, void** table, uint64_t virt) {
             for(int i = 0; i < level; i++)
                 kputs("-");
 
-            if(level == 3) {
+            if(level == 2) {
                 kprintf(" %lx -> %lx\n", v << 12, extract_pointer(addr[i]));
             }
             else {
@@ -279,7 +287,7 @@ static void print_struct(int level, void** table, uint64_t virt) {
         }
     }
 }
-*/
+
 
 
 
@@ -291,23 +299,23 @@ void init_paging(const struct stivale2_struct_tag_memmap* memmap) {
 // so memory is both identity mapped and transtated 
 // so *x = *translate_address(x)
 
-    pml4[0]   = create_table_entry(
-                        (void*)early_virtual_to_physical(pdpt_low), 
-                        PRESENT_ENTRY
-                    );
-    pml4[256] = create_table_entry(
-                        (void*)early_virtual_to_physical(pdpt_mid), 
-                        PRESENT_ENTRY | PL_US
-                    );
+    //pml4[0]   = create_table_entry(
+    //                    (void*)early_virtual_to_physical(pdpt_low), 
+    //                    PRESENT_ENTRY
+    //                );
+    //pml4[256] = create_table_entry(
+    //                    (void*)early_virtual_to_physical(pdpt_mid), 
+    //                    PRESENT_ENTRY | PL_US
+    //                );
                     
 
     // the high half memory is supervisor only
     // so that no user can access it eventhough the entry
     // stays in the pml4!  
-    pml4[511] = create_table_entry(
-                        (void*)early_virtual_to_physical(pdpt_high), 
-                        PRESENT_ENTRY | PL_US
-                    );
+    //pml4[511] = create_table_entry(
+    //                    (void*)early_virtual_to_physical(pdpt_high), 
+    //                    PRESENT_ENTRY | PL_US
+    //                );
 
 
 // map all the memory to 0xffff800000000000
@@ -320,14 +328,13 @@ void init_paging(const struct stivale2_struct_tag_memmap* memmap) {
 // in order to avoid awful recursion bugs 
     alloc_page_table_realloc = 0;
 
-    //print_struct(0, pml4, 0);
 
 
 // map the kernel 
     map_kernel(memmap);
 }
 
-void append_initialization(void) {
+void append_paging_initialization(void) {
 
 // enable  PAE in cr4 
 // disable PCIDE
@@ -428,8 +435,6 @@ void map_pages(uint64_t physical_addr,
                uint64_t virtual_addr, 
                size_t count,
                unsigned flags) {
-
-
     
     while(count > 0) {
         // fetch table indexes
@@ -444,15 +449,23 @@ void map_pages(uint64_t physical_addr,
         pdpte restrict pdptentry = extract_pointer(get_entry_or_allocate((void**)pml4entry, pdpti));
         pde   restrict pdentry   = extract_pointer(get_entry_or_allocate((void**)pdptentry, pdi));
 
-
-    
         while(count > 0 && pti < 512) {
             // create a new entry
             uint64_t e = create_table_entry((void*)physical_addr,flags);
             
             void** entry_ptr = (void**)translate_address(pdentry) + pti;
+            
 
-            assert(!present_entry(*entry_ptr));
+            if(present_entry(*entry_ptr)) {
+                char buff[256];
+                sprintf(buff, 
+                    "map_pages(...,flags=%u):\n"
+                    " tried to map physical memory 0x%lx to 0x%lx, but physical memory 0x%lx"
+                    " was already mapped here",
+                    flags, physical_addr, virtual_addr, extract_pointer(*entry_ptr));
+                
+                panic(buff);
+            }
 
             
             *entry_ptr = e;
@@ -462,5 +475,39 @@ void map_pages(uint64_t physical_addr,
             physical_addr += 0x1000;
             virtual_addr  += 0x1000;
         }
+    }
+}
+
+
+void alloc_pages(uint64_t virtual_addr_begin, 
+               size_t   count,
+               unsigned flags) {
+    // don't allow recusion
+    alloc_page_table_realloc = 0;
+
+
+    void callback(
+            uint64_t physical_address, 
+            uint64_t virtual_address,
+            size_t   c) {
+            
+        
+        map_pages(physical_address,
+                  virtual_address,
+                  c,
+                  flags);
+    };
+
+    while(count > 0) {
+        unsigned size = count;
+        if(size > MAX_ALLOC)
+            size = MAX_ALLOC;
+
+        fill_page_table_allocator_buffer(16);
+
+        physalloc(size, virtual_addr_begin, callback);
+
+        count -= size;
+        virtual_addr_begin += size * 0x1000;
     }
 }

@@ -13,7 +13,7 @@ struct stivale2_struct_tag_memmap;
  * map the kernel executable to high half: 0xffffffff80000000 + phys
  */
 void init_paging(const struct stivale2_struct_tag_memmap* memmap);
-void append_initialization(void);
+void append_paging_initialization(void);
 
 
 // page table flags
@@ -46,3 +46,6 @@ void map_pages(uint64_t physical_addr,
                size_t   count,
                unsigned flags);
 
+void alloc_pages(uint64_t virtual_addr, 
+               size_t   count,
+               unsigned flags);

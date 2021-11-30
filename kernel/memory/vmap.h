@@ -42,7 +42,8 @@
  * 
  */
 
-#define APIC_VIRTUAL_ADDRESS 0xffffffff20000000llu
+#define HPET_VIRTUAL_ADDRESS 0xffffffff1fffe000llu
+#define APIC_VIRTUAL_ADDRESS 0xffffffff1ffff000llu
 
 
 

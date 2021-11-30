@@ -260,7 +260,7 @@ static void* select_bitmap(struct MR_header* header,
 
 // return a pointer to the MR header
 static struct MR_header* get_header_base(const struct memory_range* range) {
-    return range->base;
+    return (void *)((uint64_t)range->base | TRANSLATED_PHYSICAL_MEMORY_BEGIN);
 }
 
 // modifies the bitmaps to allocate
@@ -401,6 +401,7 @@ void physalloc(size_t size, void* virtual_addr, PHYSALLOC_CALLBACK callback) {
     while(size > 0) {
         unsigned max_block_size_id = 0;
         struct memory_range* range = getMR(size, &max_block_size_id);
+        
 
         const unsigned memory_range_length = range->length;
         
@@ -483,7 +484,7 @@ void physalloc(size_t size, void* virtual_addr, PHYSALLOC_CALLBACK callback) {
                 // loop through the region inside the lvl0 map 
                     for(unsigned j = 0; j < granularity; j++) {
                         void* target_address = range->base + (curr_page+1) * 0x1000;
-                        callback((uint64_t)target_address, (uint64_t)virtual_addr, 0x1000);
+                        callback((uint64_t)target_address, (uint64_t)virtual_addr, 1);
                         
                         alloc_page_bitmaps(header, curr_page);
 
