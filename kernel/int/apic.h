@@ -50,7 +50,5 @@ struct APICConfig
 static_assert(sizeof(struct APICConfig) == 0x400);
 
 
-uint64_t get_apic_configuration_physical_space(void);
-
 void apic_setup_clock(void);
 uint64_t clock(void);

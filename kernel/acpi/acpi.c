@@ -10,9 +10,11 @@
 #include "../klib/string.h"
 #include "acpitables.h"
 #include "../int/apic.h"
+#include "../memory/vmap.h"
+#include "../memory/paging.h"
 
 
-extern volatile void* physical_config_base;
+static void* apic_config_base, *hpet_config_space;
 
 static bool __ATTR_PURE__ checksum(const void* table, size_t size) {
     uint8_t sum = 0;
@@ -47,6 +49,7 @@ void read_acpi_tables(const void* rsdp_location) {
 
     size_t n_entries = (xsdt->header.length - sizeof(xsdt->header)) / sizeof(void*);
 
+    kprintf("%u ACPI entries\n", n_entries);
 
     bool madt_parsed = false,
          hpet_parsed = false,
@@ -56,6 +59,9 @@ void read_acpi_tables(const void* rsdp_location) {
     for(size_t i = 0; i < n_entries; i++) {
         const struct ACPISDTHeader* table = xsdt->entries[i];
         assert(checksum(&table, table->length));
+
+        kprintf("%3u: %4s\n", i, table->signature.arg);
+
 
         switch(table->signature.raw) {
         case MADT_SIGNATURE:
@@ -76,24 +82,32 @@ void read_acpi_tables(const void* rsdp_location) {
         default:
             break;
         }
-        kprintf("%3u: %4s\n", i, table->signature.arg);
     }
 
     
     assert(madt_parsed);
-    //assert(hpet_parsed);
+    assert(hpet_parsed);
     assert(fadt_parsed);
-    //assert(pcie_parsed);
+    assert(pcie_parsed);
+}
+
+void map_acpi_mmios(void) {
+    // mmios to map: HPET, PCIE
+    // cache disable
+    map_pages(apic_config_base,  APIC_VIRTUAL_ADDRESS, 1,
+                                 PRESENT_ENTRY | PCD);
+    map_pages(hpet_config_space, HPET_VIRTUAL_ADDRESS, 1,
+                                 PRESENT_ENTRY | PCD);
 }
 
 static void parse_hpet(const struct HPET* table) {
-    
+    hpet_config_space = table->address;
 }
 
 static void parse_madt(const struct MADT* table) {
     // checksum is already done
 
-    physical_config_base = (void*)(uint64_t)table->lAPIC_address;
+    apic_config_base = (void*)(uint64_t)table->lAPIC_address;
     const void* ptr = table->entries;
     const void* end = (const void*)table + table->header.length;
 
@@ -104,7 +118,7 @@ static void parse_madt(const struct MADT* table) {
     (void)override_ioapic_passed;
     
 
-    kprintf("table size: %u\n", end-ptr);
+    //kprintf("table size: %u\n", end-ptr);
     while(ptr < end) {
     //for(int i = 10; i>0; i--) {
         const struct MADTEntryHeader* entry_header = ptr;
@@ -154,7 +168,7 @@ static void parse_madt(const struct MADT* table) {
 
         }
 
-        kprintf("entry: type %u ; size %u\n", entry_header->type,entry_header->length);
+        //kprintf("entry: type %u ; size %u\n", entry_header->type,entry_header->length);
 
         ptr += entry_header->length;
     }

@@ -11,6 +11,7 @@
 #include "common.h"
 #include "regs.h"
 #include "int/apic.h"
+#include "drivers/hpet.h"
 
 #include "int/idt.h"
 #include "memory/physical_allocator.h"
@@ -42,8 +43,8 @@ static struct stivale2_header_tag_framebuffer framebuffer_hdr_tag = {
         .identifier = STIVALE2_HEADER_TAG_FRAMEBUFFER_ID,
         .next = (uint64_t)&terminal_hdr_tag
     },
-    .framebuffer_width  = 800,
-    .framebuffer_height = 600,
+    .framebuffer_width  = 0,
+    .framebuffer_height = 0,
     .framebuffer_bpp    = 32
 };
  
@@ -104,6 +105,27 @@ static void print_fb_infos(struct stivale2_struct_tag_framebuffer* fbtag) {
 #pragma GCC diagnostic pop
 
 
+static void init_memory(const struct stivale2_struct_tag_memmap* memmap_tag,
+                        const struct stivale2_struct_tag_framebuffer* fbtag) {
+
+    init_physical_allocator(memmap_tag);
+
+
+    init_paging(memmap_tag);
+
+// map MMIOs
+    map_pages(
+        early_virtual_to_physical(fbtag->framebuffer_addr), 
+        0xffffffff00000000,
+        (fbtag->framebuffer_height * fbtag->framebuffer_pitch+0x0fff) / 0x1000,
+        PRESENT_ENTRY
+    );
+
+// map lapic registers
+    map_acpi_mmios();
+}
+
+
 // Registers %rbp, %rbx and %r12 through %r15 “belong” to the calling functio
 // The following will be our kernel's entry point.
 void _start(struct stivale2_struct *stivale2_struct) {
@@ -136,48 +158,33 @@ void _start(struct stivale2_struct *stivale2_struct) {
     setup_isrs();
     read_acpi_tables((void*)rsdp_tag_ptr->rsdp);
 
-    init_physical_allocator(memmap_tag);
+    init_memory(memmap_tag, fbtag);
 
-
-    init_paging(memmap_tag);
-
-// cannot print anything around here: the framebuffer isn't mapped
-
-// map MMIOs
-    map_pages(
-        early_virtual_to_physical(fbtag->framebuffer_addr), 
-        0xffffffff00000000,
-        (fbtag->framebuffer_height * fbtag->framebuffer_pitch+0x0fff) / 0x1000,
-        PRESENT_ENTRY
-    );
-
-// map lapic registers
-
-    map_pages(
-        get_apic_configuration_physical_space(), 
-        APIC_VIRTUAL_ADDRESS,
-        1,
-        PRESENT_ENTRY | PCD
-    );
 
  // first initialize our terminal 
+    //initVideo(fbtag,         0xc0000000);
     initVideo(fbtag,         0xffffffff00000000);
     init_gdt_table();
-
 // we cannot use stivale2 terminal
 // after loading our gdt
 // so we need to load our gdt after our
 // terminal is successfully installed 
-    setup_terminal();
-    append_initialization();
-
-
-    terminal_set_colors(0xf0f0f0, 0x007000);
-    terminal_clear();
-    kputs(&_binary_bootmessage_txt);
     
+    setup_terminal();
+    append_paging_initialization();
 
+
+
+    terminal_set_colors(0xfff0a0, 0x212121);
+    terminal_clear();
+    
+        
+    kputs(&_binary_bootmessage_txt);
+    kprintf("OUI\n");
+
+    hpet_init();
     apic_setup_clock();
+
 
     for(;;) {
         asm volatile("hlt");
