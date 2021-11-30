@@ -44,6 +44,10 @@ $(KERNEL): $(OBJ)
 #%.txt.o: ../resources/ascii/%.txt
 #	$(LD) -r -b binary -o $@ $<
 
+
+kernel/memory/paging.o: INTERNALCFLAGS += -Wno-int-conversion
+	
+
 %.c.o: %.c
 	$(CC) $(CFLAGS) $(INTERNALCFLAGS) -c $< -o $@
 

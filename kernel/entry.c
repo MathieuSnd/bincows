@@ -115,8 +115,8 @@ static void init_memory(const struct stivale2_struct_tag_memmap* memmap_tag,
 
 // map MMIOs
     map_pages(
-        early_virtual_to_physical(fbtag->framebuffer_addr), 
-        0xffffffff00000000,
+        early_virtual_to_physical((void *)fbtag->framebuffer_addr), 
+        MMIO_BEGIN,
         (fbtag->framebuffer_height * fbtag->framebuffer_pitch+0x0fff) / 0x1000,
         PRESENT_ENTRY
     );
@@ -162,8 +162,7 @@ void _start(struct stivale2_struct *stivale2_struct) {
 
 
  // first initialize our terminal 
-    //initVideo(fbtag,         0xc0000000);
-    initVideo(fbtag,         0xffffffff00000000);
+    initVideo(fbtag, (void *)MMIO_BEGIN);
     init_gdt_table();
 // we cannot use stivale2 terminal
 // after loading our gdt

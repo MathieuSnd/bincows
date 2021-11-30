@@ -7,16 +7,12 @@
 #include "../memory/vmap.h"
 #include "../drivers/hpet.h"
 
-volatile struct APICConfig* apic_config = APIC_VIRTUAL_ADDRESS;
-
-void     set_rflags(uint64_t rf);
-uint64_t get_rflags(void);
+static volatile struct APICConfig* apic_config = (void *)APIC_VIRTUAL_ADDRESS;
 
 
-uint64_t apic_timer_clock_count = 0;
+static uint64_t apic_timer_clock_count = 0;
 
 
-char buffer[128] = {0};
 
 __attribute__((interrupt)) void lapic_timer_handler(struct IFrame* frame) {
     (void) frame;
@@ -43,9 +39,6 @@ inline uint64_t read(uint32_t m_address) {
     return ((uint64_t) high << 32) | low;
 }
 
-
-#define PRINT(X) kprintf("%s = %lx\n", #X, X)
-
 void apic_setup_clock(void) {
 
     
@@ -57,10 +50,6 @@ void apic_setup_clock(void) {
 
     assert(apic_config != NULL);
     set_irq_handler(32, lapic_timer_handler);
-
-    pit_init();
-
-
 
     // enable apic and set spurious int to 0xff
     apic_config->spurious_interrupt_vector.reg = 0x100 | LAPIC_SPURIOUS_IRQ; 
@@ -76,18 +65,12 @@ void apic_setup_clock(void) {
 
     hpet_wait();
 
-//    for(int i = 0; i < 10; i++) 
-//        pit_wait(1); /// wait for 1 ms 
-
-    //terminal_clear();
 
     uint32_t t = (UINT32_MAX - apic_config->timer_current_count.reg);
 
     apic_config->timer_initial_count.reg = t;
-            // irq on 
 
     // enable apic and set spurious int to 0xff
-    
 // unmask the IRQ, periodic mode, timer on irq 32
     apic_config->LVT_timer.reg = 0x20020;
 

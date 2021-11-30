@@ -68,9 +68,9 @@
  */
 
 #define TRANSLATED_PHYSICAL_MEMORY_BEGIN 0xffff800000000000llu
-#define MMIO_BEGIN           0xffffffff00000000llu
-#define KERNEL_DATA_BEGIN    0xffffffff80000000llu
-#define PAGE_TABLES_BEGIN    0xffffffffc0000000llu
+#define MMIO_BEGIN          0xffffffff00000000llu
+#define KERNEL_DATA_BEGIN   0xffffffff80000000llu
+#define PAGE_TABLES_BEGIN   0xffffffffc0000000llu
 
 // return non 0 value iif the given address
 // resides in kernel memory
@@ -108,6 +108,6 @@ static inline uint64_t early_virtual_to_physical(
 
 // translate a physical memory address
 // to access it where it is mapped
-static void* translate_address(void* phys_addr) {
+static inline void* translate_address(void* phys_addr) {
     return (void*)((uint64_t)phys_addr | TRANSLATED_PHYSICAL_MEMORY_BEGIN);
 }

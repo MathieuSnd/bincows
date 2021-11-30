@@ -10,7 +10,7 @@ int zero = 0;
 extern uint64_t _rbp(void);
 
 // always inline: make sure 
-static __attribute__((always_inline)) void stack_trace(void) {
+static inline __attribute__((always_inline)) void stack_trace(void) {
     void** ptr = (void**)_rbp();
     kputs("backtrace:\n");
     

@@ -174,10 +174,10 @@ static void map_physical_memory(const struct stivale2_struct_tag_memmap* memmap)
                 continue;
 
             
-            uint64_t virtual_addr = translate_address(phys_addr);
+            void* virtual_addr = translate_address((void *)phys_addr);
 
 
-            map_pages(phys_addr, virtual_addr, size, PRESENT_ENTRY);
+            map_pages(phys_addr, (uint64_t)virtual_addr, size, PRESENT_ENTRY);
             // use the allocator to allocate page tables
             // to map its own data
         }
@@ -264,8 +264,8 @@ static int present_entry(void* entry) {
 
  //function for debug purposes
 
-static void print_struct(int level, void** table, uint64_t virt) {
-    uint64_t* addr = translate_address(table);
+static inline void print_struct(int level, void** table, uint64_t virt) {
+    void** addr = translate_address(table);
 
     //if(level > 1)
       //  return ;
@@ -416,12 +416,12 @@ static void* alloc_page_table(void) {
 static void* get_entry_or_allocate(void** restrict table, unsigned index)  {
     assert(index < 512);
 
-    uint64_t* virtual_addr_table =  translate_address(table);
+    void** virtual_addr_table =  translate_address(table);
 
     void* entry = virtual_addr_table[index];
 
     if(!present_entry(entry)) {
-        uint64_t e = create_table_entry(
+        void* e = create_table_entry(
             alloc_page_table(), 
             PRESENT_ENTRY);
         return virtual_addr_table[index] = e;
@@ -451,7 +451,7 @@ void map_pages(uint64_t physical_addr,
 
         while(count > 0 && pti < 512) {
             // create a new entry
-            uint64_t e = create_table_entry((void*)physical_addr,flags);
+            void*  e = create_table_entry((void*)physical_addr,flags);
             
             void** entry_ptr = (void**)translate_address(pdentry) + pti;
             
@@ -505,7 +505,7 @@ void alloc_pages(uint64_t virtual_addr_begin,
 
         fill_page_table_allocator_buffer(16);
 
-        physalloc(size, virtual_addr_begin, callback);
+        physalloc(size, (void*)virtual_addr_begin, callback);
 
         count -= size;
         virtual_addr_begin += size * 0x1000;

@@ -73,7 +73,7 @@ void read_acpi_tables(const void* rsdp_location) {
             fadt_parsed = true;
             break;
         case HPET_SIGNATURE:
-            parse_hpet(table);
+            parse_hpet((const void*)table);
             hpet_parsed = true;
             break;
         case PCIE_SIGNATURE:
@@ -94,14 +94,14 @@ void read_acpi_tables(const void* rsdp_location) {
 void map_acpi_mmios(void) {
     // mmios to map: HPET, PCIE
     // cache disable
-    map_pages(apic_config_base,  APIC_VIRTUAL_ADDRESS, 1,
+    map_pages((uint64_t)apic_config_base, APIC_VIRTUAL_ADDRESS, 1,
                                  PRESENT_ENTRY | PCD);
-    map_pages(hpet_config_space, HPET_VIRTUAL_ADDRESS, 1,
+    map_pages((uint64_t)hpet_config_space, HPET_VIRTUAL_ADDRESS, 1,
                                  PRESENT_ENTRY | PCD);
 }
 
 static void parse_hpet(const struct HPET* table) {
-    hpet_config_space = table->address;
+    hpet_config_space = (void*)table->address;
 }
 
 static void parse_madt(const struct MADT* table) {

@@ -31,7 +31,7 @@ void _cli(void);
 void _sti(void);
 
 
-void setup_isr(void);
+void setup_isrs(void);
 
 
 #endif // IDT_H
