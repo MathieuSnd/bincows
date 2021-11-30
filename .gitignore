@@ -5,3 +5,4 @@ limine-bootloader/
 *.o
 include_cp
 *.elf
+qemu.log
