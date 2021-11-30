@@ -35,6 +35,8 @@ void default_terminal_handler(const char* s, size_t l) {
 #define NCOLS_MAX 133
 #define TERMINAL_LINES_MAX 75
 
+
+
 static Image* charmap = NULL;
 static struct Char buffer[NCOLS_MAX * TERMINAL_LINES_MAX * TERMINAL_N_PAGES];
 
@@ -45,6 +47,8 @@ static uint16_t cur_col, cur_line;
 
 static uint32_t current_fgcolor = 0xa0a0a0;
 static uint32_t current_bgcolor = 0;
+
+static unsigned margin_left, margin_top;
 
 
 
@@ -68,15 +72,27 @@ void setup_terminal(void) {
     
 // dynamicly create the terminal
 // with right size
-
-    ncols       = screenImage->w / TERMINAL_FONTWIDTH;
-    term_nlines = (screenImage->h / TERMINAL_LINE_HEIGHT) - 3;
-
-                                
+    unsigned console_w = (screenImage->w * 9 ) / 10,
+             console_h = (screenImage->w * 95 ) / 100;
+#ifdef BIGGER_FONT
+    ncols       = console_w / TERMINAL_FONTWIDTH / 2 - 1;
+    term_nlines = console_h / TERMINAL_LINE_HEIGHT / 2 - 1;
+#else
+    ncols       = console_w / TERMINAL_FONTWIDTH - 1;
+    term_nlines = console_h / TERMINAL_LINE_HEIGHT - 1;
+#endif
     if(ncols > NCOLS_MAX)
         ncols = NCOLS_MAX;
     if(term_nlines > TERMINAL_LINES_MAX)
         term_nlines = TERMINAL_LINES_MAX;
+
+#ifdef BIGGER_FONT
+    margin_left = (screenImage->w - ncols       * 2 * TERMINAL_FONTWIDTH ) / 2;
+    margin_top  = 0;//(screenImage->h - term_nlines * 2 * TERMINAL_FONTHEIGHT) / 2;
+#else
+    margin_left = (screenImage->w - ncols       * TERMINAL_FONTWIDTH ) / 2;
+    margin_top  = (screenImage->h - term_nlines * TERMINAL_FONTHEIGHT) / 2;
+#endif
 
     nlines      = TERMINAL_N_PAGES * term_nlines;
 
@@ -130,9 +146,9 @@ static void next_line(void) {
     cur_col = 0;
     cur_line++;
     if(cur_line >= nlines) {
-        cur_line = nlines-1;
+        cur_line = nlines-4;
 
-        move_buffer(1);
+        move_buffer(4);
     }
     else if(cur_line >= first_line + term_nlines) {
         first_line++;
@@ -158,8 +174,8 @@ static void emplace_char(char c) {
 
         buffer[ncols * cur_line + cur_col] = make_Char(c);
         
-        const struct Char* ch = &buffer[ncols * cur_line + cur_col];
-
+        struct Char* ch = &buffer[ncols * cur_line + cur_col];
+        
         cur_col += 1;
         if(!need_refresh)
             print_char(ch, cur_line - first_line, cur_col);
@@ -170,14 +186,25 @@ static void emplace_char(char c) {
         break;
     
     case '\n':
-        next_line();
+    {
+        for(unsigned i=cur_col;i < ncols; i++) 
+        {
+            //print_char(ch, cur_line - first_line, cur_col);
+            emplace_char(' ');
+
+        }
+    }
         break;
     
     case '\t':
-        cur_col = ((cur_col + TAB_SPACE) / TAB_SPACE) * TAB_SPACE;
+    {
+        unsigned new_col = ((cur_col + TAB_SPACE) / TAB_SPACE) * TAB_SPACE;
+        while(cur_col < new_col)
+            emplace_char(' ');
+
+    }
         
-        if(cur_col >= ncols)
-            next_line();
+        //if(cur_col >= ncols)
         break;
 
     case '\r':
@@ -218,16 +245,18 @@ static void print_char(const struct Char* restrict c, int line, int col) {
         .h = INTERLINE,
     };
 */
-  /*
+#ifdef BIGGER_FONT
     blitcharX2(charmap, c->c, c->fg_color, c->bg_color,
-                col  * FONTWIDTH * 2, 2 *line * LINE_HEIGHT);
+                margin_left + 2 * col  * TERMINAL_FONTWIDTH, 
+                margin_top  + 2 * line * TERMINAL_LINE_HEIGHT);
     
-*/
 
+#else
 
     blitchar(charmap, c->c, c->fg_color, c->bg_color,
-                col  * TERMINAL_FONTWIDTH, line * TERMINAL_LINE_HEIGHT);
-
+                margin_left + col  * TERMINAL_FONTWIDTH, 
+                margin_top  + line * TERMINAL_LINE_HEIGHT);
+#endif
 
     //imageDraw(charmap, NULL, NULL);
 

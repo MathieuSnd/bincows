@@ -23,7 +23,8 @@ INTERNALCFLAGS  :=  -mgeneral-regs-only \
 					-Wall -Wextra       \
 					-fcompare-debug-second \
 					-I/opt/cross/include/  \
-					-fpie
+					-fpie                  \
+#					-D BIGGER_FONT
  
 CFILES := $(shell find ./ -type f -name '*.c')
 SFILES := $(shell find ./ -type f -name '*.s')
