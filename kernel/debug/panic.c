@@ -18,7 +18,7 @@ static __attribute__((always_inline)) void stack_trace(void) {
         
         if(*ptr == 0) // reached the top
             break;
-        kprintf("\t?? in %llx\n", *(ptr+1));
+        kprintf("\t%llx \n", *(ptr+1));
 
         ptr = *ptr;
     }
@@ -27,7 +27,7 @@ static __attribute__((always_inline)) void stack_trace(void) {
 __attribute__((noreturn)) void panic(const char* panic_string) {
     // checks if video is operationnal
     if(get_terminal_handler() != NULL) {
-        terminal_set_colors(0xa0a0a0, 0x0000ff);
+        terminal_set_colors(0xfff0a0, 0x400000);
 
         if(panic_string == NULL)
             panic_string = "(null)";
