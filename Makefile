@@ -3,7 +3,9 @@
 
 HDD_ROOT := disc_root 
 HDD_FILE := disk.hdd
- 
+
+PARTITION := /dev/nvme0n1p5
+
 USED_LOOPBACK := /dev/loop2
 
 LIMINE_INSTALL := ./limine-bootloader/limine-install-linux-x86_64
@@ -13,39 +15,53 @@ QEMU_PATH := qemu-system-x86_64
 QEMU_ARGS := -monitor stdio \
 			 -bios /usr/share/ovmf/OVMF.fd \
 			 -m 8192 \
-			 -vga std \
+			 -M q35 \
+			 -vga virtio \
 			 -no-reboot \
 			 -D qemu.log \
-			-drive format=raw,file=$(HDD_FILE),id=disk,if=none \
-			-device ahci,id=ahci \
-			-device ide-hd,drive=disk,bus=ahci.0
+			-drive format=raw,file=
 
 QEMU_DEBUG_ARGS:= $(QEMU_ARGS) -no-shutdown -d int
 
 
-
 run: all
-	$(QEMU_PATH) $(QEMU_ARGS) 
+	$(QEMU_PATH) $(QEMU_ARGS)$(HDD_FILE)
+
+
+prun: kernel $(PARTITION)
+	sudo $(QEMU_PATH) $(QEMU_ARGS)$(PARTITION)
+
 
 
 
 
 debug: all
 	$(QEMU_PATH) $(QEMU_DEBUG_ARGS) 
-	
-all: disk
+
+pdebug: $(PARTITION)
+	HDD_FILE := $(PARTITION)
+	$(QEMU_PATH) $(QEMU_ARGS) 
+
+
+all: diskfile
 
 threaded_build:
 	make -j all
+
+
+$(PARTITION): kernel
+	sudo cp -r disk_root/* /media/bincows/
+#sudo $(LIMINE_INSTALL) $(PARTITION)
+
 
 $(HDD_FILE): kernel/entry.c
 	dd if=/dev/zero bs=1M count=0 seek=64 of=$(HDD_FILE)
 	sudo /sbin/parted -s $(HDD_FILE) mklabel gpt
 	sudo /sbin/parted -s $(HDD_FILE) mkpart ESP fat32 2048s 100%
 	sudo /sbin/parted -s $(HDD_FILE) set 1 esp on
-	$(LIMINE_INSTALL) $(HDD_FILE)
+#	$(LIMINE_INSTALL) $(HDD_FILE)
 
-disk: kernel $(HDD_FILE)
+diskfile: kernel $(HDD_FILE)
 
 	sudo losetup -P $(USED_LOOPBACK) $(HDD_FILE)
 	
