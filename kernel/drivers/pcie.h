@@ -3,7 +3,7 @@
 #include <stdint.h>
 #include <stddef.h>
 
-struct PCIE_config_space_descriptor {
+struct PCIE_segment_group_descriptor {
     void* address; // Base address 
         // of enhanced configuration mechanism
     uint16_t group; // PCI Segment Group Number
@@ -18,7 +18,8 @@ struct PCIE_config_space_descriptor {
 
 struct PCIE_Descriptor {
     size_t size;
-    struct PCIE_config_space_descriptor array[32];
+    struct PCIE_segment_group_descriptor array[4];
+    // we only handle PCIE devices with only 4 segment groups max
 };
 
 

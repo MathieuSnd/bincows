@@ -12,9 +12,14 @@
 #include "../int/apic.h"
 #include "../memory/vmap.h"
 #include "../memory/paging.h"
-
+#include "../drivers/pcie.h"
+#include "../debug/logging.h"
 
 static void* apic_config_base, *hpet_config_space;
+
+// defined in pcie.c
+extern struct PCIE_Descriptor pcie_descriptor;
+
 
 static bool __ATTR_PURE__ checksum(const void* table, size_t size) {
     uint8_t sum = 0;
@@ -179,9 +184,9 @@ static void parse_pcie(const struct PCIETable* table) {
     // fill the pcie driver's descriptor 
     size_t size = (table->header.length-sizeof(table->header));
 
-    pcie_descriptor.size = size / sizeof(struct PCIE_config_space_descriptor);
+    pcie_descriptor.size = size / sizeof(struct PCIE_segment_group_descriptor);
  
-    memcpy(pcie_descriptor.array, table->spaces, size);
+    memcpy(pcie_descriptor.array, table->segments, size);
 }
 
 static void parse_fadt(const struct ACPISDTHeader* table) {

@@ -141,13 +141,13 @@ struct MADT {
 
 
 static_assert(
-    sizeof(struct PCIE_config_space_descriptor) == 16);
+    sizeof(struct PCIE_segment_group_descriptor) == 16);
 
 struct PCIETable {
     struct ACPISDTHeader header;
     uint64_t reserved0;
 
-    struct PCIE_config_space_descriptor spaces[];
+    struct PCIE_segment_group_descriptor segments[];
 } __packed;
 
 
