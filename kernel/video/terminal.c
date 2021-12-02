@@ -4,6 +4,7 @@
 #include "../debug/assert.h"
 #include "video.h"
 #include "../klib/string.h"
+#include "../debug/logging.h"
 
 #define TAB_SPACE 6
 
@@ -57,6 +58,8 @@ extern int _binary_charmap_bmp;
 
 
 void setup_terminal(void) {
+    klog_debug("setup the terminal...");
+
     assert(charmap == NULL);
     
     charmap = loadBMP_24b_1b(&_binary_charmap_bmp);

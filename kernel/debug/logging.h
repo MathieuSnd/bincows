@@ -15,9 +15,9 @@
 
 
 #ifndef NDEBUG
-#define klog_debug(fmt, ...) klogf(LOG_LEVEL_DEBUG, fmt, __VA_ARGS__)
+#define klog_debug(...) klogf(LOG_LEVEL_DEBUG, __VA_ARGS__)
 #else
-#define klog_debug(fmt, ...)
+#define klog_debug(...)
 #endif
 
 #define klog_info(...) klogf(LOG_LEVEL_INFO, __VA_ARGS__) 

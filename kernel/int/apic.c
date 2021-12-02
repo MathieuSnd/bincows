@@ -1,8 +1,10 @@
 #include <stdint.h>
 
-#include "../debug/assert.h"
 #include "idt.h"
 #include "apic.h"
+
+#include "../debug/assert.h"
+#include "../debug/logging.h"
 #include "../klib/sprintf.h"
 #include "../memory/vmap.h"
 #include "../drivers/hpet.h"
@@ -40,7 +42,7 @@ inline uint64_t read(uint32_t m_address) {
 }
 
 void apic_setup_clock(void) {
-
+    klog_info("setup local apic clock...");
     
 // enable apic msr
     uint64_t IA32_APIC_BASE = read_msr(0x1b);    

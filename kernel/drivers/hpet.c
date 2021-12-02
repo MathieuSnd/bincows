@@ -3,6 +3,7 @@
 #include "hpet.h"
 #include "../memory/vmap.h"
 #include "../debug/assert.h"
+#include "../debug/logging.h"
 /**
 000-007h General Capabilities and ID Register Read Only
 008-00Fh Reserved
@@ -51,6 +52,8 @@ struct HPET_MMIO* const base = (void *)HPET_VIRTUAL_ADDRESS;
 static uint32_t hpet_period = 0;
 
 void hpet_init(void) {
+    klog_debug("init hpet...");
+    
     hpet_period = base->capabilities >> 32;
 }
 
