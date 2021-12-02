@@ -45,18 +45,16 @@ struct HPET_MMIO {
 
 static_assert(sizeof(struct HPET_MMIO) == 0x400);
 
+struct HPET_MMIO* const base = (void *)HPET_VIRTUAL_ADDRESS;
+
+
 static uint32_t hpet_period = 0;
 
 void hpet_init(void) {
-    struct HPET_MMIO* const base = (void *)HPET_VIRTUAL_ADDRESS;
-
     hpet_period = base->capabilities >> 32;
 }
 
 void hpet_prepare_wait_ms(unsigned ms) {
-
-    struct HPET_MMIO* const base = (void *)HPET_VIRTUAL_ADDRESS;
-    
     hpet_period = base->capabilities >> 32;
 
 // deactivate hpet timer
@@ -66,14 +64,15 @@ void hpet_prepare_wait_ms(unsigned ms) {
 //t * 1000 / (T * 1e15) * 
 
 void hpet_wait() {
-    struct HPET_MMIO* const base = (void *)HPET_VIRTUAL_ADDRESS;
-
-
     base->general_config |= 1;
 
     while(base->main_counter_value > 0x1000) {
             
     }
+}
+
+void hpet_disable(void) {
+    base->general_config &= ~1llu;
 }
 
 

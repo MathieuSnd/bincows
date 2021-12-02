@@ -74,5 +74,7 @@ void apic_setup_clock(void) {
 // unmask the IRQ, periodic mode, timer on irq 32
     apic_config->LVT_timer.reg = 0x20020;
 
+    hpet_disable();
+
 }
 
