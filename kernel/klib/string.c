@@ -52,7 +52,7 @@ char* strncpy(char* dst, const char* src, size_t n) {
     if(c != '\0')
         *pdst = '\0';
     dst = '\0';
-    return NULL;
+    return dst;
 }
 
 
