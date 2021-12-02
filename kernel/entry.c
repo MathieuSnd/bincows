@@ -12,6 +12,7 @@
 #include "regs.h"
 #include "int/apic.h"
 #include "drivers/hpet.h"
+#include "drivers/pcie.h"
 
 #include "int/idt.h"
 #include "memory/physical_allocator.h"
@@ -108,7 +109,7 @@ static void print_fb_infos(struct stivale2_struct_tag_framebuffer* fbtag) {
 
 static void init_memory(const struct stivale2_struct_tag_memmap* memmap_tag,
                         const struct stivale2_struct_tag_framebuffer* fbtag) {
-
+    klog_debug("init memory...");
     init_physical_allocator(memmap_tag);
 
 
@@ -183,6 +184,9 @@ void _start(struct stivale2_struct *stivale2_struct) {
     kprintf("boot logs:\n");
     kputs(klog_get());
     klog_flush();
+
+    pcie_init();
+
 
     hpet_init();
     apic_setup_clock();

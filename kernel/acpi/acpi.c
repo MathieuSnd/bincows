@@ -185,7 +185,10 @@ static void parse_pcie(const struct PCIETable* table) {
     size_t size = (table->header.length-sizeof(table->header));
 
     pcie_descriptor.size = size / sizeof(struct PCIE_segment_group_descriptor);
- 
+    
+    
+    assert(pcie_descriptor.size < PCIE_SUPPORTED_SEGMENT_GROUPS);
+
     memcpy(pcie_descriptor.array, table->segments, size);
 }
 
