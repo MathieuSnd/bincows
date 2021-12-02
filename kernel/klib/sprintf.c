@@ -206,20 +206,22 @@ int kprintf(const char* format, ...) {
 
     va_start(ap, format);
 
-    terminal_handler_t print_fun = get_terminal_handler();
+    ret = vkprintf(format, ap);
 
-    if(!print_fun)
-        ret = -1;
-    else {
-        char buf[1024];
-    
-        ret = vsprintf(buf, format, ap);
-
-        print_fun(buf, strlen(buf));
-    }
 
     va_end(ap);
 
     return ret;
 }
 
+int vkprintf(const char* format, va_list ap) {
+    terminal_handler_t print_fun = get_terminal_handler();
+
+    char buf[1024];
+
+    int ret = vsprintf(buf, format, ap);
+
+    print_fun(buf, strlen(buf));
+
+    return ret;
+}
