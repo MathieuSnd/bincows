@@ -4,9 +4,9 @@
 
 #include "memory/gdt.h"
 #include "video/video.h"
+#include "video/terminal.h"
 #include "klib/sprintf.h"
 #include "klib/string.h"
-#include "video/terminal.h"
 #include "acpi/acpi.h"
 #include "common.h"
 #include "regs.h"
@@ -17,6 +17,7 @@
 #include "memory/physical_allocator.h"
 #include "memory/paging.h"
 #include "memory/vmap.h"
+#include "debug/logging.h"
  
 
 #define KERNEL_STACK_SIZE 8192
@@ -153,7 +154,8 @@ void _start(struct stivale2_struct *stivale2_struct) {
     }
         
  
-
+ // print all logging messages
+    set_logging_level(LOG_LEVEL_DEBUG);
 
     setup_isrs();
     read_acpi_tables((void*)rsdp_tag_ptr->rsdp);
@@ -172,14 +174,15 @@ void _start(struct stivale2_struct *stivale2_struct) {
     setup_terminal();
     append_paging_initialization();
 
-
-
     terminal_set_colors(0xfff0a0, 0x212121);
     terminal_clear();
     
         
     kputs(&_binary_bootmessage_txt);
-    kprintf("OUI\n");
+    
+    kprintf("boot logs:\n");
+    kputs(klog_get());
+    klog_flush();
 
     hpet_init();
     apic_setup_clock();

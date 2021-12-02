@@ -54,7 +54,7 @@ void read_acpi_tables(const void* rsdp_location) {
 
     size_t n_entries = (xsdt->header.length - sizeof(xsdt->header)) / sizeof(void*);
 
-    kprintf("%u ACPI entries\n", n_entries);
+    klog_debug("%u ACPI entries:", n_entries);
 
     bool madt_parsed = false,
          hpet_parsed = false,
@@ -65,7 +65,7 @@ void read_acpi_tables(const void* rsdp_location) {
         const struct ACPISDTHeader* table = xsdt->entries[i];
         assert(checksum(&table, table->length));
 
-        kprintf("%3u: %4s\n", i, table->signature.arg);
+        klog_debug("  %3u: %4s", i, table->signature.arg);
 
 
         switch(table->signature.raw) {

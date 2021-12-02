@@ -8,6 +8,7 @@
 #include "../debug/assert.h"
 #include "../debug/panic.h"
 #include "physical_allocator.h"
+#include "../debug/logging.h"
 #include "vmap.h"
 
 /**
@@ -180,7 +181,13 @@ void init_physical_allocator(const struct stivale2_struct_tag_memmap* memmap) {
     }
 
     n_ranges = j;
-    total_available_pages = total_pages - n_ranges; 
+    total_available_pages = total_pages - n_ranges;
+    klog_info(
+        "found %u MB of usable memory in the system (%u pages, %u physical ranges)",
+        total_available_pages * 4 / 1024,
+        total_available_pages,
+        n_ranges
+    );
 }
 
 
