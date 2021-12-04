@@ -10,7 +10,7 @@
 
 #define BUFFER_SIZE 4096
 
-static char buffer[BUFFER_SIZE];
+static char logs_buffer[BUFFER_SIZE];
 static unsigned current_level;
 // current position in the buffer
 static int i = 0;
@@ -19,10 +19,11 @@ static int i = 0;
 // if there is enough space remaining.
 // else, leave it as is
 static inline void append_string(const char* str) {
+    return;
     unsigned len = strlen(str);
     if(i+len >= BUFFER_SIZE)
-        return;
-    memcpy(buffer+i, str, len);
+        klog_flush();        
+    memcpy(logs_buffer+i, str, len);
     i += len;
 }
 
@@ -56,6 +57,7 @@ void klog(unsigned level, const char* string) {
     
     kputs(string);
     kputs("\n");
+    return;
 
 // append to the buffer
     append_string(level_name);
@@ -64,10 +66,11 @@ void klog(unsigned level, const char* string) {
 }
 
 
-void klogf(unsigned level, const char* fmt, ...) {
-    if(i > (BUFFER_SIZE * 3) / 4 || level < current_level)
-        return; // avoid overflows
     
+void klogf(unsigned level, const char* fmt, ...) {
+    if(level < current_level)
+        return;
+
     char string[1024];
     
 // render string buffer 
@@ -76,22 +79,8 @@ void klogf(unsigned level, const char* fmt, ...) {
     vsprintf(string, fmt, ap);
     va_end(ap);
 
+    klog(level, string);
 
-    const char* level_name = get_level_names_and_set_terminal_color(level);
-
-// print on the screen
-// with fancy colors
-    kputs(level_name);
-    
-    set_terminal_fgcolor(TEXT_COLOR);
-    kputs(string);
-    kputs("\n");
-
-
-// append to the buffer
-    append_string(level_name);
-    append_string(string);
-    append_string("\n");
 }
 
 void set_logging_level(unsigned level) {
@@ -100,8 +89,8 @@ void set_logging_level(unsigned level) {
 
 
 const char* klog_get(void) {
-    buffer[i] = 0;
-    return buffer;
+    logs_buffer[i] = 0;
+    return logs_buffer;
 }
 
 void klog_flush(void) {
