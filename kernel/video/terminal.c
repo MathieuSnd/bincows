@@ -1,10 +1,11 @@
 #include <stddef.h>
 #include <stdbool.h>
 #include "terminal.h"
-#include "../debug/assert.h"
 #include "video.h"
 #include "../klib/string.h"
+#include "../debug/assert.h"
 #include "../debug/logging.h"
+#include "../memory/kalloc.h"
 
 #define TAB_SPACE 6
 
@@ -13,8 +14,9 @@ struct Char {
     uint32_t fg_color: 24;
     char c;
     uint32_t bg_color;
-};
+} __packed;
 
+static_assert_equals(sizeof(struct Char), 8);
 
 static void write_string(const char *string, size_t length);
 static struct Char make_Char(char c);
@@ -39,7 +41,7 @@ void default_terminal_handler(const char* s, size_t l) {
 
 
 static Image* charmap = NULL;
-static struct Char buffer[NCOLS_MAX * TERMINAL_LINES_MAX * TERMINAL_N_PAGES];
+static struct Char* char_buffer = NULL;
 
 static uint16_t ncols, nlines;
 static uint16_t term_nlines;
@@ -61,6 +63,7 @@ void setup_terminal(void) {
     klog_debug("setup the terminal...");
 
     assert(charmap == NULL);
+    assert(char_buffer == NULL);
     
     charmap = loadBMP_24b_1b(&_binary_charmap_bmp);
     
@@ -76,7 +79,7 @@ void setup_terminal(void) {
 // dynamicly create the terminal
 // with right size
     unsigned console_w = (screenImage->w * 9 ) / 10,
-             console_h = (screenImage->w * 95 ) / 100;
+             console_h = (screenImage->h * 95 ) / 100;
 #ifdef BIGGER_FONT
     ncols       = console_w / TERMINAL_FONTWIDTH / 2 - 1;
     term_nlines = console_h / TERMINAL_LINE_HEIGHT / 2 - 1;
@@ -84,11 +87,13 @@ void setup_terminal(void) {
     ncols       = console_w / TERMINAL_FONTWIDTH - 1;
     term_nlines = console_h / TERMINAL_LINE_HEIGHT - 1;
 #endif
-    if(ncols > NCOLS_MAX)
-        ncols = NCOLS_MAX;
-    if(term_nlines > TERMINAL_LINES_MAX)
-        term_nlines = TERMINAL_LINES_MAX;
 
+    nlines      = TERMINAL_N_PAGES * term_nlines;
+
+    // allocate the terminal buffer
+    char_buffer = kmalloc(ncols * nlines * sizeof(struct Char));
+
+    // calculate the margins 
 #ifdef BIGGER_FONT
     margin_left = (screenImage->w - ncols       * 2 * TERMINAL_FONTWIDTH ) / 2;
     margin_top  = 0;//(screenImage->h - term_nlines * 2 * TERMINAL_FONTHEIGHT) / 2;
@@ -97,7 +102,6 @@ void setup_terminal(void) {
     margin_top  = (screenImage->h - term_nlines * TERMINAL_FONTHEIGHT) / 2;
 #endif
 
-    nlines      = TERMINAL_N_PAGES * term_nlines;
 
 
 
@@ -112,7 +116,7 @@ void terminal_clear(void) {
     
     size_t buffer_len = nlines * ncols;
 
-    struct Char* ptr = buffer;
+    struct Char* ptr = char_buffer;
     for(;buffer_len > 0; --buffer_len)
         *(ptr++) = make_Char(0);
     
@@ -141,7 +145,7 @@ static void move_buffer(int lines) {
         size_t bytes = ncols * lines;
         size_t buff_size = nlines * ncols;
 
-        memmove(buffer, buffer + bytes, sizeof(struct Char)*(buff_size - bytes));        
+        memmove(char_buffer, char_buffer + bytes, sizeof(struct Char)*(buff_size - bytes));        
     }
 }
 
@@ -175,9 +179,9 @@ static void emplace_char(char c) {
         // any character
     default:
 
-        buffer[ncols * cur_line + cur_col] = make_Char(c);
+        char_buffer[ncols * cur_line + cur_col] = make_Char(c);
         
-        struct Char* ch = &buffer[ncols * cur_line + cur_col];
+        struct Char* ch = &char_buffer[ncols * cur_line + cur_col];
         
         cur_col += 1;
         if(!need_refresh)
@@ -269,7 +273,7 @@ static void print_char(const struct Char* restrict c, int line, int col) {
 
 static void flush_screen(void) {
         // begins at the terminal's first line
-    const struct Char* curr = buffer + first_line * ncols;
+    const struct Char* curr = char_buffer + first_line * ncols;
 
     for(size_t l = 0; l < term_nlines; l++) {
         for(size_t c = 0; c < ncols; c++) {
