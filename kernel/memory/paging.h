@@ -19,7 +19,7 @@ void append_paging_initialization(void);
 // page table flags
 
 // the entry is present
-#define PRESENT_ENTRY 1
+#define PRESENT_ENTRY 1llu
 // read only
 #define PL_RW 2
 // supervisor only
@@ -46,6 +46,6 @@ void map_pages(uint64_t physical_addr,
                size_t   count,
                unsigned flags);
 
-void alloc_pages(uint64_t virtual_addr, 
+void alloc_pages(void* virtual_addr, 
                size_t   count,
                unsigned flags);

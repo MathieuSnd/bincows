@@ -479,7 +479,7 @@ void map_pages(uint64_t physical_addr,
 }
 
 
-void alloc_pages(uint64_t virtual_addr_begin, 
+void alloc_pages(void*  virtual_addr_begin, 
                size_t   count,
                unsigned flags) {
     // don't allow recusion
@@ -505,7 +505,7 @@ void alloc_pages(uint64_t virtual_addr_begin,
 
         fill_page_table_allocator_buffer(16);
 
-        physalloc(size, (void*)virtual_addr_begin, callback);
+        physalloc(size, virtual_addr_begin, callback);
 
         count -= size;
         virtual_addr_begin += size * 0x1000;
