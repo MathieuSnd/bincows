@@ -20,6 +20,8 @@
  * 0xffffffff80000000  |----------------|
  *                     |     KERNEL     |
  *                     |      DATA      |
+ * 0xffffffff80300000  |----------------|
+ *                     |  KERNEL HEAP   |
  * 0xffffffffffffffff  ------------------
  * 
  * 
@@ -67,10 +69,11 @@
  * 
  */
 
+
 #define TRANSLATED_PHYSICAL_MEMORY_BEGIN 0xffff800000000000llu
 #define MMIO_BEGIN          0xffffffff00000000llu
 #define KERNEL_DATA_BEGIN   0xffffffff80000000llu
-#define PAGE_TABLES_BEGIN   0xffffffffc0000000llu
+#define KERNEL_HEAP_BEGIN   0xffffffff80300000llu
 
 // return non 0 value iif the given address
 // resides in kernel memory
