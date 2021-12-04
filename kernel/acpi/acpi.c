@@ -54,7 +54,7 @@ void read_acpi_tables(const void* rsdp_location) {
 
     size_t n_entries = (xsdt->header.length - sizeof(xsdt->header)) / sizeof(void*);
 
-    klog_debug("%u ACPI entries:", n_entries);
+    klog_debug("%u ACPI entries found", n_entries);
 
     bool madt_parsed = false,
          hpet_parsed = false,
@@ -64,9 +64,6 @@ void read_acpi_tables(const void* rsdp_location) {
     for(size_t i = 0; i < n_entries; i++) {
         const struct ACPISDTHeader* table = xsdt->entries[i];
         assert(checksum(&table, table->length));
-
-        klog_debug("  %3u: %4s", i, table->signature.arg);
-
 
         switch(table->signature.raw) {
         case MADT_SIGNATURE:
