@@ -19,7 +19,7 @@ static int i = 0;
 // if there is enough space remaining.
 // else, leave it as is
 static inline void append_string(const char* str) {
-    return;
+
     unsigned len = strlen(str);
     if(i+len >= BUFFER_SIZE)
         klog_flush();        
@@ -57,7 +57,6 @@ void klog(unsigned level, const char* string) {
     
     kputs(string);
     kputs("\n");
-    return;
 
 // append to the buffer
     append_string(level_name);
