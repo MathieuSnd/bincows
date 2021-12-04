@@ -245,7 +245,7 @@ static seg_header* split_segment(seg_header* pred, seg_header* tosplit, size_t s
 
 
 void kheap_init(void) {
-    klog_info("init kernel heap...");
+    klog_debug("init kernel heap...");
     expand_heap(MIN_EXPAND_SIZE);
 }
 
