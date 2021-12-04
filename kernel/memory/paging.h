@@ -21,13 +21,13 @@ void append_paging_initialization(void);
 // the entry is present
 #define PRESENT_ENTRY 1llu
 // read only
-#define PL_RW 2
+#define PL_RW 2llu
 // supervisor only
-#define PL_US 4
+#define PL_US 4llu
 // page level write through
-#define PWT 8
+#define PWT 8llu
 // page level cache disable
-#define PCD 16
+#define PCD 16llu
 #define PL_XD (1llu << 63)
 
 /**
@@ -44,8 +44,8 @@ void append_paging_initialization(void);
 void map_pages(uint64_t physical_addr,
                uint64_t virtual_addr, 
                size_t   count,
-               unsigned flags);
+               uint64_t flags);
 
 void alloc_pages(void* virtual_addr, 
                size_t   count,
-               unsigned flags);
+               uint64_t flags);

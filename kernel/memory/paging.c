@@ -100,7 +100,7 @@ static uint32_t pml4_offset(uint64_t virt) {
 
 // PWT: page level write-through
 // PCD: page level cache disable
-static void* create_table_entry(void* entry, unsigned flags) {
+static void* create_table_entry(void* entry, uint64_t flags) {
     assert_aligned(entry, 0x1000);
 
     return  (void*)(flags |
@@ -434,7 +434,7 @@ static void* get_entry_or_allocate(void** restrict table, unsigned index)  {
 void map_pages(uint64_t physical_addr, 
                uint64_t virtual_addr, 
                size_t count,
-               unsigned flags) {
+               uint64_t flags) {
     
     while(count > 0) {
         // fetch table indexes
