@@ -21,7 +21,7 @@ QEMU_ARGS := -monitor stdio \
 			 -D qemu.log \
 			-drive format=raw,file=
 
-QEMU_DEBUG_ARGS:= $(QEMU_ARGS) -no-shutdown -d int
+QEMU_DEBUG_ARGS:= -no-shutdown -d int $(QEMU_ARGS)
 
 
 run: all
@@ -36,7 +36,7 @@ prun: kernel $(PARTITION)
 
 
 debug: all
-	$(QEMU_PATH) $(QEMU_DEBUG_ARGS) 
+	$(QEMU_PATH) $(QEMU_DEBUG_ARGS)$(HDD_FILE)
 
 pdebug: $(PARTITION)
 	HDD_FILE := $(PARTITION)
