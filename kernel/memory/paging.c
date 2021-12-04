@@ -230,7 +230,7 @@ static void map_kernel(const struct stivale2_struct_tag_memmap* memmap) {
             size = (size+0x0fff) / 0x1000;
    
 
-            unsigned flags = PRESENT_ENTRY;
+            uint64_t flags = PRESENT_ENTRY;
 
             switch (n++)
             {
@@ -481,7 +481,7 @@ void map_pages(uint64_t physical_addr,
 
 void alloc_pages(void*  virtual_addr_begin, 
                size_t   count,
-               unsigned flags) {
+               uint64_t flags) {
     // don't allow recusion
     alloc_page_table_realloc = 0;
 
