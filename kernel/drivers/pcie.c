@@ -111,11 +111,13 @@ static void scan_devices(void) {
                 unsigned func, 
                 struct PCIE_configuration_space* config_space
                 ) {
+                    
         current->next = kmalloc(
                     sizeof(struct device_desc_node)
                 );
 
-        
+        klog_debug("device %u:%u - %u", bus, device, func);
+
         current = current->next;
         current->next           = NULL;
 
@@ -136,15 +138,17 @@ static void scan_devices(void) {
             // the device
             if(!check_function(bus,device, 0))
                 continue;
+
             insert(bus, device, 0, get_config_space_base(bus,device,0));
             
-            for(unsigned func = 0; func < 8; func++)
+            for(unsigned func = 1; func < 8; func++)
                 if(check_function(bus,device, func))
                     insert(bus, device, func, get_config_space_base(bus,device,func));
 
         }
     }
     
+
     // now create the final array
     installed_devices = kmalloc(
                     n_installed_devices 
@@ -165,7 +169,27 @@ static void scan_devices(void) {
         kfree(device);
         device = next;
     }
+}
+// identity map every page that might be a config space 
+static void identity_map_possible_config_spaces(void) {
+    for(unsigned i = 0; i < pcie_descriptor.size; i++) {
 
+        // identity map the corresponding pages
+        map_pages(
+            (uint64_t)pcie_descriptor.array[i].address, // phys
+            (uint64_t)pcie_descriptor.array[i].address, // virt
+            256 * // busses
+            32  * // devices
+            8,    // functions
+            PRESENT_ENTRY | PCD | PL_XD
+            // no cache, execute disable
+        );
+    }
+}
+
+static void identity_unmap_possible_config_spaces(void) {
+    for(unsigned i = 0; i < pcie_descriptor.size; i++)
+    ;//    unmap_pages((uint64_t)pcie_descriptor.array[i].address, 256 * 32 * 8);
 }
 
 /**
@@ -178,28 +202,20 @@ void pcie_init(void) {
     klog_debug("init pcie...");
 
     // calculate the highest bus number
+
     for(unsigned i = 0; i < pcie_descriptor.size; i++) {
         // map the corresponding pages 
         if(pcie_descriptor.array[i].end_bus > max_bus)
             max_bus = pcie_descriptor.array[i].end_bus;
-
-        klog_debug("map %lx", pcie_descriptor.array[i].address);
-        // identity map the corresponding pages
-        map_pages(
-            pcie_descriptor.array[i].address, // phys
-            pcie_descriptor.array[i].address, // virt
-            256 * // busses
-            32  * // devices
-            8   ,     // functions
-            PRESENT_ENTRY | PCD | PL_XD
-            // no cache, execute disable
-        );
-
-
     }
-    asm("hlt");
 
+    identity_map_possible_config_spaces();
+    
     scan_devices();
+
+
+    identity_unmap_possible_config_spaces();
+
 
     klog_info("found %u PCI Express devices", n_installed_devices);
 }

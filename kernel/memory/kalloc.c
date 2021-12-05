@@ -80,12 +80,13 @@ static void expand_heap(size_t size) {
     size_t new_kheap_pages_size = (kheap_size + size + 0xfff) >> 12;
     size_t old_kheap_pages_size = (kheap_size        + 0xfff) >> 12;
 
+
 // alloc extra pages if needed
     if(new_kheap_pages_size != old_kheap_pages_size) {
         alloc_pages(
             kheap_begin + (old_kheap_pages_size << 12),
             new_kheap_pages_size - old_kheap_pages_size,
-            PRESENT_ENTRY// | PL_XD // execute disable pages
+            PRESENT_ENTRY | PL_XD // execute disable pages
         );
     }
 
@@ -245,7 +246,9 @@ static seg_header* split_segment(seg_header* pred, seg_header* tosplit, size_t s
 
 
 void kheap_init(void) {
+
     klog_debug("init kernel heap...");
+
     expand_heap(MIN_EXPAND_SIZE);
 }
 

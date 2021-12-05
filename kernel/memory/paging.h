@@ -46,6 +46,8 @@ void map_pages(uint64_t physical_addr,
                size_t   count,
                uint64_t flags);
 
+void unmap_pages(uint64_t virtual_addr, size_t count);
+
 void alloc_pages(void* virtual_addr, 
                size_t   count,
                uint64_t flags);

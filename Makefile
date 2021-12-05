@@ -16,12 +16,14 @@ QEMU_ARGS := -monitor stdio \
 			 -bios /usr/share/ovmf/OVMF.fd \
 			 -m 8192 \
 			 -M q35 \
+			 -usb \
+			 -device usb-host \
 			 -vga virtio \
 			 -no-reboot \
 			 -D qemu.log \
 			-drive format=raw,file=
 
-QEMU_DEBUG_ARGS:= -no-shutdown -d int -s -S $(QEMU_ARGS)
+QEMU_DEBUG_ARGS:= -no-shutdown -d int $(QEMU_ARGS)
 
 
 run: all

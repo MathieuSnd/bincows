@@ -17,11 +17,12 @@
 #define IA32_EFER_NXE_BIT (1lu << 11)
 
 // size of bulks of allocation
-// the page buffer is 64 long
-// so we suppose that 4096 pages
-// won't make more than 64 page
-// tables
-#define MAX_ALLOC 1024
+// the page buffer is 16 long
+// in the worst case scenario,
+// 8192 page allocs 
+// -> 1 pdpt + 1 pd + 9 pt 
+// = 11 newpages
+#define MAX_ALLOC 4096
 
 
 /**
@@ -244,7 +245,6 @@ static void map_kernel(const struct stivale2_struct_tag_memmap* memmap) {
                 break;
             default:
                 /* data */
-                flags |=  PL_XD;
                 break;
             }
             //alloc the page table pages
@@ -426,6 +426,7 @@ static void* get_entry_or_allocate(void** restrict table, unsigned index)  {
     void* entry = virtual_addr_table[index];
 
     if(!present_entry(entry)) {
+
         void* e = create_table_entry(
             alloc_page_table(), 
             PRESENT_ENTRY);
@@ -433,6 +434,19 @@ static void* get_entry_or_allocate(void** restrict table, unsigned index)  {
     }
     else
         return entry;
+}
+
+// kernel panic if the entrty is not present
+static void* get_entry_or_panic(void** restrict table, unsigned index)  {
+    assert(index < 512);
+
+    void** virtual_addr_table =  translate_address(table);
+
+    void* entry = virtual_addr_table[index];
+
+    assert(present_entry(entry));
+    
+    return entry;
 }
 
 /**
@@ -447,6 +461,7 @@ static void internal_map_pages(uint64_t physical_addr,
                                uint64_t flags) {
     
     while(count > 0) {
+        
         // fetch table indexes
         unsigned pml4i = pml4_offset(virtual_addr),
                 pdpti = pdpt_offset(virtual_addr),
@@ -499,19 +514,16 @@ void alloc_pages(void*  virtual_addr_begin,
     // don't allow recusion
     alloc_page_table_realloc = 0;
 
-
     void callback(
             uint64_t physical_address, 
             uint64_t virtual_address,
             size_t   c) {
-            
         
         internal_map_pages(physical_address,
                   virtual_address,
                   c,
                   flags);
     };
-
     while(count > 0) {
         unsigned size = count;
         if(size > MAX_ALLOC)
@@ -544,4 +556,73 @@ void map_pages(uint64_t physical_addr,
     // count <= 64
     fill_page_table_allocator_buffer(64);
     internal_map_pages(physical_addr, virtual_addr, count, flags);
+}
+
+// return 1 if any of the page entries is present
+int is_range_unmapped(pte* page_table, unsigned begin, unsigned end) {
+
+    pte* translated = translate_address(page_table);
+
+    for(int i = begin; i < end; i++) {
+        if(present_entry(translated[i]))
+            return 1;
+    }
+    return 0;
+}
+
+void unmap_pages(uint64_t virtual_addr, size_t count) {
+
+    while(count > 0) {
+        // fetch table indexes
+        unsigned pml4i = pml4_offset(virtual_addr),
+                 pdpti = pdpt_offset(virtual_addr),
+                 pdi   = pd_offset(virtual_addr),
+                 pti   = pt_offset(virtual_addr);
+
+        assert(pml4i == 0 || pml4i == 511 || pml4i == 256);
+        // those entries should exist
+
+        pml4e restrict pml4entry = extract_pointer(get_entry_or_panic((void**)pml4,      pml4i));
+        pdpte restrict pdptentry = extract_pointer(get_entry_or_panic((void**)pml4entry, pdpti));
+        pde   restrict pdentry   = extract_pointer(get_entry_or_panic((void**)pdptentry, pdi));
+
+        // keep track of the first & last element
+        // to unmap, we are sure that in this range
+        // everything is unmapped
+        unsigned begin = pti;
+
+        while(count > 0 && pti < 512) {
+            void** entry_ptr = (void**)translate_address(pdentry) + pti;
+            
+
+            if(!present_entry(*entry_ptr)) {
+
+                char buff[256];
+
+                sprintf(buff, 
+                    "unmap_pages(...):\n"
+                    " tried to unmap not mapped virtual memory 0x%lx",
+                    virtual_addr);
+                
+                panic(buff);
+            }
+
+            pti++;
+            count--;
+            virtual_addr  += 0x1000;      
+        }
+        
+        unsigned end = pti;
+
+        // unmap the page map if empty
+        if(is_range_unmapped(pdentry, 0, begin))
+            continue;
+        if(is_range_unmapped(pdentry, end, 512))
+            continue;
+        
+        // the page table contains no entry
+        // let's free it
+        physfree(pdentry);
+
+    }
 }

@@ -38,6 +38,7 @@ void terminal_clear(void);
 
 // change the default terminal handler,
 // which is an empty function
+// h = NULL will make a safe empty handler
 void set_terminal_handler(terminal_handler_t h);
 
 
