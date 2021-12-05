@@ -7,20 +7,14 @@
 #include "vmap.h"
 #include "../klib/sprintf.h"
 #include "../debug/panic.h"
-#include "../debug/dump.h"
+#include "../debug/logging.h"
+#include "../registers.h"
 
-extern uint64_t get_cr0(void);
-extern void set_cr0(uint64_t cr0);
 
-extern void _cr3(uint64_t cr3);
-
-extern uint64_t get_cr4(void);
-extern void set_cr4(uint64_t cr4);
-
-#define CR0_PG_BIT  (1lu << 31)
-#define CR4_PAE_BIT (1lu << 5)
-#define CR4_PCIDE   (1lu << 17)
-
+#define CR0_PG_BIT        (1lu << 31)
+#define CR4_PAE_BIT       (1lu << 5)
+#define CR4_PCIDE         (1lu << 17)
+#define IA32_EFER_NXE_BIT (1lu << 11)
 
 // size of bulks of allocation
 // the page buffer is 64 long
@@ -75,7 +69,6 @@ static_assert_equals(sizeof(pdpt_low),  0x1000);
 // unset it to avoid nasty recursions
 static int alloc_page_table_realloc = 1;
 static void fill_page_table_allocator_buffer(size_t n);
-
 
 // extract the offset of the page table 
 // from a virtual address
@@ -223,12 +216,14 @@ static void map_kernel(const struct stivale2_struct_tag_memmap* memmap) {
             // floor the base to one page
             uint64_t base = e->base & ~0x0fff;
 
-            uint64_t virtual_addr = base | KERNEL_DATA_BEGIN;
             
+
             // ceil the size
             size_t   size = e->length + (e->base - base);
             size = (size+0x0fff) / 0x1000;
    
+            klog_debug("section %lx size %x\n", e->base, e->length);
+            uint64_t virtual_addr = base | KERNEL_DATA_BEGIN;
 
             uint64_t flags = PRESENT_ENTRY;
 
@@ -236,14 +231,16 @@ static void map_kernel(const struct stivale2_struct_tag_memmap* memmap) {
             {
             case 0:
                 /* .text */
-                flags |=  PL_XD;
+                flags |= PL_RW;
                 break;
             case 1:
                 /* rodata */
+                flags |= PL_XD;
                 flags |= PL_RW;
                 break;
-            
             default:
+                /* data */
+                flags |=  PL_XD;
                 break;
             }
             //alloc the page table pages
@@ -342,6 +339,10 @@ void append_paging_initialization(void) {
 
 // enable the PG bit
     set_cr0(get_cr0() | CR0_PG_BIT);
+
+// enable NXE bit
+    write_msr(IA32_EFER_MSR, read_msr(IA32_EFER_MSR) | IA32_EFER_NXE_BIT);
+
 // get the physical address of the pml4 table
     uint64_t pml4_lower_half_ptr = early_virtual_to_physical(pml4);
 
