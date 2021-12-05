@@ -25,12 +25,14 @@ SECTIONS
 
     _kernel_base_address = .;
  
-    .text : {
+    .text ALIGN(0x1000): {
         *(.text*)
     } :text
  
     /* Move to the next memory page for .rodata */
-    . += 0x1000;
+    /*. += 0x1000;*/
+    
+    . = ALIGN(0x1000);
  
     /* We place the .stivale2hdr section containing the header in its own section, */
     /* and we use the KEEP directive on it to make sure it doesn't get discarded. */
@@ -43,19 +45,22 @@ SECTIONS
     } :rodata
  
     /* Move to the next memory page for .data */
-    . += 0x1000;
- 
+    /* . += 0x1000; */
+    . = ALIGN(0x1000);
+
     .data : {
         *(.data*)
     } :data
- 
-    /* Dynamic section needed for PIE */
-    .dynamic : {
-        *(.dynamic)
-    } :data :dynamic
- 
+
     .bss : {
         *(COMMON)
         *(.bss*)
     } :data
+
+    
+    /* Dynamic section needed for PIE */
+    .dynamic : {
+        *(.dynamic)
+    } :dynamic
+ 
 }
