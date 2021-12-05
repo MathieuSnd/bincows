@@ -136,7 +136,7 @@ read_msr:
     ret
 
     
-; read_msr(uint32_t addr, uint64_t value)
+; write_msr(uint32_t addr, uint64_t value)
 write_msr:
     push rbp
     mov rbp, rsp
