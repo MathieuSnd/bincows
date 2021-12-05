@@ -9,7 +9,7 @@
 #include "klib/string.h"
 #include "acpi/acpi.h"
 #include "common.h"
-#include "regs.h"
+#include "registers.h"
 #include "int/apic.h"
 #include "drivers/hpet.h"
 #include "drivers/pcie.h"
@@ -18,13 +18,14 @@
 #include "memory/physical_allocator.h"
 #include "memory/paging.h"
 #include "memory/vmap.h"
+#include "memory/kalloc.h"
 #include "debug/logging.h"
  
 
 #define KERNEL_STACK_SIZE 8192
 
  // 8K stack
-static uint8_t stack_base[KERNEL_STACK_SIZE] __align(16);
+static uint8_t stack_base[KERNEL_STACK_SIZE] __attribute__((section(".stack"))) __align(16);
 
 #define INITIAL_STACK_PTR ((uintptr_t)(stack_base + KERNEL_STACK_SIZE))
 
@@ -123,8 +124,11 @@ static void init_memory(const struct stivale2_struct_tag_memmap* memmap_tag,
         PRESENT_ENTRY
     );
 
-// map lapic registers
+// map lapic & hpet registers
     map_acpi_mmios();
+
+// init kernel heap
+    kheap_init();
 }
 
 
@@ -138,9 +142,10 @@ void _start(struct stivale2_struct *stivale2_struct) {
     const struct stivale2_struct_tag_memmap*      memmap_tag;
     const struct stivale2_struct_tag_framebuffer* fbtag;
     const struct stivale2_struct_tag_rsdp*        rsdp_tag_ptr;
+
     term_str_tag = stivale2_get_tag(stivale2_struct, STIVALE2_STRUCT_TAG_TERMINAL_ID);
     memmap_tag   = stivale2_get_tag(stivale2_struct, STIVALE2_STRUCT_TAG_MEMMAP_ID);
-    fbtag        = stivale2_get_tag(stivale2_struct, 0x506461d2950408fa);
+    fbtag        = stivale2_get_tag(stivale2_struct, STIVALE2_STRUCT_TAG_FRAMEBUFFER_ID);
     rsdp_tag_ptr = stivale2_get_tag(stivale2_struct, STIVALE2_STRUCT_TAG_RSDP_ID);
 
 
@@ -174,10 +179,9 @@ void _start(struct stivale2_struct *stivale2_struct) {
     
     setup_terminal();
     append_paging_initialization();
-
     terminal_set_colors(0xfff0a0, 0x212121);
     terminal_clear();
-    
+
         
     kputs(&_binary_bootmessage_txt);
     

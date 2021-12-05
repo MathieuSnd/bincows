@@ -21,7 +21,7 @@ QEMU_ARGS := -monitor stdio \
 			 -D qemu.log \
 			-drive format=raw,file=
 
-QEMU_DEBUG_ARGS:= -no-shutdown -d int $(QEMU_ARGS)
+QEMU_DEBUG_ARGS:= -no-shutdown -d int -s -S $(QEMU_ARGS)
 
 
 run: all

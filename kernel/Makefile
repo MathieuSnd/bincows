@@ -28,7 +28,8 @@ INTERNALCFLAGS  :=  -mgeneral-regs-only \
  
 CFILES := $(shell find ./ -type f -name '*.c')
 SFILES := $(shell find ./ -type f -name '*.s')
-OBJ    :=  $(SFILES:.s=.s.o) $(CFILES:.c=.c.o) 
+OBJ    :=  $(SFILES:.s=.s.o) $(CFILES:.c=.c.o)
+LDSCRIPT := linker.ld 
 #charmap.bmp.o
 .PHONY: all clean
  
@@ -36,7 +37,7 @@ all: $(KERNEL)
 
 
  
-$(KERNEL): $(OBJ)
+$(KERNEL): $(OBJ) $(LDSCRIPT)
 	$(CC) $(INTERNALLDFLAGS) $(OBJ) -o $@
  
 #%.bmp.o: ../resources/bmp/%.bmp

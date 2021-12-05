@@ -22,8 +22,8 @@ SECTIONS
     /* Since we are going to use PIE, this is just the base load address, but the */
     /* bootloader will be able to relocate us as it sees fit. */
     . = 0xffffffff80200000;
-
     _kernel_base_address = .;
+
  
     .text ALIGN(0x1000): {
         *(.text*)
@@ -55,6 +55,10 @@ SECTIONS
     .bss : {
         *(COMMON)
         *(.bss*)
+    } :data
+
+    .stack : {
+        *(.stack)
     } :data
 
     

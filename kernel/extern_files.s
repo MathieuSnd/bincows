@@ -16,6 +16,5 @@ _binary_bootmessage_txt:
 [section .bss]
 
 alignb 4
-__image_pix:
-    TIMES 0x2000  resb 0
+__image_pix:  resb 2048
     

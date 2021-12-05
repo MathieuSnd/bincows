@@ -28,5 +28,29 @@ extern struct PCIE_Descriptor pcie_descriptor;
 
 
 void pcie_init(void);
+void pcie_scan(void);
 
+
+typedef void (*driver_init_fun)(void* config_space); 
+typedef void (*driver_callback)(void); 
+
+struct driver_descriptor {
+    driver_init_fun install;
+    driver_callback remove;
+};
+
+
+/**
+ * PCIE drivers interfaces:
+ * 
+ * provide void init(void* config_space_base)
+ * 
+ * functions to call:
+ *      register_irq(unsigned)
+ *      unregister_irq(unsigned)
+ * 
+ *      int  register_timer(void callback(void), unsigned period)
+ *      void unregister_timer(int timer_id)
+ *     
+ */
 

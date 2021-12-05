@@ -14,7 +14,7 @@ struct Char {
     uint32_t fg_color: 24;
     char c;
     uint32_t bg_color;
-} __packed;
+} __attribute__((packed));
 
 static_assert_equals(sizeof(struct Char), 8);
 
@@ -64,10 +64,10 @@ void setup_terminal(void) {
 
     assert(charmap == NULL);
     assert(char_buffer == NULL);
+
     
     charmap = loadBMP_24b_1b(&_binary_charmap_bmp);
-    
-    
+
     assert(charmap      != NULL);
     assert(charmap->bpp   == 1);
     assert(charmap->pitch == 1);
@@ -101,8 +101,6 @@ void setup_terminal(void) {
     margin_left = (screenImage->w - ncols       * TERMINAL_FONTWIDTH ) / 2;
     margin_top  = (screenImage->h - term_nlines * TERMINAL_FONTHEIGHT) / 2;
 #endif
-
-
 
 
     set_terminal_handler(write_string);

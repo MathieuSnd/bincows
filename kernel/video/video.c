@@ -4,6 +4,7 @@
 #include <stivale2.h>
 
 #include "../klib/string.h"
+#include "../debug/logging.h"
 //#include "../memory/kalloc.h"
 #include "../common.h"
 #include "../debug/assert.h"
@@ -68,8 +69,6 @@ void imageLower_blitBinaryMask(
 
     size_t dst_skip = screen.pitch - copy_size;
     size_t src_skip = img -> pitch - copy_size;
-
-
 
 // assert that everything are 2-aligned
 // so that we can process faster
@@ -597,6 +596,7 @@ Image* loadBMP_24b_1b(const void* rawFile) {
             }            
         }
                 pix[y] = byte;
+
     }
 
     return &loadBMP_24b_1b_ret;
