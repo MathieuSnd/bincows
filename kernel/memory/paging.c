@@ -51,16 +51,16 @@ typedef pdpte* pml4e;
 static pml4e pml4[512]   __page = {0};
 
 // 1st entry 0 -> 0x0000007fffffffff
-static pdpte pdpt_low[512] __page = {0}; 
+//static pdpte pdpt_low[512] __page = {0}; 
 // 256th          0xffff800000000000 -> 0xffff807fffffffff
-static pdpte pdpt_mid[512] __page = {0};
+//static pdpte pdpt_mid[512] __page = {0};
 // 511st entry 0xffffff8000000000 -> 0xffffffffffffffff
-static pdpte pdpt_high[512] __page = {0};
+//static pdpte pdpt_high[512] __page = {0};
 
 static_assert_equals(sizeof(pml4),     0x1000);
-static_assert_equals(sizeof(pdpt_high), 0x1000);
-static_assert_equals(sizeof(pdpt_mid),  0x1000);
-static_assert_equals(sizeof(pdpt_low),  0x1000);
+//static_assert_equals(sizeof(pdpt_high), 0x1000);
+//static_assert_equals(sizeof(pdpt_mid),  0x1000);
+//static_assert_equals(sizeof(pdpt_low),  0x1000);
 
 
 
@@ -69,6 +69,11 @@ static_assert_equals(sizeof(pdpt_low),  0x1000);
 // unset it to avoid nasty recursions
 static int alloc_page_table_realloc = 1;
 static void fill_page_table_allocator_buffer(size_t n);
+
+static void internal_map_pages(uint64_t physical_addr, 
+                               uint64_t virtual_addr, 
+                               size_t  count,
+                               uint64_t flags);
 
 // extract the offset of the page table 
 // from a virtual address
@@ -170,7 +175,7 @@ static void map_physical_memory(const struct stivale2_struct_tag_memmap* memmap)
             void* virtual_addr = translate_address((void *)phys_addr);
 
 
-            map_pages(phys_addr, (uint64_t)virtual_addr, size, PRESENT_ENTRY);
+            internal_map_pages(phys_addr, (uint64_t)virtual_addr, size, PRESENT_ENTRY | PL_XD);
             // use the allocator to allocate page tables
             // to map its own data
         }
@@ -192,7 +197,7 @@ static void map_allocator_data(void) {
         uint64_t phys_addr = (uint64_t) entries[i].physical_address;
         uint64_t virtual_addr = TRANSLATED_PHYSICAL_MEMORY_BEGIN | phys_addr;
 
-        map_pages(phys_addr, virtual_addr, 1, PRESENT_ENTRY);
+        internal_map_pages(phys_addr, virtual_addr, 1, PRESENT_ENTRY);
         // use the allocator to allocate page tables
         // to map its own data
     }
@@ -222,7 +227,6 @@ static void map_kernel(const struct stivale2_struct_tag_memmap* memmap) {
             size_t   size = e->length + (e->base - base);
             size = (size+0x0fff) / 0x1000;
    
-            klog_debug("section %lx size %x\n", e->base, e->length);
             uint64_t virtual_addr = base | KERNEL_DATA_BEGIN;
 
             uint64_t flags = PRESENT_ENTRY;
@@ -246,7 +250,7 @@ static void map_kernel(const struct stivale2_struct_tag_memmap* memmap) {
             //alloc the page table pages
             // before doing any allocation
             fill_page_table_allocator_buffer(64);
-            map_pages(base, virtual_addr, size, flags);
+            internal_map_pages(base, virtual_addr, size, flags);
         }
     }
 }
@@ -431,11 +435,16 @@ static void* get_entry_or_allocate(void** restrict table, unsigned index)  {
         return entry;
 }
 
-
-void map_pages(uint64_t physical_addr, 
-               uint64_t virtual_addr, 
-               size_t count,
-               uint64_t flags) {
+/**
+ * this function cannot be called in a callback
+ * because it would lead to recursion.
+ * therefore we put it static internal
+ * and wrap it in a fresh public function
+ */
+static void internal_map_pages(uint64_t physical_addr, 
+                               uint64_t virtual_addr, 
+                               size_t   count,
+                               uint64_t flags) {
     
     while(count > 0) {
         // fetch table indexes
@@ -450,6 +459,7 @@ void map_pages(uint64_t physical_addr,
         pdpte restrict pdptentry = extract_pointer(get_entry_or_allocate((void**)pml4entry, pdpti));
         pde   restrict pdentry   = extract_pointer(get_entry_or_allocate((void**)pdptentry, pdi));
 
+
         while(count > 0 && pti < 512) {
             // create a new entry
             void*  e = create_table_entry((void*)physical_addr,flags);
@@ -458,9 +468,11 @@ void map_pages(uint64_t physical_addr,
             
 
             if(present_entry(*entry_ptr)) {
+
                 char buff[256];
+
                 sprintf(buff, 
-                    "map_pages(...,flags=%u):\n"
+                    "internal_map_pages(...,flags=%lu):\n"
                     " tried to map physical memory 0x%lx to 0x%lx, but physical memory 0x%lx"
                     " was already mapped here",
                     flags, physical_addr, virtual_addr, extract_pointer(*entry_ptr));
@@ -468,13 +480,14 @@ void map_pages(uint64_t physical_addr,
                 panic(buff);
             }
 
-            
             *entry_ptr = e;
             
             pti++;
             count--;
             physical_addr += 0x1000;
             virtual_addr  += 0x1000;
+
+               
         }
     }
 }
@@ -493,7 +506,7 @@ void alloc_pages(void*  virtual_addr_begin,
             size_t   c) {
             
         
-        map_pages(physical_address,
+        internal_map_pages(physical_address,
                   virtual_address,
                   c,
                   flags);
@@ -511,4 +524,24 @@ void alloc_pages(void*  virtual_addr_begin,
         count -= size;
         virtual_addr_begin += size * 0x1000;
     }
+}
+
+
+void map_pages(uint64_t physical_addr, 
+               uint64_t virtual_addr, 
+               size_t   count,
+               uint64_t flags) {
+
+    while(count > 64) {
+        fill_page_table_allocator_buffer(64);
+        internal_map_pages(physical_addr, virtual_addr, 64, flags);
+        count -= 64;
+
+        physical_addr += 0x1000 * 64;
+        virtual_addr  += 0x1000 * 64;
+    }
+
+    // count <= 64
+    fill_page_table_allocator_buffer(64);
+    internal_map_pages(physical_addr, virtual_addr, count, flags);
 }
