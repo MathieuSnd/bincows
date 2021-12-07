@@ -90,11 +90,11 @@ void dump(const void* addr, size_t size, size_t line_size, uint8_t mode) {
             if(size-- <= 1)
                 break;
             else {
-                kprintf(row_fmt, *(uint64_t *)ptr & mask);
+                printf(row_fmt, *(uint64_t *)ptr & mask);
                 ptr+=pitch;
             }
         }
-        kprintf(last_row_fmt, *(uint64_t *)ptr & mask);
+        printf(last_row_fmt, *(uint64_t *)ptr & mask);
         ptr+=pitch;
     }
 }

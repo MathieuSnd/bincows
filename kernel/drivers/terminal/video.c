@@ -5,7 +5,7 @@
 
 #include "../../lib/string.h"
 #include "../../lib/logging.h"
-//#include "../memory/kalloc.h"
+//#include "../memory/heap.h"
 #include "../../lib/common.h"
 #include "../../lib/assert.h"
 #include "video.h"
@@ -246,7 +246,7 @@ void imageBlit(const Image* restrict src, Image* restrict dst,
 /*
 
 Image* alloc_image(uint32_t width, uint32_t height, uint32_t bpp) {
-    Image* ret = kmalloc(sizeof(Image));
+    Image* ret = malloc(sizeof(Image));
 
     ret->w     = width;
     ret->h     = height;
@@ -261,7 +261,7 @@ Image* alloc_image(uint32_t width, uint32_t height, uint32_t bpp) {
     else
         ret->pitch = (uint32_t)allign16(width * (bpp/8));
 
-    ret->pix   = kmalloc(ret->pitch * height);
+    ret->pix   = malloc(ret->pitch * height);
 
     return ret;
 }
@@ -271,7 +271,7 @@ Image* alloc_image(uint32_t width, uint32_t height, uint32_t bpp) {
 void free_image(Image* im) {
     assert(im != NULL);
 
-    kfree(im->pix);
+    free(im->pix);
 }
 */
 

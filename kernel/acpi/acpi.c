@@ -54,7 +54,7 @@ void read_acpi_tables(const void* rsdp_location) {
 
     size_t n_entries = (xsdt->header.length - sizeof(xsdt->header)) / sizeof(void*);
 
-    klog_debug("%u ACPI entries found", n_entries);
+    log_debug("%u ACPI entries found", n_entries);
 
     bool madt_parsed = false,
          hpet_parsed = false,
@@ -120,7 +120,7 @@ static void parse_madt(const struct MADT* table) {
     (void)override_ioapic_passed;
     
 
-    //kprintf("table size: %u\n", end-ptr);
+    //printf("table size: %u\n", end-ptr);
     while(ptr < end) {
     //for(int i = 10; i>0; i--) {
         const struct MADTEntryHeader* entry_header = ptr;
@@ -165,12 +165,12 @@ static void parse_madt(const struct MADT* table) {
                 }
                 break;
             default:
-                kprintf("WARNING: invalid APIC MADT entry %u\n", entry_header->type);
+                printf("WARNING: invalid APIC MADT entry %u\n", entry_header->type);
 
 
         }
 
-        //kprintf("entry: type %u ; size %u\n", entry_header->type,entry_header->length);
+        //printf("entry: type %u ; size %u\n", entry_header->type,entry_header->length);
 
         ptr += entry_header->length;
     }

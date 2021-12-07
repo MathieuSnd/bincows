@@ -276,13 +276,13 @@ static inline void print_struct(int level, void** table, uint64_t virt) {
             uint64_t v = (virt << 9) | i;
 
             for(int i = 0; i < level; i++)
-                kputs("-");
+                puts("-");
 
             if(level == 2) {
-                kprintf(" %lx -> %lx\n", v << 12, extract_pointer(addr[i]));
+                printf(" %lx -> %lx\n", v << 12, extract_pointer(addr[i]));
             }
             else {
-                kputs("\n");
+                puts("\n");
                 print_struct(level+1, extract_pointer(addr[i]), v);
             }
         }

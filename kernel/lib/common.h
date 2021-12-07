@@ -20,7 +20,7 @@ typedef  int8_t i8;
 #define __noreturn  __attribute__((noreturn))
 
 #ifndef NDEBUG
-#define PDEBUG kprintf("'%s':%d - %s()\n", __FILE__, __LINE__,__func__);
+#define PDEBUG printf("'%s':%d - %s()\n", __FILE__, __LINE__,__func__);
 #endif 
 
 inline uint64_t allign16(uint64_t p) {

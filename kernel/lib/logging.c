@@ -23,7 +23,7 @@ static inline void append_string(const char* str) {
 
     unsigned len = strlen(str);
     if(i+len >= BUFFER_SIZE)
-        klog_flush();        
+        log_flush();        
     memcpy(logs_buffer+i, str, len);
     i += len;
 }
@@ -44,7 +44,7 @@ static const char* get_level_names_and_set_terminal_color(unsigned level) {
     }
 }
 
-void klog(unsigned level, const char* string) {
+void log(unsigned level, const char* string) {
     if(level < current_level)
         return; // avoid overflows
 
@@ -53,11 +53,11 @@ void klog(unsigned level, const char* string) {
 
 // print on the screen
 // with fancy colors
-    kputs(level_name);
+    puts(level_name);
     set_terminal_fgcolor(TEXT_COLOR);
     
-    kputs(string);
-    kputs("\n");
+    puts(string);
+    puts("\n");
 
 // append to the buffer
     append_string(level_name);
@@ -67,7 +67,7 @@ void klog(unsigned level, const char* string) {
 
 
     
-void klogf(unsigned level, const char* fmt, ...) {
+void logf(unsigned level, const char* fmt, ...) {
     if(level < current_level)
         return;
 
@@ -79,7 +79,7 @@ void klogf(unsigned level, const char* fmt, ...) {
     vsprintf(string, fmt, ap);
     va_end(ap);
 
-    klog(level, string);
+    log(level, string);
 
 }
 
@@ -88,12 +88,12 @@ void set_logging_level(unsigned level) {
 }
 
 
-const char* klog_get(void) {
+const char* log_get(void) {
     logs_buffer[i] = 0;
     return logs_buffer;
 }
 
-void klog_flush(void) {
+void log_flush(void) {
     i = 0;
 }
 

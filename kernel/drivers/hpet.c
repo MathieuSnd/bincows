@@ -52,7 +52,7 @@ struct HPET_MMIO* const base = (void *)HPET_VIRTUAL_ADDRESS;
 static uint32_t hpet_period = 0;
 
 void hpet_init(void) {
-    klog_debug("init hpet...");
+    log_debug("init hpet...");
     
     hpet_period = base->capabilities >> 32;
 }

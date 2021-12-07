@@ -4,10 +4,10 @@
 
 // provides 8byte-aligned 
 // free memory
-void* kmalloc(size_t size);
-void  kfree(void* p);
-void  kheap_init(void);
+void* malloc(size_t size);
+void  free(void* p);
+void  heap_init(void);
 
 #ifndef NDEBUG
-void  kmalloc_test(void);
+void  malloc_test(void);
 #endif

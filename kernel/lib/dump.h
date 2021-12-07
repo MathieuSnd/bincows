@@ -21,7 +21,7 @@
 
 
 /**
- * dump a memory chunk in kprintf
+ * dump a memory chunk in printf
  * addr: address of the beginning of the chunk
  * size:      number of bytes to dump
  * line_size: number of words per line

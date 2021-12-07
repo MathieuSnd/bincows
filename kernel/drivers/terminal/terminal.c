@@ -7,7 +7,7 @@
 #include "../../lib/string.h"
 #include "../../lib/assert.h"
 #include "../../lib/logging.h"
-#include "../../memory/kalloc.h"
+#include "../../memory/heap.h"
 
 
 #define TAB_SPACE 6
@@ -63,7 +63,7 @@ extern int _binary_charmap_bmp;
 
 
 void setup_terminal(void) {
-    klog_debug("setup the terminal...");
+    log_debug("setup the terminal...");
 
     assert(charmap == NULL);
     assert(char_buffer == NULL);
@@ -94,7 +94,7 @@ void setup_terminal(void) {
     nlines      = TERMINAL_N_PAGES * term_nlines;
 
     // allocate the terminal buffer
-    char_buffer = kmalloc(ncols * nlines * sizeof(struct Char));
+    char_buffer = malloc(ncols * nlines * sizeof(struct Char));
 
     // calculate the margins 
 #ifdef BIGGER_FONT

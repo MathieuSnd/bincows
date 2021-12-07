@@ -2,7 +2,7 @@
 #include "../lib/logging.h"
 #include "../lib/dump.h"
 #include "../lib/assert.h"
-#include "../memory/kalloc.h"
+#include "../memory/heap.h"
 #include "../memory/paging.h"
 #include "../lib/string.h"
 
@@ -112,11 +112,11 @@ static void scan_devices(void) {
                 struct PCIE_configuration_space* config_space
                 ) {
                     
-        current->next = kmalloc(
+        current->next = malloc(
                     sizeof(struct device_desc_node)
                 );
 
-        klog_debug("device %u:%u - %u", bus, device, func);
+        log_debug("device %u:%u - %u", bus, device, func);
 
         current = current->next;
         current->next           = NULL;
@@ -150,7 +150,7 @@ static void scan_devices(void) {
     
 
     // now create the final array
-    installed_devices = kmalloc(
+    installed_devices = malloc(
                     n_installed_devices 
                     * sizeof(struct pcie_device_descriptor));
     
@@ -166,7 +166,7 @@ static void scan_devices(void) {
         
 
         struct device_desc_node* next = device->next;
-        kfree(device);
+        free(device);
         device = next;
     }
 }
@@ -199,7 +199,7 @@ static void identity_unmap_possible_config_spaces(void) {
  */
 void pcie_init(void) {
 
-    klog_debug("init pcie...");
+    log_debug("init pcie...");
 
     // calculate the highest bus number
 
@@ -217,5 +217,5 @@ void pcie_init(void) {
     identity_unmap_possible_config_spaces();
 
 
-    klog_info("found %u PCI Express devices", n_installed_devices);
+    log_info("found %u PCI Express devices", n_installed_devices);
 }

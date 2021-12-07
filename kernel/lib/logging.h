@@ -15,21 +15,21 @@
 
 
 #ifndef NDEBUG
-#define klog_debug(...) klogf(LOG_LEVEL_DEBUG, __VA_ARGS__)
+#define log_debug(...) logf(LOG_LEVEL_DEBUG, __VA_ARGS__)
 #else
-#define klog_debug(...)
+#define log_debug(...)
 #endif
 
-#define klog_info(...) klogf(LOG_LEVEL_INFO, __VA_ARGS__) 
-#define klog_warn(...) klogf(LOG_LEVEL_WARN, __VA_ARGS__)
+#define log_info(...) logf(LOG_LEVEL_INFO, __VA_ARGS__) 
+#define log_warn(...) logf(LOG_LEVEL_WARN, __VA_ARGS__)
 
-void klog(unsigned level, const char* string);
+void log(unsigned level, const char* string);
 
-// behaves like kprintf
-void klogf(unsigned level, const char* fmt, ...);
+// behaves like printf
+void logf(unsigned level, const char* fmt, ...);
 
 void set_logging_level(unsigned level);
 
-const char* klog_get(void);
+const char* log_get(void);
 
-void klog_flush(void);
+void log_flush(void);

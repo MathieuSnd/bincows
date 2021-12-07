@@ -1,7 +1,7 @@
 #include <stdint.h>
 #include <stddef.h>
 
-#include "kalloc.h"
+#include "heap.h"
 #include "../lib/sprintf.h"
 #include "../memory/vmap.h"
 #include "../memory/paging.h"
@@ -59,8 +59,8 @@ static_assert(sizeof(seg_header) % 8 == 0);
  * 
  */
 
-static void *kheap_begin = (void *)KERNEL_HEAP_BEGIN;
-static size_t kheap_size = 0;
+static void *heap_begin = (void *)KERNEL_HEAP_BEGIN;
+static size_t heap_size = 0;
 
 // sum of the available heap ranges, 
 // without the last free segment:
@@ -77,21 +77,21 @@ static seg_header* current_segment = NULL;
  * expand the heap by size bytes
  */
 static void expand_heap(size_t size) {
-    size_t new_kheap_pages_size = (kheap_size + size + 0xfff) >> 12;
-    size_t old_kheap_pages_size = (kheap_size        + 0xfff) >> 12;
+    size_t new_heap_pages_size = (heap_size + size + 0xfff) >> 12;
+    size_t old_heap_pages_size = (heap_size        + 0xfff) >> 12;
 
 
 // alloc extra pages if needed
-    if(new_kheap_pages_size != old_kheap_pages_size) {
+    if(new_heap_pages_size != old_heap_pages_size) {
         alloc_pages(
-            kheap_begin + (old_kheap_pages_size << 12),
-            new_kheap_pages_size - old_kheap_pages_size,
+            heap_begin + (old_heap_pages_size << 12),
+            new_heap_pages_size - old_heap_pages_size,
             PRESENT_ENTRY | PL_XD // execute disable pages
         );
     }
 
 // create a new segment in the extra space
-    seg_header* new_segment = kheap_begin + kheap_size;
+    seg_header* new_segment = heap_begin + heap_size;
 
 
     new_segment->next = current_segment;
@@ -101,9 +101,9 @@ static void expand_heap(size_t size) {
     current_segment = new_segment;
 
 
-    kheap_size += size;
+    heap_size += size;
 
-    klog_debug("kernel heap extended to %lu KB", kheap_size / 1024);
+    log_debug("kernel heap extended to %lu KB", heap_size / 1024);
 }
 
 /**
@@ -245,15 +245,15 @@ static seg_header* split_segment(seg_header* pred, seg_header* tosplit, size_t s
 }
 
 
-void kheap_init(void) {
+void heap_init(void) {
 
-    klog_debug("init kernel heap...");
+    log_debug("init kernel heap...");
 
     expand_heap(MIN_EXPAND_SIZE);
 }
 
 
-void* __attribute__((noinline)) kmalloc(size_t size) {
+void* __attribute__((noinline)) malloc(size_t size) {
     // align the size to assure that 
     // the whole structure is alligned
     size = ((size + 7 ) / 8) * 8;
@@ -321,12 +321,12 @@ void* __attribute__((noinline)) kmalloc(size_t size) {
     expand_heap(MAX(size+sizeof(seg_header), MIN_EXPAND_SIZE));
 
 // retrty now that we are sure that the memory is avaiable
-    return kmalloc(size);
+    return malloc(size);
 }
 
 
 // O(1) free
-void kfree(void *ptr) {
+void free(void *ptr) {
     seg_header* header = ptr - sizeof(seg_header);
     
     assert(header->free == 0);
@@ -342,19 +342,19 @@ void kfree(void *ptr) {
 
 
 #ifndef NDEBUG
-void kmalloc_test(void) {
+void malloc_test(void) {
     void* arr[128];
 
     uint64_t size = 5;
     
     for(int j = 0; j < 100; j++) {
         for(int i = 0; i < 128; i++) {
-            arr[i] = kmalloc(size % 1024);
+            arr[i] = malloc(size % 1024);
             
             size = (16807 * size) % ((1lu << 31) - 1);
         }
         for(int i = 0; i < 128; i++)
-            kfree(arr[i]);
+            free(arr[i]);
     }
 }
 #endif

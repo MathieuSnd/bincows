@@ -15,7 +15,7 @@
 #include "memory/physical_allocator.h"
 #include "memory/paging.h"
 #include "memory/vmap.h"
-#include "memory/kalloc.h"
+#include "memory/heap.h"
 
 #include "lib/sprintf.h"
 #include "lib/string.h"
@@ -81,8 +81,8 @@ static const void *stivale2_get_tag(const struct stivale2_struct *stivale2_struc
 }
 
 
-#define PRINT_VAL(v) kprintf(#v "=%ld\n", (uint64_t)v);
-#define PRINT_HEX(v) kprintf(#v "=%lx\n", (uint64_t)v);
+#define PRINT_VAL(v) printf(#v "=%ld\n", (uint64_t)v);
+#define PRINT_HEX(v) printf(#v "=%lx\n", (uint64_t)v);
 
 // const char but represents a big string
 extern const char _binary_bootmessage_txt;
@@ -96,7 +96,7 @@ static void debug_terminal() {
     char buff[256];
     for(int i = 0; i < 256; i++)
         buff[i] = i+1;
-    kputs(buff);
+    puts(buff);
 }
 
 static void print_fb_infos(struct stivale2_struct_tag_framebuffer* fbtag) {
@@ -112,7 +112,7 @@ static void print_fb_infos(struct stivale2_struct_tag_framebuffer* fbtag) {
 
 static void init_memory(const struct stivale2_struct_tag_memmap* memmap_tag,
                         const struct stivale2_struct_tag_framebuffer* fbtag) {
-    klog_debug("init memory...");
+    log_debug("init memory...");
     init_physical_allocator(memmap_tag);
 
 
@@ -130,7 +130,7 @@ static void init_memory(const struct stivale2_struct_tag_memmap* memmap_tag,
     map_acpi_mmios();
 
 // init kernel heap
-    kheap_init();
+    heap_init();
 }
 
 
@@ -185,11 +185,11 @@ void _start(struct stivale2_struct *stivale2_struct) {
     terminal_clear();
 
         
-    kputs(&_binary_bootmessage_txt);
+    puts(&_binary_bootmessage_txt);
     
-    kprintf("boot logs:\n");
-    kputs(klog_get());
-    klog_flush();
+    printf("boot logs:\n");
+    puts(log_get());
+    log_flush();
 
     pcie_init();
 
@@ -200,7 +200,7 @@ void _start(struct stivale2_struct *stivale2_struct) {
 
     for(;;) {
         asm volatile("hlt");
-        kprintf("%lu\r", clock());
+        printf("%lu\r", clock());
     }
 
     __builtin_unreachable();

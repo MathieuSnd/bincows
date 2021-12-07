@@ -12,13 +12,13 @@ extern uint64_t _rbp(void);
 // always inline: make sure 
 static inline __attribute__((always_inline)) void stack_trace(void) {
     void** ptr = (void**)_rbp();
-    kputs("backtrace:\n");
+    puts("backtrace:\n");
     
     for(unsigned i = 0; i < MAX_STACK_TRACE; i++) {
         
         if(*ptr == 0) // reached the top
             break;
-        kprintf("\t%llx \n", *(ptr+1));
+        printf("\t%llx \n", *(ptr+1));
 
         ptr = *ptr;
     }
@@ -32,17 +32,17 @@ __attribute__((noreturn)) void panic(const char* panic_string) {
         if(panic_string == NULL)
             panic_string = "(null)";
 
-        kputs(
+        puts(
             "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n"
             "!!!!!!!!!!!!!   KERNL PANIC   !!!!!!!!!!!!!\n"
             "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
         
-        kputs(panic_string);
-        kputs("\n\n");
+        puts(panic_string);
+        puts("\n\n");
         
         stack_trace();
 
-        kputs(
+        puts(
             "\n\n"
             "you may manually shutdown the machine.\n"
         );

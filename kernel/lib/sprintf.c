@@ -193,20 +193,20 @@ int sprintf(char* str, const char* format, ...) {
 //
 //}
 
-void kputs(const char* s) {
+void puts(const char* s) {
     terminal_handler_t print_fun = get_terminal_handler();
 
     if(print_fun)
         print_fun(s, strlen(s));
 }
 
-int kprintf(const char* format, ...) {
+int printf(const char* format, ...) {
     va_list ap;
     int ret;
 
     va_start(ap, format);
 
-    ret = vkprintf(format, ap);
+    ret = vprintf(format, ap);
 
 
     va_end(ap);
@@ -214,7 +214,7 @@ int kprintf(const char* format, ...) {
     return ret;
 }
 
-int vkprintf(const char* format, va_list ap) {
+int vprintf(const char* format, va_list ap) {
     terminal_handler_t print_fun = get_terminal_handler();
 
     char buf[1024];
