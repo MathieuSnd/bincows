@@ -153,7 +153,7 @@ static void defragment(void) {
 
 // try to merge the node with the next one
 // we suppose that the argument is free
-static void try_merge(seg_header* free_node) {
+static inline void try_merge(seg_header* free_node) {
     assert(free_node->free);
 
     seg_header* next = free_node->next;
@@ -350,13 +350,11 @@ void kmalloc_test(void) {
     for(int j = 0; j < 100; j++) {
         for(int i = 0; i < 128; i++) {
             arr[i] = kmalloc(size % 1024);
-            size = (16807 * size) % (1 << 31 - 1);
+            
+            size = (16807 * size) % ((1lu << 31) - 1);
         }
         for(int i = 0; i < 128; i++)
             kfree(arr[i]);
     }
-
-    //print();
-    
 }
 #endif
