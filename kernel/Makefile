@@ -29,6 +29,7 @@ INTERNALCFLAGS  :=  -mgeneral-regs-only \
 CFILES := $(shell find ./ -type f -name '*.c')
 SFILES := $(shell find ./ -type f -name '*.s')
 OBJ    :=  $(SFILES:.s=.s.o) $(CFILES:.c=.c.o)
+
 LDSCRIPT := linker.ld 
 #charmap.bmp.o
 .PHONY: all clean
@@ -36,18 +37,12 @@ LDSCRIPT := linker.ld
 all: $(KERNEL)
 
 
+
+
  
 $(KERNEL): $(OBJ) $(LDSCRIPT)
 	$(CC) $(INTERNALLDFLAGS) $(OBJ) -o $@
  
-#%.bmp.o: ../resources/bmp/%.bmp
-#	$(LD) -r -b binary -o $@ $<
-#%.txt.o: ../resources/ascii/%.txt
-#	$(LD) -r -b binary -o $@ $<
-
-
-kernel/memory/paging.o: INTERNALCFLAGS += -Wno-int-conversion
-	
 
 %.c.o: %.c
 	$(CC) $(CFLAGS) $(INTERNALCFLAGS) -c $< -o $@
