@@ -38,7 +38,7 @@ static const char* get_level_names_and_set_terminal_color(unsigned level) {
             return "[INFO] ";
 
         default:// level > warning -> warning.
-        case LOG_LEVEL_WARNING:
+        case LOG_LEVEL_WARN:
             set_terminal_fgcolor(LOG_WARNIN_COLOR);
             return "[WARNING] ";
     }
