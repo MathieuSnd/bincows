@@ -1,10 +1,11 @@
 #include <stdarg.h>
 
+#include "../drivers/terminal/terminal.h"
 #include "../lib/sprintf.h"
-#include "logging.h"
-#include "../video/terminal.h"
-
 #include "../lib/string.h"
+
+#include "logging.h"
+
 
 #define TEXT_COLOR 0xfff0a0
 

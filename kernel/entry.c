@@ -3,8 +3,8 @@
 #include <stivale2.h>
 
 #include "memory/gdt.h"
-#include "video/video.h"
-#include "video/terminal.h"
+#include "drivers/terminal/video.h"
+#include "drivers/terminal/terminal.h"
 #include "acpi/acpi.h"
 #include "int/apic.h"
 #include "int/idt.h"

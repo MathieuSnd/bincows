@@ -2,7 +2,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
-#include "../lib/assert.h"
+#include "../../lib/assert.h"
 
 
 #define TERMINAL_CHARMAP_W 6

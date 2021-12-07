@@ -3,11 +3,11 @@
 // for initialization
 #include <stivale2.h>
 
-#include "../lib/string.h"
-#include "../lib/logging.h"
+#include "../../lib/string.h"
+#include "../../lib/logging.h"
 //#include "../memory/kalloc.h"
-#include "../lib/common.h"
-#include "../lib/assert.h"
+#include "../../lib/common.h"
+#include "../../lib/assert.h"
 #include "video.h"
 #include "terminal.h"
 
@@ -80,8 +80,8 @@ void imageLower_blitBinaryMask(
     assert((size_t)src_skip  % 8 == 0);
     
 
-    uint32_t* src_ptr32 = (uint32_t *)src_ptr;
-    uint32_t* dst_ptr32 = (uint32_t *)dst_ptr;
+    uint32_t* restrict src_ptr32 = (uint32_t *)src_ptr;
+    uint32_t* restrict dst_ptr32 = (uint32_t *)dst_ptr;
 
 
     

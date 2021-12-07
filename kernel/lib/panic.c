@@ -1,6 +1,6 @@
 #include "panic.h"
 #include "../lib/sprintf.h"
-#include "../video/terminal.h"
+#include "../drivers/terminal/terminal.h"
 
 
 int zero = 0;
