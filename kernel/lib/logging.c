@@ -32,10 +32,10 @@ static const char* get_level_names_and_set_terminal_color(unsigned level) {
     switch(level) {
         case LOG_LEVEL_DEBUG:
             set_terminal_fgcolor(LOG_DEBUG_COLOR);
-            return "[DEBUG] ";
+            return "[DEBUG]   ";
         case LOG_LEVEL_INFO:
             set_terminal_fgcolor(LOG_INFO_COLOR);
-            return "[INFO] ";
+            return "[INFO]    ";
 
         default:// level > warning -> warning.
         case LOG_LEVEL_WARN:
