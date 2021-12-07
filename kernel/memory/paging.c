@@ -563,7 +563,7 @@ int is_range_unmapped(pte* page_table, unsigned begin, unsigned end) {
 
     pte* translated = translate_address(page_table);
 
-    for(int i = begin; i < end; i++) {
+    for(unsigned i = begin; i < end; i++) {
         if(present_entry(translated[i]))
             return 1;
     }
