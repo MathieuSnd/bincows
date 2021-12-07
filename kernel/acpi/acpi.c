@@ -3,7 +3,7 @@
 #include <stdbool.h>
 
 #include "acpi.h"
-#include "../common.h"
+#include "../lib/common.h"
 #include "../lib/assert.h"
 #include "../lib/dump.h"
 #include "../lib/sprintf.h"

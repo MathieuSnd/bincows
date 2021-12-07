@@ -1,5 +1,5 @@
 #include "gdt.h"
-#include "../common.h"
+#include "../lib/common.h"
 #include "../lib/sprintf.h"
 #include "../lib/assert.h"
 

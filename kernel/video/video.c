@@ -6,7 +6,7 @@
 #include "../lib/string.h"
 #include "../lib/logging.h"
 //#include "../memory/kalloc.h"
-#include "../common.h"
+#include "../lib/common.h"
 #include "../lib/assert.h"
 #include "video.h"
 #include "terminal.h"

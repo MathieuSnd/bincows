@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include "../lib/assert.h"
-#include "../common.h"
+#include "../lib/common.h"
 
 #define ATTR_64_GATE 0b1110
 #define ATTR_64_TRAP 0b1110

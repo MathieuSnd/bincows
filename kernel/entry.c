@@ -5,21 +5,23 @@
 #include "memory/gdt.h"
 #include "video/video.h"
 #include "video/terminal.h"
-#include "lib/sprintf.h"
-#include "lib/string.h"
 #include "acpi/acpi.h"
-#include "common.h"
-#include "registers.h"
 #include "int/apic.h"
+#include "int/idt.h"
+
 #include "drivers/hpet.h"
 #include "drivers/pcie.h"
 
-#include "int/idt.h"
 #include "memory/physical_allocator.h"
 #include "memory/paging.h"
 #include "memory/vmap.h"
 #include "memory/kalloc.h"
+
+#include "lib/sprintf.h"
+#include "lib/string.h"
 #include "lib/logging.h"
+#include "lib/common.h"
+#include "lib/registers.h"
  
 
 #define KERNEL_STACK_SIZE 8192

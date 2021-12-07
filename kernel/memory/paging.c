@@ -8,7 +8,7 @@
 #include "../lib/sprintf.h"
 #include "../lib/panic.h"
 #include "../lib/logging.h"
-#include "../registers.h"
+#include "../lib/registers.h"
 
 
 #define CR0_PG_BIT        (1lu << 31)

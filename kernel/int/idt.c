@@ -1,7 +1,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "../common.h"
+#include "../lib/common.h"
 #include "idt.h"
 
 
