@@ -2,11 +2,11 @@
 #include <stddef.h>
 
 #include "kalloc.h"
-#include "../klib/sprintf.h"
+#include "../lib/sprintf.h"
 #include "../memory/vmap.h"
 #include "../memory/paging.h"
-#include "../debug/logging.h"
-#include "../debug/assert.h"
+#include "../lib/logging.h"
+#include "../lib/assert.h"
 
 
 #define MIN_EXPAND_SIZE 1024

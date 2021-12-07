@@ -5,8 +5,8 @@
 #include "memory/gdt.h"
 #include "video/video.h"
 #include "video/terminal.h"
-#include "klib/sprintf.h"
-#include "klib/string.h"
+#include "lib/sprintf.h"
+#include "lib/string.h"
 #include "acpi/acpi.h"
 #include "common.h"
 #include "registers.h"
@@ -19,7 +19,7 @@
 #include "memory/paging.h"
 #include "memory/vmap.h"
 #include "memory/kalloc.h"
-#include "debug/logging.h"
+#include "lib/logging.h"
  
 
 #define KERNEL_STACK_SIZE 8192

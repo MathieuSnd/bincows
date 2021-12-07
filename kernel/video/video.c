@@ -3,11 +3,11 @@
 // for initialization
 #include <stivale2.h>
 
-#include "../klib/string.h"
-#include "../debug/logging.h"
+#include "../lib/string.h"
+#include "../lib/logging.h"
 //#include "../memory/kalloc.h"
 #include "../common.h"
-#include "../debug/assert.h"
+#include "../lib/assert.h"
 #include "video.h"
 #include "terminal.h"
 

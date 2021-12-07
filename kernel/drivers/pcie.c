@@ -1,10 +1,10 @@
 #include "pcie.h"
-#include "../debug/logging.h"
-#include "../debug/dump.h"
-#include "../debug/assert.h"
+#include "../lib/logging.h"
+#include "../lib/dump.h"
+#include "../lib/assert.h"
 #include "../memory/kalloc.h"
 #include "../memory/paging.h"
-#include "../klib/string.h"
+#include "../lib/string.h"
 
 
 struct PCIE_configuration_space {

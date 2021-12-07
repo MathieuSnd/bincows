@@ -2,7 +2,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
-#include "../debug/assert.h"
+#include "../lib/assert.h"
 
 #define LAPIC_SPURIOUS_IRQ 0xff
 

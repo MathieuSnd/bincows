@@ -2,9 +2,9 @@
 #include <stdbool.h>
 #include "terminal.h"
 #include "video.h"
-#include "../klib/string.h"
-#include "../debug/assert.h"
-#include "../debug/logging.h"
+#include "../lib/string.h"
+#include "../lib/assert.h"
+#include "../lib/logging.h"
 #include "../memory/kalloc.h"
 
 #define TAB_SPACE 6

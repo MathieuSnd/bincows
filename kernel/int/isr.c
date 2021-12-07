@@ -1,6 +1,6 @@
-#include "../klib/sprintf.h"
-#include "../debug/assert.h"
-#include "../debug/panic.h"
+#include "../lib/sprintf.h"
+#include "../lib/assert.h"
+#include "../lib/panic.h"
 #include "idt.h"
 
 // return the value of cr2

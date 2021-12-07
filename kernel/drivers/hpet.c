@@ -2,8 +2,8 @@
 #include <stddef.h>
 #include "hpet.h"
 #include "../memory/vmap.h"
-#include "../debug/assert.h"
-#include "../debug/logging.h"
+#include "../lib/assert.h"
+#include "../lib/logging.h"
 /**
 000-007h General Capabilities and ID Register Read Only
 008-00Fh Reserved

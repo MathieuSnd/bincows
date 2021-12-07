@@ -4,16 +4,16 @@
 
 #include "acpi.h"
 #include "../common.h"
-#include "../debug/assert.h"
-#include "../debug/dump.h"
-#include "../klib/sprintf.h"
-#include "../klib/string.h"
+#include "../lib/assert.h"
+#include "../lib/dump.h"
+#include "../lib/sprintf.h"
+#include "../lib/string.h"
 #include "acpitables.h"
 #include "../int/apic.h"
 #include "../memory/vmap.h"
 #include "../memory/paging.h"
 #include "../drivers/pcie.h"
-#include "../debug/logging.h"
+#include "../lib/logging.h"
 
 static void* apic_config_base, *hpet_config_space;
 

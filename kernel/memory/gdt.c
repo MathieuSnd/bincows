@@ -1,7 +1,7 @@
 #include "gdt.h"
 #include "../common.h"
-#include "../klib/sprintf.h"
-#include "../debug/assert.h"
+#include "../lib/sprintf.h"
+#include "../lib/assert.h"
 
 extern void _ltr(uint16_t tss_selector);
 

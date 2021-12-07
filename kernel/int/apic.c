@@ -3,9 +3,9 @@
 #include "idt.h"
 #include "apic.h"
 
-#include "../debug/assert.h"
-#include "../debug/logging.h"
-#include "../klib/sprintf.h"
+#include "../lib/assert.h"
+#include "../lib/logging.h"
+#include "../lib/sprintf.h"
 #include "../memory/vmap.h"
 #include "../drivers/hpet.h"
 

@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
-#include "../debug/assert.h"
+#include "../lib/assert.h"
 #include "../common.h"
 
 #define ATTR_64_GATE 0b1110

@@ -1,13 +1,13 @@
 #include <stivale2.h>
-#include "../debug/assert.h"
-#include "../klib/string.h"
+#include "../lib/assert.h"
+#include "../lib/string.h"
 #include "physical_allocator.h"
 
 #include "paging.h"
 #include "vmap.h"
-#include "../klib/sprintf.h"
-#include "../debug/panic.h"
-#include "../debug/logging.h"
+#include "../lib/sprintf.h"
+#include "../lib/panic.h"
+#include "../lib/logging.h"
 #include "../registers.h"
 
 
