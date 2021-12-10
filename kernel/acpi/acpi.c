@@ -141,6 +141,7 @@ static void parse_madt(const struct MADT* table) {
                 break;
             case APIC_TYPE_IO_INTERRUPT_SOURCE_OVERRIDE:
                 {
+                    log_debug("ISSOU");
                     // const struct MADT_ioapic_interrupt_source_override_entry* entry = ptr;
                 }
                 break;

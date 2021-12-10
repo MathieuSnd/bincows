@@ -112,6 +112,17 @@ inb:
     
     pop  rdx
     ret
+    
+; void outb(uint16_t port, uint8_t val)
+outb:
+    push rdx
+    mov  rdx, rdi
+    mov  rax, rsi
+
+    out  dx,  al
+    
+    pop  rdx
+    ret
 
 
 ; read_msr(uint32_t addr)

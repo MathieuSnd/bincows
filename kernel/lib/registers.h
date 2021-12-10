@@ -28,4 +28,8 @@ uint64_t read_msr(uint32_t addr);
 uint64_t write_msr(uint32_t addr, uint64_t value);
 
 
+uint8_t inb(uint16_t port);
+void outb(uint16_t port, uint8_t val);
+
+
 #endif// REGISTERS_H

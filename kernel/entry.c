@@ -8,9 +8,11 @@
 #include "acpi/acpi.h"
 #include "int/apic.h"
 #include "int/idt.h"
+#include "int/pic.h"
 
 #include "drivers/hpet.h"
 #include "drivers/pcie.h"
+#include "drivers/ps2kb.h"
 
 #include "memory/physical_allocator.h"
 #include "memory/paging.h"
@@ -22,6 +24,7 @@
 #include "lib/logging.h"
 #include "lib/common.h"
 #include "lib/registers.h"
+#include "lib/dump.h"
  
 
 #define KERNEL_STACK_SIZE 8192
@@ -99,19 +102,19 @@ static void debug_terminal() {
     puts(buff);
 }
 
-static void print_fb_infos(struct stivale2_struct_tag_framebuffer* fbtag) {
-    PRINT_VAL(fbtag->framebuffer_width);
-    PRINT_VAL(fbtag->framebuffer_height);
-    PRINT_VAL(fbtag->framebuffer_pitch);
-    PRINT_VAL(fbtag->framebuffer_bpp);
-    PRINT_HEX(fbtag->framebuffer_addr);
+static void print_fb_infos(struct stivale2_struct_tag_framebuffer* framebuffer_tag) {
+    PRINT_VAL(framebuffer_tag->framebuffer_width);
+    PRINT_VAL(framebuffer_tag->framebuffer_height);
+    PRINT_VAL(framebuffer_tag->framebuffer_pitch);
+    PRINT_VAL(framebuffer_tag->framebuffer_bpp);
+    PRINT_HEX(framebuffer_tag->framebuffer_addr);
 }
 
 #pragma GCC diagnostic pop
 
 
 static void init_memory(const struct stivale2_struct_tag_memmap* memmap_tag,
-                        const struct stivale2_struct_tag_framebuffer* fbtag) {
+                        const struct stivale2_struct_tag_framebuffer* framebuffer_tag) {
     log_debug("init memory...");
     init_physical_allocator(memmap_tag);
 
@@ -120,9 +123,9 @@ static void init_memory(const struct stivale2_struct_tag_memmap* memmap_tag,
 
 // map MMIOs
     map_pages(
-        early_virtual_to_physical((void *)fbtag->framebuffer_addr), 
+        early_virtual_to_physical((void *)framebuffer_tag->framebuffer_addr), 
         MMIO_BEGIN,
-        (fbtag->framebuffer_height * fbtag->framebuffer_pitch+0x0fff) / 0x1000,
+        (framebuffer_tag->framebuffer_height * framebuffer_tag->framebuffer_pitch+0x0fff) / 0x1000,
         PRESENT_ENTRY
     );
 
@@ -142,14 +145,16 @@ void _start(struct stivale2_struct *stivale2_struct) {
     // Let's get the terminal structure tag from the bootloader.
     const struct stivale2_struct_tag_terminal*    term_str_tag;
     const struct stivale2_struct_tag_memmap*      memmap_tag;
-    const struct stivale2_struct_tag_framebuffer* fbtag;
+    const struct stivale2_struct_tag_framebuffer* framebuffer_tag;
     const struct stivale2_struct_tag_rsdp*        rsdp_tag_ptr;
+    const struct stivale2_struct_tag_kernel_file_v2* boot_volume_tag;
 
-    term_str_tag = stivale2_get_tag(stivale2_struct, STIVALE2_STRUCT_TAG_TERMINAL_ID);
-    memmap_tag   = stivale2_get_tag(stivale2_struct, STIVALE2_STRUCT_TAG_MEMMAP_ID);
-    fbtag        = stivale2_get_tag(stivale2_struct, STIVALE2_STRUCT_TAG_FRAMEBUFFER_ID);
-    rsdp_tag_ptr = stivale2_get_tag(stivale2_struct, STIVALE2_STRUCT_TAG_RSDP_ID);
-
+    term_str_tag    = stivale2_get_tag(stivale2_struct, STIVALE2_STRUCT_TAG_TERMINAL_ID);
+    memmap_tag      = stivale2_get_tag(stivale2_struct, STIVALE2_STRUCT_TAG_MEMMAP_ID);
+    framebuffer_tag = stivale2_get_tag(stivale2_struct, STIVALE2_STRUCT_TAG_FRAMEBUFFER_ID);
+    rsdp_tag_ptr    = stivale2_get_tag(stivale2_struct, STIVALE2_STRUCT_TAG_RSDP_ID);
+    boot_volume_tag = stivale2_get_tag(stivale2_struct, 0x9b4358364c19ee62);
+    
 
     // term_str_tag == NULL is not a blocking
     // errror: stivale2 terminal is only used 
@@ -168,11 +173,11 @@ void _start(struct stivale2_struct *stivale2_struct) {
     setup_isrs();
     read_acpi_tables((void*)rsdp_tag_ptr->rsdp);
 
-    init_memory(memmap_tag, fbtag);
+    init_memory(memmap_tag, framebuffer_tag);
 
 
  // first initialize our terminal 
-    initVideo(fbtag, (void *)MMIO_BEGIN);
+    initVideo(framebuffer_tag, (void *)MMIO_BEGIN);
     init_gdt_table();
 // we cannot use stivale2 terminal
 // after loading our gdt
@@ -191,8 +196,12 @@ void _start(struct stivale2_struct *stivale2_struct) {
     puts(log_get());
     log_flush();
 
-    pcie_init();
+//    dump(boot_volume_tag->kernel_file, 160, 20, DUMP_HEX8);
+    log_info("boot file: %lx", boot_volume_tag->kernel_file);
 
+    //pcie_init();
+    pic_init();
+    ps2kb_init();
 
     hpet_init();
     apic_setup_clock();
