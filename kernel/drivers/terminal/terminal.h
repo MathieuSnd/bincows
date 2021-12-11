@@ -33,7 +33,11 @@ terminal_handler_t get_terminal_handler(void);
 // setup_function
 void assert_terminal(void);
 
-void setup_terminal(void);
+void terminal_install_early(void);
+void terminal_install_late (void);
+void terminal_remove(void);
+void terminal_update(void);
+
 void terminal_clear(void);
 
 // change the default terminal handler,
@@ -50,3 +54,5 @@ void set_terminal_bgcolor(uint32_t c);
 void set_terminal_fgcolor(uint32_t c);
 
 void terminal_set_colors(uint32_t foreground, uint32_t background);
+
+

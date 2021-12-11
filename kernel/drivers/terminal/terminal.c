@@ -1,5 +1,6 @@
 #include <stddef.h>
 #include <stdbool.h>
+#include <stdatomic.h>
 
 #include "terminal.h"
 #include "video.h"
@@ -8,6 +9,8 @@
 #include "../../lib/assert.h"
 #include "../../lib/logging.h"
 #include "../../memory/heap.h"
+#include "../../int/apic.h"
+#include "../../int/idt.h"
 
 
 #define TAB_SPACE 6
@@ -32,7 +35,7 @@ static terminal_handler_t terminal_handler = NULL;
 static bool need_refresh = false;
 
 
-void default_terminal_handler(const char* s, size_t l) {
+void empty_terminal_handler(const char* s, size_t l) {
     (void) (s + l);
     // empty handler by default,
     // make sure not to execute the address 0 :)
@@ -40,6 +43,9 @@ void default_terminal_handler(const char* s, size_t l) {
 
 #define NCOLS_MAX 133
 #define TERMINAL_LINES_MAX 75
+
+
+static void append_string(const char *string, size_t length);
 
 
 
@@ -56,26 +62,52 @@ static uint32_t current_bgcolor = 0;
 
 static unsigned margin_left, margin_top;
 
+#define UPDATE_PERIOD_MS (1000 / 60)
 
 
-// "int" but designates a binary file 
-extern int _binary_charmap_bmp;
+// "uint8_t" but designates a binary file 
+extern uint8_t _binary_charmap_bmp;
 
 
-void setup_terminal(void) {
-    log_debug("setup the terminal...");
+static unsigned timerID = INVALID_TIMER_ID;
+
+
+
+static char*    stream_buffer = NULL;
+
+static unsigned stream_buffer_size = 0;
+static volatile unsigned stream_buffer_content_size = 0;
+
+
+// should be called every UPDATE_PERIOD ms
+// should execute in an IRQ
+void terminal_update(void) {
+    static unsigned update_cur_line = 0;
+    
+
+    stream_buffer_content_size = 0;
+
+
+    if(need_refresh) {
+        need_refresh = 0;
+        flush_screen();
+    }
+    // flush the buffer
+}
+
+
+
+void terminal_remove(void) {
+    apic_delete_timer(timerID);
+}
+
+void terminal_install_early(void) {
+    log_debug("install the terminal...");
 
     assert(charmap == NULL);
     assert(char_buffer == NULL);
 
-    
-    charmap = loadBMP_24b_1b(&_binary_charmap_bmp);
 
-    assert(charmap      != NULL);
-    assert(charmap->bpp   == 1);
-    assert(charmap->pitch == 1);
-    assert(charmap->w   == TERMINAL_CHARMAP_W);
-    assert(charmap->h   == TERMINAL_CHARMAP_H);
     
     const Image* screenImage = getScreenImage();
     
@@ -105,12 +137,27 @@ void setup_terminal(void) {
     margin_top  = (screenImage->h - term_nlines * TERMINAL_FONTHEIGHT) / 2;
 #endif
 
+    stream_buffer = malloc(ncols * term_nlines);
 
+    set_terminal_handler(empty_terminal_handler);
+}
+
+// finish intallation when memory
+// is well initialized
+void terminal_install_late(void) {
+    timerID = apic_create_timer(terminal_update, UPDATE_PERIOD_MS);
+
+    charmap = loadBMP_24b_1b(&_binary_charmap_bmp);
+    
+    
     set_terminal_handler(write_string);
+
+    terminal_clear();
 }
 
 
 void terminal_clear(void) {
+
     cur_col    = 0;
     cur_line   = 0;
     first_line = 0;
@@ -122,6 +169,7 @@ void terminal_clear(void) {
         *(ptr++) = make_Char(0);
     
     flush_screen();
+
 }
 
 
@@ -147,6 +195,11 @@ static void move_buffer(int lines) {
         size_t buff_size = nlines * ncols;
 
         memmove(char_buffer, char_buffer + bytes, sizeof(struct Char)*(buff_size - bytes));        
+
+        // cannot touch the first one: it is already written
+        for(unsigned i = 1; i < bytes; i++) {
+            char_buffer[i+buff_size-bytes] = make_Char(0);
+        }
     }
 }
 
@@ -174,23 +227,29 @@ static struct Char make_Char(char c) {
 }
 
 
-// emplace the char in the buffer, dosn't draw anything
+static void emplace_normal_char(char c) {
+    char_buffer[ncols * cur_line + cur_col] = make_Char(c);
+    
+    struct Char* ch = &char_buffer[ncols * cur_line + cur_col];
+    
+
+    if(cur_col >= ncols)
+        next_line();
+    
+    if(!need_refresh)
+        print_char(ch, cur_line - first_line, cur_col);
+    
+    
+    cur_col += 1;
+}
+
+
+// emplace the char in the buffer, and maybe draw 
 static void emplace_char(char c) {
     switch(c) {
-        // any character
     default:
-
-        char_buffer[ncols * cur_line + cur_col] = make_Char(c);
-        
-        struct Char* ch = &char_buffer[ncols * cur_line + cur_col];
-        
-        cur_col += 1;
-        if(!need_refresh)
-            print_char(ch, cur_line - first_line, cur_col);
-
-        if(cur_col >= ncols)
-            next_line();
-        
+        // any character
+        emplace_normal_char(c);
         break;
     
     case '\n':
@@ -198,8 +257,7 @@ static void emplace_char(char c) {
         for(unsigned i=cur_col;i < ncols; i++) 
         {
             //print_char(ch, cur_line - first_line, cur_col);
-            emplace_char(' ');
-
+            emplace_normal_char(' ');
         }
     }
         break;
@@ -211,10 +269,7 @@ static void emplace_char(char c) {
             emplace_char(' ');
 
     }
-        
-        //if(cur_col >= ncols)
         break;
-
     case '\r':
         cur_col = 0;
         break;
@@ -284,9 +339,25 @@ static void flush_screen(void) {
 }
 
 
-static void write_string(const char *string, size_t length) {
 
-    need_refresh = false;
+// add the string to the buffer
+static void append_string(const char *string, size_t length) {
+// atomic operation
+    _cli();
+    
+    memcpy(stream_buffer + stream_buffer_content_size, 
+           string, 
+           length);
+
+    stream_buffer_content_size += length;
+
+    _sti();
+}
+
+
+
+static void write_string(const char *string, size_t length) {
+    //need_refresh = false;
 
     for(;length>0;--length) {
         char c = *string++;
@@ -296,8 +367,8 @@ static void write_string(const char *string, size_t length) {
         emplace_char(c);
 
     }
-    if(need_refresh)
-        flush_screen();
+    //if(need_refresh)
+    //    flush_screen();
 }
 
 

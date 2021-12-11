@@ -309,8 +309,6 @@ const Image* getScreenImage(void) {
     return &screen;
 }
 
-
-extern uint8_t __image_pix;
 /*
 // assert that the checks are already performed
 static Image* loadBMP_24(const struct BMPFileHeader* restrict header, const void* restrict body) {
@@ -563,13 +561,13 @@ Image* loadBMP_24b_1b(const void* rawFile) {
     const uint8_t* srcpix  = (const uint8_t *)header + header->body_offset;
 
     
-
+    uint32_t pitch = (w+7)/8;
 
     loadBMP_24b_1b_ret.w     = w;
     loadBMP_24b_1b_ret.h     = h;
     loadBMP_24b_1b_ret.bpp   = 1;
-    loadBMP_24b_1b_ret.pitch = ((w+7) / 8);
-    loadBMP_24b_1b_ret.pix   = &__image_pix; 
+    loadBMP_24b_1b_ret.pitch = pitch;
+    loadBMP_24b_1b_ret.pix   = malloc(pitch * h); 
 
     assert(loadBMP_24b_1b_ret.pitch == 1);
     assert(w == 6);
@@ -588,7 +586,6 @@ Image* loadBMP_24b_1b(const void* rawFile) {
             // put 1 iif r channel > 128
             byte |= *(src_ptr) >> 7;
 
-            
 
             //if((x % 8 == 0 && x != 0) || x == w-1) {
             if(x == w-1) {

@@ -184,10 +184,12 @@ void _start(struct stivale2_struct *stivale2_struct) {
 // so we need to load our gdt after our
 // terminal is successfully installed 
     
-    setup_terminal();
-    append_paging_initialization();
+    terminal_install_early();
     terminal_set_colors(0xfff0a0, 0x212121);
-    terminal_clear();
+    
+    append_paging_initialization();
+
+    terminal_install_late();
 
         
     puts(&_binary_bootmessage_txt);
@@ -213,7 +215,6 @@ void _start(struct stivale2_struct *stivale2_struct) {
 
     for(;;) {
         asm volatile("hlt");
-        printf("%lu\r", clock());
     }
 
     __builtin_unreachable();
