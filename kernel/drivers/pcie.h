@@ -37,6 +37,12 @@ typedef void (*driver_callback)(void);
 struct driver_descriptor {
     driver_init_fun install;
     driver_callback remove;
+    
+    const char* driver_name;
+    uint32_t status;
+
+    void* driver_data;
+    size_t driver_data_len;
 };
 
 

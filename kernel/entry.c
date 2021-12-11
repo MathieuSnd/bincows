@@ -112,7 +112,7 @@ static void print_fb_infos(struct stivale2_struct_tag_framebuffer* framebuffer_t
 
 #pragma GCC diagnostic pop
 
-
+ 
 static void init_memory(const struct stivale2_struct_tag_memmap* memmap_tag,
                         const struct stivale2_struct_tag_framebuffer* framebuffer_tag) {
     log_debug("init memory...");
@@ -147,7 +147,7 @@ void _start(struct stivale2_struct *stivale2_struct) {
     const struct stivale2_struct_tag_memmap*      memmap_tag;
     const struct stivale2_struct_tag_framebuffer* framebuffer_tag;
     const struct stivale2_struct_tag_rsdp*        rsdp_tag_ptr;
-    const struct stivale2_struct_tag_kernel_file_v2* boot_volume_tag;
+    const struct stivale2_struct_tag_boot_volume* boot_volume_tag;
 
     term_str_tag    = stivale2_get_tag(stivale2_struct, STIVALE2_STRUCT_TAG_TERMINAL_ID);
     memmap_tag      = stivale2_get_tag(stivale2_struct, STIVALE2_STRUCT_TAG_MEMMAP_ID);
@@ -196,9 +196,13 @@ void _start(struct stivale2_struct *stivale2_struct) {
     puts(log_get());
     log_flush();
 
-//    dump(boot_volume_tag->kernel_file, 160, 20, DUMP_HEX8);
-    log_info("boot file: %lx", boot_volume_tag->kernel_file);
-
+    dump(boot_volume_tag, sizeof(struct stivale2_struct_tag_boot_volume), 8, DUMP_HEX8);
+    //log_info("boot volume: %x:%x:%x:%lx", 
+    //        boot_volume_tag->guid.a,
+    //        boot_volume_tag->guid.b,
+    //        boot_volume_tag->guid.c,
+    //        *(uint64_t*)boot_volume_tag->guid.d);
+//
     //pcie_init();
     pic_init();
     ps2kb_init();
