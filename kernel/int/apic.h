@@ -5,7 +5,7 @@
 #include "../lib/assert.h"
 
 #define LAPIC_SPURIOUS_IRQ 0xff
-
+#define INVALID_TIMER_ID ((unsigned)-1)
 
 void apic_setup_clock(void);
 uint64_t clock(void);
