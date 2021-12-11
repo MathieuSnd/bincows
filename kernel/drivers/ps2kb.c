@@ -8,11 +8,12 @@
 
 static void kbevent_default_handler(const struct kbevent* event) {
     (void) event;
+    log_debug("%c ", event->scancode);
 }
 
 static kbevent_handler handler = kbevent_default_handler;
 
-static char lshift_state, rshift_state; 
+static char lshift_state, rshift_state, altgr_state; 
 
 static uint8_t get_byte(void) {
     // wait for the output bufer
@@ -23,13 +24,22 @@ static uint8_t get_byte(void) {
 
     return inb(0x60);
 }
+static void flush_output_buffer(void) {
+    // wait for the output bufer
+    // to be empty
+    while((inb(0x64) & 1) != 0) {
+        inb(0x60);
+    }
+
+}
+
 
 // outputs a command to the controller
 static void command_byte(uint8_t b) {
 
     // wait for the input bufer
     // to be empty
-    while((inb(0x64) & 2) == 1) {
+    while((inb(0x64) & 2) != 0) {
         asm volatile("pause");
     }
 
@@ -40,6 +50,7 @@ static void command_byte(uint8_t b) {
 
 extern const char ps2_azerty_table_lowercase[];
 extern const char ps2_azerty_table_uppercase[];
+extern const char ps2_azerty_table_altgr    [];
 
 
 
@@ -54,13 +65,26 @@ int is_caps(void) {
 }
 
 
+void ps2_trigger_CPU_reset(void) {
+    command_byte(0xFE);
+    // reset command
+}
+
+void ps2kb_poll_wait_for_key(uint8_t key) {
+    while(get_byte() != key)
+        ;
+}
+
 static int process_leds(uint8_t b) {
     if(b == 0xba) {// caps lock
         // flush data buffer
         inb(0x60);
+        leds_state = 0xff;
         command_byte(0xED);
-        leds_state = leds_state ^ 4;
-
+        
+        // io wait
+        outb(0x80, 0);
+        
         command_byte(leds_state);
         return 1;
     }
@@ -92,22 +116,29 @@ static void process_byte(uint8_t b) {
         rshift_state = ev.type;
         return;
     }
+    else if(ev.keycode == 56) {
+        altgr_state = ev.type;
+    }
 
-
-    if(is_caps())
+    if(altgr_state)
+        ev.scancode = ps2_azerty_table_altgr[ev.keycode];
+    else if(is_caps())
         ev.scancode = ps2_azerty_table_uppercase[ev.keycode];
     else
         ev.scancode = ps2_azerty_table_lowercase[ev.keycode];
-    
-    printf("%c", ev.scancode);
     
     handler(&ev);
 }
 
 
 static void __attribute__((interrupt)) irq_handler(void* r) {
-
-    process_byte(inb(0x60));
+    uint8_t status = inb(0x64);
+    
+    // sometimes, interrupts
+    // are triggered eventhough no
+    // key is pressed or released
+    if(status & 1)
+        process_byte(inb(0x60));
 
     pic_eoi(1);
 }
@@ -115,6 +146,7 @@ static void __attribute__((interrupt)) irq_handler(void* r) {
 void ps2kb_init(void) {
     
     log_debug("init ps/2 keyboard...");
+    set_irq_handler(17, irq_handler);
     
     unsigned status = inb(0x64);
     if(status & 0xc0) {
@@ -131,14 +163,13 @@ void ps2kb_init(void) {
 
     command_byte(0x6);
     command_byte(config | 1);
+    // flush output buffer
+    flush_output_buffer();
 
-
-    set_irq_handler(17, irq_handler);
     pic_mask_irq(1, 0);
 
-    for(;;)
-    asm("hlt");
-    //log_debug("dzdvf");
+    while(1)
+        asm("hlt");
 }
 
 
