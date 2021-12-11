@@ -168,8 +168,6 @@ void ps2kb_init(void) {
 
     pic_mask_irq(1, 0);
 
-    while(1)
-        asm("hlt");
 }
 
 
