@@ -11,10 +11,3 @@ _binary_charmap_bmp_end:
 _binary_bootmessage_txt:
     incbin "../resources/ascii/boot_message.txt"
     db 0
-
-
-[section .bss]
-
-alignb 4
-__image_pix:  resb 2048
-    
