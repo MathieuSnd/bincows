@@ -7,6 +7,7 @@
 #include "../memory/paging.h"
 #include "../lib/logging.h"
 #include "../lib/assert.h"
+#include "../lib/string.h"
 
 
 #define MIN_EXPAND_SIZE 1024
@@ -151,6 +152,20 @@ static void defragment(void) {
         }
 }
 
+// return the node preceding the argument
+// in the linked list
+// O(n) sequential research
+static seg_header* find_pred(seg_header* node) {
+    for(seg_header* seg = current_segment; 
+                    seg != NULL;
+                    seg = seg->next) {
+        if(seg->next == node)
+            return node;
+    }
+    assert(0);
+    __builtin_unreachable();
+}
+
 // try to merge the node with the next one
 // we suppose that the argument is free
 static inline void try_merge(seg_header* free_node) {
@@ -191,27 +206,16 @@ static inline void try_merge(seg_header* free_node) {
 
         // if not, we must find the preceding
         // node in the linked list
+        seg_header* seg = find_pred(free_node);
 
-        for(seg_header* seg = current_segment; 
-                        seg != NULL;
-                        seg = seg->next) {
-            if(seg->next == free_node) {
-                // we found it!
-
-                // now make it point on the 
-                // new merged node which is
-                // the 'next' node
-                seg->next = next;
-
-                // we are done merging!
-                return;
-            }
-        }
-        // oh no! wtf
-        // the argument wasn't in the list
-        assert(0);
+        // now make it point on the 
+        // new merged node which is
+        // the 'next' node
+        seg->next = next;
     }
 }
+
+
 
 /*
  * insert a new segment between to_split and pred
@@ -253,7 +257,7 @@ void heap_init(void) {
 }
 
 
-void* __attribute__((noinline)) malloc(size_t size) {
+void* malloc(size_t size) {
     // align the size to assure that 
     // the whole structure is alligned
     size = ((size + 7 ) / 8) * 8;
@@ -322,6 +326,63 @@ void* __attribute__((noinline)) malloc(size_t size) {
 
 // retrty now that we are sure that the memory is avaiable
     return malloc(size);
+}
+
+static void realloc_shrink(seg_header* header, size_t size) {
+    // check if we can actually free some memory
+    if(header->size - size >= sizeof(seg_header) + MIN_SEGMENT_SIZE) {
+        split_segment(
+            find_pred(header), // we need to find the preceding
+                                // node in order to split it
+            header,
+            size
+        );
+    }
+    else {
+        // the difference is not big enough
+        // to actually free anything
+        // let's not even change the size
+        // in the structure
+        // so that if we do:
+        // realloc(ptr, size-X);
+        // realloc(ptr, size);
+        // no reallocation will be done
+    }
+}
+
+// O(n) in case of freeing (size < oldsize)
+void* realloc(void* ptr, size_t size) {
+    if(ptr == NULL)
+        return malloc(size);
+    
+    seg_header* header = ptr - sizeof(seg_header);
+    if(size <= header->size) {// no need to move
+        realloc_shrink(header, size);
+    }
+    else {
+        // maybe need reallocation
+        
+        // mark the node free
+        header->free = 1;
+        unsigned old_size = header->size;
+
+        // hope for the node to merge with another
+        defragment();
+
+
+        // check the size again
+        if(header->size >= size) {
+            // we have enough space now!
+            header->free = 0;
+            realloc_shrink(header, size);
+        }
+        else {
+            // still not enough space
+            // we have to copy the whole thing
+            void* new_ptr = malloc(size);
+            memcpy(new_ptr, ptr, old_size);
+        }
+    }
 }
 
 
