@@ -8,6 +8,51 @@
 #include "../lib/sprintf.h"
 #include "../memory/vmap.h"
 #include "../drivers/hpet.h"
+#include "../lib/string.h"
+#include "../memory/heap.h"
+
+struct APICRegister 
+{
+    volatile uint32_t reg;
+    uint32_t reserved[3];
+};
+static_assert(sizeof(struct APICRegister) == 16);
+
+struct APICConfig
+{
+    volatile struct APICRegister reserved1[2];                         // 
+    volatile struct APICRegister LAPIC_ID;                             // RW
+    volatile struct APICRegister LAPIC_version;                        // R
+    volatile struct APICRegister reserved2[4];                         // 
+    volatile struct APICRegister task_priority;                        // RW
+    volatile struct APICRegister arbitration_priority;                 // R
+    volatile struct APICRegister processor_priority;                   // R
+    volatile struct APICRegister end_of_interrupt;                     // W
+    volatile struct APICRegister remote_read;                          // R
+    volatile struct APICRegister logical_destination;                  // RW
+    volatile struct APICRegister destination_format;                   // RW
+    volatile struct APICRegister spurious_interrupt_vector;            // RW
+    volatile struct APICRegister in_service[8];                        // R
+    volatile struct APICRegister trigger_mode[8];                      // R
+    volatile struct APICRegister interrupt_request[8];                 // R
+    volatile struct APICRegister error_status;                         // R
+    volatile struct APICRegister reserved3[6];                         // 
+    volatile struct APICRegister LVT_corrected_machine_check_interrupt;// RW
+    volatile struct APICRegister interrupt_command[2];                 // RW
+    volatile struct APICRegister LVT_timer;                            // RW
+    volatile struct APICRegister LVT_thermal_sensor;                   // RW
+    volatile struct APICRegister LVT_performance_monitoring_counters;  // RW
+    volatile struct APICRegister LVT_LINT0;                            // RW
+    volatile struct APICRegister LVT_LINT1;                            // RW
+    volatile struct APICRegister LVT_error;                            // RW
+    volatile struct APICRegister timer_initial_count;                  // RW
+    volatile struct APICRegister timer_current_count;                  // R
+    volatile struct APICRegister reserved4[4];                         // 
+    volatile struct APICRegister timer_divide_configuration;           // RW
+    volatile struct APICRegister reserved5;                            // 
+};
+static_assert(sizeof(struct APICConfig) == 0x400);
+
 
 static volatile struct APICConfig* apic_config = (void *)APIC_VIRTUAL_ADDRESS;
 
@@ -15,12 +60,62 @@ static volatile struct APICConfig* apic_config = (void *)APIC_VIRTUAL_ADDRESS;
 static uint64_t apic_timer_clock_count = 0;
 
 
+// 1 ms
+#define CLOCK_FREQUENCY 1
+struct timer {
+    unsigned period;    
+    unsigned counter;
+    void (*func)(void);
+};
+
+// realloc(NULL, s) ~ malloc(s)
+static struct timer* timers = NULL;
+static unsigned n_timers = 0;
+static unsigned buffsize = 0;
+
+
+unsigned apic_create_timer(void (*fun)(void), int millisecs) {
+    unsigned id = n_timers++;
+
+    if(n_timers > buffsize) {
+        buffsize *= 2;
+        timers = realloc(timers, buffsize);
+    }
+
+    timers[id].counter = 0;
+    timers[id].period  = millisecs * CLOCK_FREQUENCY;
+    timers[id].func    = fun; 
+}
+
+int apic_delete_timer(unsigned id) {
+    if(id >= n_timers)
+        return 0;
+    n_timers--;
+
+    memmove(timers+id, timers+id+1, (n_timers - id) * sizeof(struct timer));
+    if(n_timers < buffsize/2) {
+        buffsize /= 2;
+        timers = realloc(timers, buffsize);
+    }
+
+    return 1;
+}
+
 
 __attribute__((interrupt)) void lapic_timer_handler(struct IFrame* frame) {
     (void) frame;
     ++apic_timer_clock_count;
 
+    for(unsigned i = 0; i < n_timers; i++) {
+        if(++timers[i].counter >= timers[i].period) {
+            timers[i].func();
+            timers[i].counter = 0;
+        }
+    }
+
+
     apic_config->end_of_interrupt.reg = 0;
+
 }  
 
 uint64_t clock(void)  {
