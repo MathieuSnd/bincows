@@ -1,6 +1,8 @@
 #include "panic.h"
 #include "../lib/sprintf.h"
 #include "../drivers/terminal/terminal.h"
+#include "../drivers/ps2kb.h"
+#include "../acpi/power.h"
 
 
 int zero = 0;
@@ -44,8 +46,11 @@ __attribute__((noreturn)) void panic(const char* panic_string) {
 
         puts(
             "\n\n"
-            "you may manually shutdown the machine.\n"
+            "type ESCAPE to shutdown the computer.\n"
         );
+        // do not make any interrupt
+        ps2kb_poll_wait_for_key(PS2KB_ESCAPE);
+        shutdown();
     }
     
     asm volatile("cli");
