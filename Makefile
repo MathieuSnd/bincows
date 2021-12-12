@@ -28,6 +28,7 @@ QEMU_DEBUG_ARGS:= -no-shutdown -d int $(QEMU_ARGS)
 
 
 run: all
+	./write_disk.sh
 	$(QEMU_PATH) $(QEMU_ARGS)$(HDD_FILE)
 
 
