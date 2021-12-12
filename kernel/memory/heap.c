@@ -358,6 +358,7 @@ void* realloc(void* ptr, size_t size) {
     seg_header* header = ptr - sizeof(seg_header);
     if(size <= header->size) {// no need to move
         realloc_shrink(header, size);
+        return ptr;
     }
     else {
         // maybe need reallocation
@@ -375,12 +376,15 @@ void* realloc(void* ptr, size_t size) {
             // we have enough space now!
             header->free = 0;
             realloc_shrink(header, size);
+            return ptr;
         }
         else {
             // still not enough space
             // we have to copy the whole thing
             void* new_ptr = malloc(size);
             memcpy(new_ptr, ptr, old_size);
+            
+            return new_ptr;
         }
     }
 }
