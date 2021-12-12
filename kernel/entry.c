@@ -133,8 +133,6 @@ static void init_memory(const struct stivale2_struct_tag_memmap* memmap_tag,
 // map lapic & hpet registers
     map_acpi_mmios();
 
-// init kernel heap
-    heap_init();
 }
 
 
@@ -184,11 +182,21 @@ void _start(struct stivale2_struct *stivale2_struct) {
 // after loading our gdt
 // so we need to load our gdt after our
 // terminal is successfully installed 
+    append_paging_initialization();
+    void empty_terminal_handler(const char* s, size_t l) {
+    (void) (s + l);
+    // empty handler by default,
+    // make sure not to execute the address 0 :)
+    }
+    set_terminal_handler(empty_terminal_handler);
+
+// init kernel heap
+    heap_init();
+    
     
     terminal_install_early();
     terminal_set_colors(0xfff0a0, 0x212121);
     
-    append_paging_initialization();
 
     terminal_install_late();
 

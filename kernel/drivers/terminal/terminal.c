@@ -35,7 +35,7 @@ static terminal_handler_t terminal_handler = NULL;
 static bool need_refresh = false;
 
 
-void empty_terminal_handler(const char* s, size_t l) {
+static void empty_terminal_handler(const char* s, size_t l) {
     (void) (s + l);
     // empty handler by default,
     // make sure not to execute the address 0 :)
@@ -73,7 +73,7 @@ static unsigned timerID = INVALID_TIMER_ID;
 
 
 
-//static char*    stream_buffer = NULL;
+static char*    stream_buffer = NULL;
 
 //static unsigned stream_buffer_size = 0;
 //static volatile unsigned stream_buffer_content_size = 0;
@@ -102,10 +102,12 @@ void terminal_remove(void) {
 }
 
 void terminal_install_early(void) {
-    log_debug("install the terminal...");
+    set_terminal_handler(empty_terminal_handler);
 
-    assert(charmap == NULL);
-    assert(char_buffer == NULL);
+//    log_debug("install the terminal...");
+//
+//    assert(charmap == NULL);
+//    assert(char_buffer == NULL);
 
 
     
@@ -125,8 +127,6 @@ void terminal_install_early(void) {
 
     nlines      = TERMINAL_N_PAGES * term_nlines;
 
-    // allocate the terminal buffer
-    char_buffer = malloc(ncols * nlines * sizeof(struct Char));
 
     // calculate the margins 
 #ifdef BIGGER_FONT
@@ -137,15 +137,20 @@ void terminal_install_early(void) {
     margin_top  = (screenImage->h - term_nlines * TERMINAL_FONTHEIGHT) / 2;
 #endif
 
-//    stream_buffer = NULL;//malloc(ncols * term_nlines);
 
-    set_terminal_handler(empty_terminal_handler);
+    // allocate the terminal buffer
+    char_buffer   = malloc(ncols * nlines * sizeof(struct Char) * 10);
+    stream_buffer = malloc(ncols * term_nlines);
+
+
 }
 
 // finish intallation when memory
 // is well initialized
 void terminal_install_late(void) {
     //timerID = apic_create_timer(terminal_update, UPDATE_PERIOD_MS);
+
+    
 
     charmap = loadBMP_24b_1b(&_binary_charmap_bmp);
     
@@ -210,7 +215,7 @@ static void next_line(void) {
         cur_line = nlines-4;
 
         move_buffer(4);
-    }
+    }  
     else if(cur_line >= first_line + term_nlines) {
         first_line++;
         need_refresh = true;
@@ -228,19 +233,18 @@ static struct Char make_Char(char c) {
 
 
 static void emplace_normal_char(char c) {
+    if(cur_col >= ncols) {
+        next_line();
+    }
+    
     char_buffer[ncols * cur_line + cur_col] = make_Char(c);
     
     struct Char* ch = &char_buffer[ncols * cur_line + cur_col];
-    cur_col += 1;
-    
-
-    if(cur_col >= ncols)
-        next_line();
     
     if(!need_refresh)
         print_char(ch, cur_line - first_line, cur_col);
     
-    
+    cur_col += 1;
 }
 
 

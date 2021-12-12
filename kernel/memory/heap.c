@@ -260,6 +260,9 @@ void heap_init(void) {
 void* __attribute__((noinline)) malloc(size_t size) {
     // align the size to assure that 
     // the whole structure is alligned
+
+    printf("malloc(%x)", size);
+
     size = ((size + 7 ) / 8) * 8;
     if(size < MIN_SEGMENT_SIZE)
         size = MIN_SEGMENT_SIZE;
