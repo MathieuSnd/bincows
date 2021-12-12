@@ -8,7 +8,7 @@
 
 static void kbevent_default_handler(const struct kbevent* event) {
     (void) event;
-    log_debug("%c ", event->scancode);
+    log_debug("%c ", event->keycode);
 }
 
 static kbevent_handler handler = kbevent_default_handler;
@@ -105,7 +105,7 @@ static void process_byte(uint8_t b) {
         return;
     struct kbevent ev = {
         .type     = (b&0x80) ? KEYRELEASED : KEYPRESSED,
-        .keycode  = b&0x7f,
+        .scancode  = b&0x7f,
     };
 
     if(ev.keycode == 0x2A) {
@@ -121,11 +121,11 @@ static void process_byte(uint8_t b) {
     }
 
     if(altgr_state)
-        ev.scancode = ps2_azerty_table_altgr[ev.keycode];
+        ev.keycode = ps2_azerty_table_altgr    [ev.scancode];
     else if(is_caps())
-        ev.scancode = ps2_azerty_table_uppercase[ev.keycode];
+        ev.keycode = ps2_azerty_table_uppercase[ev.scancode];
     else
-        ev.scancode = ps2_azerty_table_lowercase[ev.keycode];
+        ev.keycode = ps2_azerty_table_lowercase[ev.scancode];
     
     handler(&ev);
 }
@@ -159,7 +159,6 @@ void ps2kb_init(void) {
     uint8_t config;
     command_byte(0x20); // read config byte command
     config = get_byte();
-    log_debug("zdf");
 
     command_byte(0x6);
     command_byte(config | 1);
