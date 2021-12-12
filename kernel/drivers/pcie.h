@@ -2,6 +2,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include "../lib/assert.h"
 
 struct PCIE_segment_group_descriptor {
     void* address; // Base address 
@@ -12,7 +13,9 @@ struct PCIE_segment_group_descriptor {
     uint8_t end_bus; // End PCI bus number 
         // decoded by this host bridge
     uint32_t reserved;
-};
+} __attribute__((packed));
+
+static_assert(sizeof(struct PCIE_segment_group_descriptor) == 16);
 
 
 #define PCIE_SUPPORTED_SEGMENT_GROUPS 2
@@ -29,6 +32,8 @@ extern struct PCIE_Descriptor pcie_descriptor;
 
 void pcie_init(void);
 void pcie_scan(void);
+void pcie_init_devices(void);
+
 
 
 typedef void (*driver_init_fun)(void* config_space); 

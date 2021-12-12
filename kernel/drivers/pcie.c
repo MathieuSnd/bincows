@@ -12,7 +12,10 @@ struct PCIE_configuration_space {
     volatile uint16_t deviceID;
              uint16_t unused0;
              uint16_t unused1;
-    volatile uint32_t class_code_revID;
+    volatile uint8_t  revID;
+    volatile uint8_t  progIF;
+    volatile uint8_t  subclasscode;
+    volatile uint8_t  classcode;
     volatile uint32_t infos;
     volatile uint64_t bar[3];
     volatile uint32_t cardbud_cis_ptr;
@@ -71,10 +74,10 @@ static struct PCIE_configuration_space* __attribute__((pure)) get_config_space_b
 }
 
 
-static int __attribute__((pure)) check_function(unsigned bus, unsigned device, unsigned func) {
+static int __attribute__((pure)) get_vendorID(unsigned bus, unsigned device, unsigned func) {
     struct PCIE_configuration_space* config_space = get_config_space_base(bus,device,func);
     
-    return config_space->vendorID != 0xffff;
+    return config_space->vendorID;
 }
 
 
@@ -84,12 +87,12 @@ struct pcie_device_descriptor {
 };
 
 // array of all installed devices' functions
-static struct pcie_device_descriptor* installed_devices = NULL;
-static size_t n_installed_devices = 0;
+static struct pcie_device_descriptor* found_devices = NULL;
+static size_t n_found_devices = 0;
 
 
 /**
- * constructs the installed_devices array
+ * constructs the found_devices array
  */
 static void scan_devices(void) {
 
@@ -106,17 +109,13 @@ static void scan_devices(void) {
 // count the number of devices
 
     void insert(
-                unsigned bus, 
-                unsigned device, 
-                unsigned func, 
-                struct PCIE_configuration_space* config_space
-                ) {
-                    
-        current->next = malloc(
-                    sizeof(struct device_desc_node)
-                );
-
-        log_debug("device %u:%u - %u", bus, device, func);
+        unsigned bus, 
+        unsigned device, 
+        unsigned func, 
+        struct PCIE_configuration_space* config_space
+        ) 
+    {            
+        current->next = malloc(sizeof(struct device_desc_node));
 
         current = current->next;
         current->next           = NULL;
@@ -127,7 +126,7 @@ static void scan_devices(void) {
         current->e.function     = func;
         current->e.config_space = config_space;
 
-        n_installed_devices++;
+        n_found_devices++;
     }
 
 
@@ -136,27 +135,39 @@ static void scan_devices(void) {
             
             // if the first function doesn't exist, so does 
             // the device
-            if(!check_function(bus,device, 0))
+            uint16_t vendorID = get_vendorID(bus,device, 0);
+            if(vendorID == 0xFFFF)
                 continue;
 
-            insert(bus, device, 0, get_config_space_base(bus,device,0));
+            insert(bus, 
+                   device, 
+                   0, 
+                   get_config_space_base(bus,device,0)
+            );
             
-            for(unsigned func = 1; func < 8; func++)
-                if(check_function(bus,device, func))
-                    insert(bus, device, func, get_config_space_base(bus,device,func));
+            for(unsigned func = 1; func < 8; func++) {
 
+                if(get_vendorID(bus,device, func) != vendorID)
+                    continue;
+                
+                insert(bus, 
+                       device, 
+                       func, 
+                       get_config_space_base(bus,device,func)
+                );
+            }
         }
     }
     
 
     // now create the final array
-    installed_devices = malloc(
-                    n_installed_devices 
+    found_devices = malloc(
+                    n_found_devices 
                     * sizeof(struct pcie_device_descriptor));
     
 
     // now fill it and free the devices structure
-    struct pcie_device_descriptor* ptr = installed_devices;
+    struct pcie_device_descriptor* ptr = found_devices;
 
     for(struct device_desc_node* device = ghost_node.next;
                                  device != NULL;
@@ -189,7 +200,7 @@ static void identity_map_possible_config_spaces(void) {
 
 static void identity_unmap_possible_config_spaces(void) {
     for(unsigned i = 0; i < pcie_descriptor.size; i++)
-    ;//    unmap_pages((uint64_t)pcie_descriptor.array[i].address, 256 * 32 * 8);
+        unmap_pages((uint64_t)pcie_descriptor.array[i].address, 256 * 32 * 8);
 }
 
 /**
@@ -209,13 +220,33 @@ void pcie_init(void) {
             max_bus = pcie_descriptor.array[i].end_bus;
     }
 
+    log_debug("%u PCIE bus groups found", pcie_descriptor.size);
+
     identity_map_possible_config_spaces();
-    
     scan_devices();
 
 
+    for(unsigned i = 0; i < n_found_devices; i++) {
+        
+        log_warn("%2x:%2x:%2x: %2x:%2x:%2x, rev %2x, "
+                 "vendor 0x%4x", 
+            
+            found_devices[i].bus,
+            found_devices[i].device,
+            found_devices[i].function,
+
+            found_devices[i].config_space->classcode,
+            found_devices[i].config_space->subclasscode,
+            found_devices[i].config_space->progIF,
+            found_devices[i].config_space->revID,
+            
+            found_devices[i].config_space->vendorID
+        );
+    }
+
     identity_unmap_possible_config_spaces();
+    log_info("found %u PCI Express devices", n_found_devices);
+}
 
-
-    log_info("found %u PCI Express devices", n_installed_devices);
+void pcie_init_devices(void) {
 }

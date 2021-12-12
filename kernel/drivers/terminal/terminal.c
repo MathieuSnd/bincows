@@ -73,19 +73,19 @@ static unsigned timerID = INVALID_TIMER_ID;
 
 
 
-static char*    stream_buffer = NULL;
+//static char*    stream_buffer = NULL;
 
-static unsigned stream_buffer_size = 0;
-static volatile unsigned stream_buffer_content_size = 0;
+//static unsigned stream_buffer_size = 0;
+//static volatile unsigned stream_buffer_content_size = 0;
 
 
 // should be called every UPDATE_PERIOD ms
 // should execute in an IRQ
 void terminal_update(void) {
+    return;
     static unsigned update_cur_line = 0;
     
 
-    stream_buffer_content_size = 0;
 
 
     if(need_refresh) {
@@ -137,7 +137,7 @@ void terminal_install_early(void) {
     margin_top  = (screenImage->h - term_nlines * TERMINAL_FONTHEIGHT) / 2;
 #endif
 
-    stream_buffer = malloc(ncols * term_nlines);
+//    stream_buffer = NULL;//malloc(ncols * term_nlines);
 
     set_terminal_handler(empty_terminal_handler);
 }
@@ -145,7 +145,7 @@ void terminal_install_early(void) {
 // finish intallation when memory
 // is well initialized
 void terminal_install_late(void) {
-    timerID = apic_create_timer(terminal_update, UPDATE_PERIOD_MS);
+    //timerID = apic_create_timer(terminal_update, UPDATE_PERIOD_MS);
 
     charmap = loadBMP_24b_1b(&_binary_charmap_bmp);
     
@@ -231,6 +231,7 @@ static void emplace_normal_char(char c) {
     char_buffer[ncols * cur_line + cur_col] = make_Char(c);
     
     struct Char* ch = &char_buffer[ncols * cur_line + cur_col];
+    cur_col += 1;
     
 
     if(cur_col >= ncols)
@@ -240,7 +241,6 @@ static void emplace_normal_char(char c) {
         print_char(ch, cur_line - first_line, cur_col);
     
     
-    cur_col += 1;
 }
 
 
@@ -321,10 +321,6 @@ static void print_char(const struct Char* restrict c, int line, int col) {
                 margin_top  + line * TERMINAL_LINE_HEIGHT);
 #endif
 
-    //imageDraw(charmap, NULL, NULL);
-
-    //imageFillRect(c->bg_color, &interlineRect);
-    
 }
 
 static void flush_screen(void) {
@@ -339,7 +335,7 @@ static void flush_screen(void) {
 }
 
 
-
+/*
 // add the string to the buffer
 static void append_string(const char *string, size_t length) {
 // atomic operation
@@ -353,11 +349,11 @@ static void append_string(const char *string, size_t length) {
 
     _sti();
 }
-
+*/
 
 
 static void write_string(const char *string, size_t length) {
-    //need_refresh = false;
+    need_refresh = false;
 
     for(;length>0;--length) {
         char c = *string++;
@@ -367,8 +363,8 @@ static void write_string(const char *string, size_t length) {
         emplace_char(c);
 
     }
-    //if(need_refresh)
-    //    flush_screen();
+    if(need_refresh)
+        flush_screen();
 }
 
 

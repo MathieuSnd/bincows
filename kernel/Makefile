@@ -7,25 +7,30 @@ CFLAGS = -Wall -Wextra -O3 -pipe
 
 INTERNALLDFLAGS :=  -Tlinker.ld            \
 					-nostdlib              \
-					-Wl,--export-dynamic \
+					-Wl,--export-dynamic   \
 					-zmax-page-size=0x1000 \
 					-static                \
 					-pie                   \
 					-ztext
 #				,--dynamic-linker 
 
-INTERNALCFLAGS  :=  -mgeneral-regs-only \
-					-ffreestanding      \
-					-mno-red-zone       \
-					-mno-80387           \
-					-fno-omit-frame-pointer \
-					-std=gnu11 			\
-					-Wall -Wextra       \
+INTERNALCFLAGS  :=  -mgeneral-regs-only    \
+					-ffreestanding         \
+					-mno-red-zone          \
+					-mno-80387             \
+					-fno-omit-frame-pointer\
+					-std=gnu11 			   \
+					-Wall -Wextra          \
 					-fcompare-debug-second \
 					-I/opt/cross/include/  \
+					-I../lai/include       \
 					-fpie                  \
-#					-D BIGGER_FONT
- 
+					-D BIGGER_FONT
+
+
+LAI_FILE := ../lai/lai.elf
+
+
 CFILES := $(shell find ./ -type f -name '*.c')
 SFILES := $(shell find ./ -type f -name '*.s')
 OBJ    :=  $(SFILES:.s=.s.o) $(CFILES:.c=.c.o)
@@ -39,9 +44,10 @@ all: $(KERNEL)
 
 
 
+
  
 $(KERNEL): $(OBJ) $(LDSCRIPT)
-	$(CC) $(INTERNALLDFLAGS) $(OBJ) -o $@
+	$(CC) $(INTERNALLDFLAGS) $(OBJ) $(LAI_FILE) -o $@
  
 
 %.c.o: %.c

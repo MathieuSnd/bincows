@@ -10,7 +10,7 @@ USED_LOOPBACK := /dev/loop2
 
 LIMINE_INSTALL := ./limine-bootloader/limine-install-linux-x86_64
 
-QEMU_PATH := qemu-system-x86_64
+QEMU_PATH := qemu-system-x86_64 -accel kvm
 
 QEMU_ARGS := -monitor stdio \
 			 -bios /usr/share/ovmf/OVMF.fd \
@@ -19,7 +19,8 @@ QEMU_ARGS := -monitor stdio \
 			 -vga virtio \
 			 -no-reboot \
 			 -D qemu.log \
-			-drive format=raw,file=
+			 -device nvme,drive=NVME1,serial=nvme-1 \
+			 -drive format=raw,if=none,id=NVME1,file=
 #			 -usb \
 #			 -device usb-host \
 

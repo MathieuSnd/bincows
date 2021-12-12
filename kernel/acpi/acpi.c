@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+
 #include "acpi.h"
 #include "../lib/common.h"
 #include "../lib/assert.h"
@@ -20,6 +21,8 @@ static void* apic_config_base, *hpet_config_space;
 // defined in pcie.c
 extern struct PCIE_Descriptor pcie_descriptor;
 
+static const struct XSDT* xsdt;
+
 
 static bool __ATTR_PURE__ checksum(const void* table, size_t size) {
     uint8_t sum = 0;
@@ -36,10 +39,13 @@ static void parse_hpet(const struct HPET* table);
 static void parse_fadt(const struct ACPISDTHeader* table);
 static void parse_pcie(const struct PCIETable* table);
 
+const struct XSDT* get_xsdt_location(void) {
+    return xsdt;
+}
+
 
 void read_acpi_tables(const void* rsdp_location) {
     const struct RSDPDescriptor20* rsdpd = rsdp_location;
-
 
     assert(rsdpd->firstPart.revision >= 2);
     
@@ -49,7 +55,7 @@ void read_acpi_tables(const void* rsdp_location) {
 
 
     // lets parse it!!
-    const struct XSDT* xsdt = (void *)rsdpd->xsdtAddress;
+    xsdt = (void *)rsdpd->xsdtAddress;
 
 
     size_t n_entries = (xsdt->header.length - sizeof(xsdt->header)) / sizeof(void*);
@@ -141,7 +147,6 @@ static void parse_madt(const struct MADT* table) {
                 break;
             case APIC_TYPE_IO_INTERRUPT_SOURCE_OVERRIDE:
                 {
-                    log_debug("ISSOU");
                     // const struct MADT_ioapic_interrupt_source_override_entry* entry = ptr;
                 }
                 break;
@@ -180,7 +185,7 @@ static void parse_madt(const struct MADT* table) {
 
 static void parse_pcie(const struct PCIETable* table) {
     // fill the pcie driver's descriptor 
-    size_t size = (table->header.length-sizeof(table->header));
+    size_t size = (table->header.length-sizeof(struct ACPISDTHeader)-8);
 
     pcie_descriptor.size = size / sizeof(struct PCIE_segment_group_descriptor);
     

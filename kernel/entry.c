@@ -6,6 +6,7 @@
 #include "drivers/terminal/video.h"
 #include "drivers/terminal/terminal.h"
 #include "acpi/acpi.h"
+#include "acpi/power.h"
 #include "int/apic.h"
 #include "int/idt.h"
 #include "int/pic.h"
@@ -193,21 +194,24 @@ void _start(struct stivale2_struct *stivale2_struct) {
 
         
     puts(&_binary_bootmessage_txt);
+
+    asm volatile("hlt");
     
     printf("boot logs:\n");
     puts(log_get());
     log_flush();
 
-    dump(boot_volume_tag, sizeof(struct stivale2_struct_tag_boot_volume), 8, DUMP_HEX8);
-    //log_info("boot volume: %x:%x:%x:%lx", 
-    //        boot_volume_tag->guid.a,
-    //        boot_volume_tag->guid.b,
-    //        boot_volume_tag->guid.c,
-    //        *(uint64_t*)boot_volume_tag->guid.d);
-//
-    //pcie_init();
+    pcie_init();
+    pcie_init_devices();
     pic_init();
     ps2kb_init();
+
+    void kbhandler(const struct kbevent* ev) {
+        if(ev->type == KEYRELEASED && ev->scancode == PS2KB_ESCAPE) {
+            shutdown();
+        }
+    };
+    ps2kb_set_event_callback(kbhandler);
 
     hpet_init();
     apic_setup_clock();

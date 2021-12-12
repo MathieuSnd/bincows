@@ -257,7 +257,7 @@ void heap_init(void) {
 }
 
 
-void* malloc(size_t size) {
+void* __attribute__((noinline)) malloc(size_t size) {
     // align the size to assure that 
     // the whole structure is alligned
     size = ((size + 7 ) / 8) * 8;
@@ -274,7 +274,9 @@ void* malloc(size_t size) {
             break;
         }
 
-        else if(!seg->free || seg->size < size) {    
+        assert(is_kernel_memory(seg));
+
+        if(!seg->free || seg->size < size) {    
             // this segment is not right, check the next one
             pred = seg;
             
@@ -287,7 +289,6 @@ void* malloc(size_t size) {
         }
 
         // we found a satisfying segment!
-
         if(seg->size >= size + sizeof(seg_header) + MIN_SEGMENT_SIZE) {
             // we don't take the whole space
 
@@ -323,7 +324,6 @@ void* malloc(size_t size) {
     // let's expand
 
     expand_heap(MAX(size+sizeof(seg_header), MIN_EXPAND_SIZE));
-
 // retrty now that we are sure that the memory is avaiable
     return malloc(size);
 }
@@ -391,7 +391,7 @@ void* realloc(void* ptr, size_t size) {
 
 
 // O(1) free
-void free(void *ptr) {
+void __attribute__((noinline))  free(void *ptr) {
     seg_header* header = ptr - sizeof(seg_header);
     
     assert(header->free == 0);
@@ -407,17 +407,27 @@ void free(void *ptr) {
 
 
 #ifndef NDEBUG
+
+void print_heap(void) {
+    for(seg_header* seg = current_segment; 
+                    seg != NULL;
+                    seg = seg->next) {
+        log_debug("%lx size=%x,free=%u", seg,seg->size, seg->free);
+    }
+}
+
 void malloc_test(void) {
+
     void* arr[128];
 
     uint64_t size = 5;
-    
+
     for(int j = 0; j < 100; j++) {
         for(int i = 0; i < 128; i++) {
             arr[i] = malloc(size % 1024);
-            
             size = (16807 * size) % ((1lu << 31) - 1);
         }
+        
         for(int i = 0; i < 128; i++)
             free(arr[i]);
     }
