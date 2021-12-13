@@ -277,7 +277,7 @@ void* __attribute__((noinline)) malloc(size_t size) {
             break;
         }
 
-        assert(is_kernel_memory(seg));
+        assert(is_kernel_memory((uint64_t)seg));
 
         if(!seg->free || seg->size < size) {    
             // this segment is not right, check the next one

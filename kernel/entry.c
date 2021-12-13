@@ -12,8 +12,9 @@
 #include "int/pic.h"
 
 #include "drivers/hpet.h"
-#include "drivers/pcie.h"
 #include "drivers/ps2kb.h"
+#include "drivers/pcie/pcie.h"
+#include "drivers/pcie/scan.h"
 
 #include "memory/physical_allocator.h"
 #include "memory/paging.h"
@@ -210,7 +211,7 @@ void _start(struct stivale2_struct *stivale2_struct) {
     log_flush();
 
     pcie_init();
-    pcie_init_devices();
+    
     pic_init();
     ps2kb_init();
 

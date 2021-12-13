@@ -4,21 +4,24 @@
 
 
 #include "acpi.h"
+#include "acpitables.h"
+
 #include "../lib/common.h"
 #include "../lib/assert.h"
 #include "../lib/dump.h"
 #include "../lib/sprintf.h"
 #include "../lib/string.h"
-#include "acpitables.h"
 #include "../int/apic.h"
+#include "../lib/logging.h"
+
 #include "../memory/vmap.h"
 #include "../memory/paging.h"
-#include "../drivers/pcie.h"
-#include "../lib/logging.h"
+
+#include "../drivers/pcie/scan.h"
 
 static void* apic_config_base, *hpet_config_space;
 
-// defined in pcie.c
+// defined in pcie/scan.c
 extern struct PCIE_Descriptor pcie_descriptor;
 
 static const struct XSDT* xsdt;
@@ -187,7 +190,7 @@ static void parse_pcie(const struct PCIETable* table) {
     // fill the pcie driver's descriptor 
     size_t size = (table->header.length-sizeof(struct ACPISDTHeader)-8);
 
-    pcie_descriptor.size = size / sizeof(struct PCIE_segment_group_descriptor);
+    pcie_descriptor.size = size / sizeof(struct PCIE_busgroup);
     
     
     assert(pcie_descriptor.size < PCIE_SUPPORTED_SEGMENT_GROUPS);

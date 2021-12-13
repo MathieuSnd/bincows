@@ -4,7 +4,7 @@
 #include <stdint.h>
 
 #include "../lib/common.h"
-#include "../drivers/pcie.h"
+#include "../drivers/pcie/scan.h"
 
 struct RSDPDescriptor {
     uint8_t  signature[8];
@@ -141,13 +141,13 @@ struct MADT {
 
 
 static_assert(
-    sizeof(struct PCIE_segment_group_descriptor) == 16);
+    sizeof(struct PCIE_busgroup) == 16);
 
 struct PCIETable {
     struct ACPISDTHeader header;
     uint64_t reserved0;
 
-    struct PCIE_segment_group_descriptor segments[];
+    struct PCIE_busgroup segments[];
 } __packed;
 
 
