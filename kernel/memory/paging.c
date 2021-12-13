@@ -558,16 +558,18 @@ void map_pages(uint64_t physical_addr,
     internal_map_pages(physical_addr, virtual_addr, count, flags);
 }
 
-// return 1 if any of the page entries is present
-int is_range_unmapped(pte* page_table, unsigned begin, unsigned end) {
+// return 1 iif the no entry is present in the range
+static int is_table_empty(pte* page_table, unsigned begin, unsigned end) {
+    assert(begin <= end);
+    assert(end <= 512);
 
     pte* translated = translate_address(page_table);
 
     for(unsigned i = begin; i < end; i++) {
         if(present_entry(translated[i]))
-            return 1;
+            return 0;
     }
-    return 0;
+    return 1;
 }
 
 void unmap_pages(uint64_t virtual_addr, size_t count) {
@@ -607,22 +609,23 @@ void unmap_pages(uint64_t virtual_addr, size_t count) {
                 panic(buff);
             }
 
+            // actually erase the entry
+            *entry_ptr = 0;
+
             pti++;
             count--;
             virtual_addr  += 0x1000;      
         }
-        
+        /*
         unsigned end = pti;
-
         // unmap the page map if empty
-        if(is_range_unmapped(pdentry, 0, begin))
-            continue;
-        if(is_range_unmapped(pdentry, end, 512))
-            continue;
-        
-        // the page table contains no entry
-        // let's free it
-        physfree(pdentry);
-
+        if(is_table_empty(pdentry, 0, begin) &&
+           is_table_empty(pdentry, end, 512))
+        {
+            // the page table contains no entry
+            // let's free it
+//            physfree(pdentry);
+        }
+        */
     }
 }

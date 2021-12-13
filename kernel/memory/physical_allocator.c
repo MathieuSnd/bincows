@@ -107,6 +107,9 @@ static void init_memory_range(struct memory_range* range, uint64_t addr, size_t 
 
     // zero all the bit maps
     memset(header->bitmap_level3, 0, 128+256+512+2048);
+    memset(addr+0x1000, 
+            0xff, 
+            range->length);
 
     // we use one page per region for the header
     header->available[0] = (length-1);
@@ -137,11 +140,10 @@ void init_physical_allocator(const struct stivale2_struct_tag_memmap* memmap) {
     for(unsigned i = 0; i < memmap->entries; i++) {
 
         const struct stivale2_mmap_entry e = memmap->memmap[i];
+    // memory ranges in account
         
     // dont take kernel & modules or acpi reclaimable
-    // memory ranges in account
         if(e.type == STIVALE2_MMAP_USABLE) {
-            
 
         // ceil the size to the number of pages
 
@@ -160,6 +162,7 @@ void init_physical_allocator(const struct stivale2_struct_tag_memmap* memmap) {
 
             while(size > 0) {
 
+
                 size_t s;// the actual size of the current 
 
                 if(size > MAX_SIZE)
@@ -168,6 +171,7 @@ void init_physical_allocator(const struct stivale2_struct_tag_memmap* memmap) {
                     break;
                 else
                     s = size;
+
 
                 struct memory_range* range = &memory_ranges_buffer[j++];
                 init_memory_range(range, base, s);

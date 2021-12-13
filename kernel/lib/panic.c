@@ -3,6 +3,7 @@
 #include "../drivers/terminal/terminal.h"
 #include "../drivers/ps2kb.h"
 #include "../acpi/power.h"
+#include "../memory/vmap.h"
 
 
 int zero = 0;
@@ -17,16 +18,28 @@ static inline __attribute__((always_inline)) void stack_trace(void) {
     puts("backtrace:\n");
     
     for(unsigned i = 0; i < MAX_STACK_TRACE; i++) {
+        //printf("oui. %lx ", ptr);
         
         if(*ptr == 0) // reached the top
             break;
-        printf("\t%llx \n", *(ptr+1));
+        
+        void* rip = *(ptr+1);
+        if(!is_kernel_memory(rip)) {
+            //maybe it is an exception error code
+            rip = *(ptr+2);
+            
+            printf("   %llx - EXCEPTION\n", rip);
+        }
+        else
+            printf("   %llx\n", rip);
+
 
         ptr = *ptr;
     }
 }
 
 __attribute__((noreturn)) void panic(const char* panic_string) {
+
     // checks if video is operationnal
     if(get_terminal_handler() != NULL) {
         terminal_set_colors(0xfff0a0, 0x400000);
@@ -52,7 +65,6 @@ __attribute__((noreturn)) void panic(const char* panic_string) {
         ps2kb_poll_wait_for_key(PS2KB_ESCAPE);
         shutdown();
     }
-    
     asm volatile("cli");
     asm volatile("hlt");
     

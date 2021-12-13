@@ -1,5 +1,6 @@
 #include "../lib/registers.h"
 #include "../lib/assert.h"
+#include "../lib/logging.h"
 #include "pic.h"
 
 
@@ -38,8 +39,16 @@ static void io_wait(void) {
 static uint16_t mask = 0xff;
 
 void pic_init(void) {
-
+	log_debug("init PIC...");
     outb(0x80, 0);
+
+// 0x343
+// 34*2=68
+
+    // mask all interrupts
+	// if already initialized
+	outb(PIC1_DATA, 0xff); 
+	outb(PIC2_DATA, 0xff); 
 
 	outb(PIC1_COMMAND, ICW1_INIT | ICW1_ICW4);  
     // starts the initialization sequence (in cascade mode)
@@ -49,6 +58,7 @@ void pic_init(void) {
 	outb(PIC1_DATA, 16);                 
     // ICW2: Master PIC vector offset
 	io_wait();
+
 
 	outb(PIC2_DATA, 24);                 
     // ICW2: Slave PIC vector offset

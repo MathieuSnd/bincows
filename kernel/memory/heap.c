@@ -260,9 +260,6 @@ void heap_init(void) {
 void* __attribute__((noinline)) malloc(size_t size) {
     // align the size to assure that 
     // the whole structure is alligned
-
-    printf("malloc(%x)", size);
-
     size = ((size + 7 ) / 8) * 8;
     if(size < MIN_SEGMENT_SIZE)
         size = MIN_SEGMENT_SIZE;
@@ -425,9 +422,9 @@ void malloc_test(void) {
 
     uint64_t size = 5;
 
-    for(int j = 0; j < 100; j++) {
+    for(int j = 0; j < 4000; j++) {
         for(int i = 0; i < 128; i++) {
-            arr[i] = malloc(size % 1024);
+            arr[i] = malloc(size % (1024*1024));
             size = (16807 * size) % ((1lu << 31) - 1);
         }
         

@@ -1,6 +1,7 @@
 #include "power.h"
 #include "../lib/assert.h"
 #include "../drivers/ps2kb.h"
+#include "../int/idt.h"
 
 static void (*funcs[MAX_SHUTDOWN_FUNCS])(void);
 static int n_funcs = 0;

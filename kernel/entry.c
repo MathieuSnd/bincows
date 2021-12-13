@@ -204,20 +204,24 @@ void _start(struct stivale2_struct *stivale2_struct) {
         
     puts(&_binary_bootmessage_txt);
 
-    asm volatile("hlt");
     
     printf("boot logs:\n");
     puts(log_get());
     log_flush();
 
     pcie_init();
-    
+
+
     pic_init();
     ps2kb_init();
 
     void kbhandler(const struct kbevent* ev) {
         if(ev->type == KEYRELEASED && ev->scancode == PS2KB_ESCAPE) {
             shutdown();
+            __builtin_unreachable();
+        }
+        if(ev->type == KEYPRESSED && ev->keycode != 0) {
+            printf("%c", ev->keycode);
         }
     };
     ps2kb_set_event_callback(kbhandler);

@@ -31,6 +31,6 @@ struct PCIE_Descriptor {
 extern struct PCIE_Descriptor pcie_descriptor;
 
 
-struct pcie_device* pcie_scan(void);
+struct pcie_dev* pcie_scan(unsigned* size);
 
 

@@ -25,7 +25,7 @@ INTERNALCFLAGS  :=  -mgeneral-regs-only    \
 					-I/opt/cross/include/  \
 					-I../lai/include       \
 					-fpie                  \
-					-D BIGGER_FONT
+#					-D BIGGER_FONT
 
 
 LAI_FILE := ../lai/lai.elf

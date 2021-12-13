@@ -223,6 +223,10 @@ void * memcpy (void* restrict _dest,
 void * memset (void * _buf, int _ch, size_t n) {
     uint8_t ch = *(uint8_t*)(&_ch);
     uint8_t* buf = _buf;
+    
+    for(;n > 0; --n)
+        *(buf++) = ch;
+    return buf;
 
     // first unaligned bytes
     for(;n > 0 && (uint64_t)buf % 8 != 0; --n)
