@@ -1,11 +1,15 @@
 #include <lai/host.h>
-// this file impelments the functions needed 
-// by the LAI library
+#include "acpitables.h"
+#include "acpi.h"
 
 #include "../lib/panic.h"
 #include "../lib/logging.h"
+#include "../lib/sprintf.h"
 #include "../memory/heap.h"
-#include "acpitables.h"
+
+// this file impelments the functions needed 
+// by the LAI library
+
 
 // OS-specific functions.
 void *laihost_malloc(size_t s) {
@@ -33,17 +37,18 @@ void laihost_panic(const char* msg) {
 
 // only called early: 
 void *laihost_scan(char * name, size_t c) {
-    const struct XSDT* xsdt = get_xsdt_location();
+    struct XSDT* xsdt = get_xsdt_location();
 
     size_t n_entries = (xsdt->header.length - sizeof(xsdt->header)) / sizeof(void*);
 
-    const uint32_t* raw = (uint32_t*)name;
+    uint32_t* raw = (uint32_t*)name;
     
     for(size_t i = 0; i < n_entries; i++) {
-        const struct ACPISDTHeader* table = xsdt->entries[i];
+        struct ACPISDTHeader* table = xsdt->entries[i];
 
         if(*raw == table->signature.raw)
-            return table;
+            if(c-- == 0)
+                return table;
     }
 
 // no such table

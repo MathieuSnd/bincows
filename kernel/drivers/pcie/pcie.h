@@ -6,8 +6,6 @@
 #include "../../lib/assert.h"
 
 void pcie_init(void);
-void pcie_init_devices(void);
-
 
 
 typedef void (*driver_init_fun)(void* config_space); 
@@ -46,8 +44,9 @@ static_assert_equals(sizeof(pcie_path_t), 8);
 
 
 struct pcie_dev {
-    struct resource bars[3];
+    struct resource* resources;
     struct dev_info info;
+    const char* name;
     
     void* config_space;
 
@@ -57,17 +56,35 @@ struct pcie_dev {
 
 };
 
-struct driver {
-    driver_init_fun install;
-    driver_callback remove;
-    
-    const char* driver_name;
-    uint32_t status;
-
-
-    struct resource data;
+struct pcie_driver {
     const struct pcie_device* dev;
 };
+
+struct PCIE_config_space {
+    volatile uint16_t vendorID;
+    volatile uint16_t deviceID;
+             uint16_t unused0;
+             uint16_t unused1;
+    volatile uint8_t  revID;
+    volatile uint8_t  progIF;
+    volatile uint8_t  subclasscode;
+    volatile uint8_t  classcode;
+             uint16_t reserved3;
+    volatile uint16_t header_type;
+    volatile uint8_t  BIST;
+    volatile uint32_t bar[6];
+    volatile uint32_t cardbud_cis_ptr;
+    volatile uint16_t subsystemID;
+    volatile uint16_t subsystem_vendorID;
+    volatile uint32_t expansion_base;
+    volatile uint8_t  capabilities;
+             uint8_t  reserved0[3];
+             uint32_t reserved1;
+    volatile uint8_t  interrupt_line;
+    volatile uint8_t  interrupt_pin;
+             uint16_t reserved5[2];
+} __packed;
+
 
 
 /**

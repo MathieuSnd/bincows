@@ -132,6 +132,8 @@ static void process_byte(uint8_t b) {
 
 
 static void __attribute__((interrupt)) irq_handler(void* r) {
+    (void) r;
+
     uint8_t status = inb(0x64);
     
     // sometimes, interrupts
@@ -146,7 +148,7 @@ static void __attribute__((interrupt)) irq_handler(void* r) {
 void ps2kb_init(void) {
     
     log_debug("init ps/2 keyboard...");
-    set_irq_handler(17, irq_handler);
+    set_irq_handler(33, irq_handler);
     
     unsigned status = inb(0x64);
     if(status & 0xc0) {

@@ -62,40 +62,69 @@ static uint64_t apic_timer_clock_count = 0;
 
 // 1 ms
 #define CLOCK_FREQUENCY 1
-struct timer {
+typedef struct {
     unsigned period;    
     unsigned counter;
     void (*func)(void);
-};
+    char exists;
+} timer_t;
+
 
 // realloc(NULL, s) ~ malloc(s)
-static struct timer* timers = NULL;
+timer_t* timers = NULL;
 static unsigned n_timers = 0;
 static unsigned buffsize = 0;
+
+
+static void timers_realloc(void) {
+    
+    if(n_timers == 0) {
+        // performs a free
+        buffsize = 0;
+    }
+    
+    if(n_timers > buffsize)
+        buffsize *= 2;
+    
+    else if(n_timers < buffsize / 2)
+        buffsize /= 2;
+    
+    timers = realloc(timers, buffsize*sizeof(timer_t));
+}
 
 
 unsigned apic_create_timer(void (*fun)(void), int millisecs) {
     unsigned id = n_timers++;
 
-    if(n_timers > buffsize) {
-        buffsize *= 2;
-        timers = realloc(timers, buffsize);
-    }
+    timers_realloc();
 
     timers[id].counter = 0;
     timers[id].period  = millisecs * CLOCK_FREQUENCY;
-    timers[id].func    = fun; 
+    timers[id].func    = fun;
+
+    timers[id].exists  = 1;
+
+    return id;
 }
 
 int apic_delete_timer(unsigned id) {
     if(id >= n_timers)
         return 0;
-    n_timers--;
+    timers[id].exists = 0;
 
-    memmove(timers+id, timers+id+1, (n_timers - id) * sizeof(struct timer));
-    if(n_timers < buffsize/2) {
-        buffsize /= 2;
-        timers = realloc(timers, buffsize);
+    // check if we can free the end of the list 
+
+    // end of the list: 
+    // timers[timer_end -> n_timers-1].exist = 0
+    char timer_end = 0; 
+    for(int i = 0; i < n_timers; i++) {
+        if(timers[i].exists)
+            timer_end = i+1;
+    } 
+
+    if(timer_end != timer_end) {
+        n_timers = timer_end;
+        timers_realloc();
     }
 
     return 1;

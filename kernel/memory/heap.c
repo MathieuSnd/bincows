@@ -354,6 +354,11 @@ static void realloc_shrink(seg_header* header, size_t size) {
 void* realloc(void* ptr, size_t size) {
     if(ptr == NULL)
         return malloc(size);
+    if(size == 0) {
+        free(ptr);
+        return NULL;
+    }
+
     
     seg_header* header = ptr - sizeof(seg_header);
     if(size <= header->size) {// no need to move

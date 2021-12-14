@@ -24,7 +24,7 @@ static void* apic_config_base, *hpet_config_space;
 // defined in pcie/scan.c
 extern struct PCIE_Descriptor pcie_descriptor;
 
-static const struct XSDT* xsdt;
+static struct XSDT* xsdt;
 
 
 static bool __ATTR_PURE__ checksum(const void* table, size_t size) {
@@ -42,7 +42,7 @@ static void parse_hpet(const struct HPET* table);
 static void parse_fadt(const struct ACPISDTHeader* table);
 static void parse_pcie(const struct PCIETable* table);
 
-const struct XSDT* get_xsdt_location(void) {
+struct XSDT* get_xsdt_location(void) {
     return xsdt;
 }
 

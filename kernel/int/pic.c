@@ -40,27 +40,17 @@ static uint16_t mask = 0xff;
 
 void pic_init(void) {
 	log_debug("init PIC...");
-    outb(0x80, 0);
 
-// 0x343
-// 34*2=68
-
-    // mask all interrupts
-	// if already initialized
-	outb(PIC1_DATA, 0xff); 
-	outb(PIC2_DATA, 0xff); 
+	_cli();
 
 	outb(PIC1_COMMAND, ICW1_INIT | ICW1_ICW4);  
     // starts the initialization sequence (in cascade mode)
-	io_wait();
 	outb(PIC2_COMMAND, ICW1_INIT | ICW1_ICW4);
-	io_wait();
-	outb(PIC1_DATA, 16);                 
+	outb(PIC1_DATA, 32);                 
     // ICW2: Master PIC vector offset
-	io_wait();
 
 
-	outb(PIC2_DATA, 24);                 
+	outb(PIC2_DATA, 40);                 
     // ICW2: Slave PIC vector offset
 	io_wait();
 	outb(PIC1_DATA, 4);                       
@@ -80,6 +70,7 @@ void pic_init(void) {
 	outb(PIC1_DATA, 0xff); 
 	outb(PIC2_DATA, 0xff); 
 
+	_sti();
 
 }
 

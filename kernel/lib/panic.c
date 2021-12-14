@@ -24,7 +24,7 @@ static inline __attribute__((always_inline)) void stack_trace(void) {
             break;
         
         void* rip = *(ptr+1);
-        if(!is_kernel_memory(rip)) {
+        if(!is_kernel_memory((uint64_t)rip)) {
             //maybe it is an exception error code
             rip = *(ptr+2);
             

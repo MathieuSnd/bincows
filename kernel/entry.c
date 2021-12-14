@@ -147,13 +147,13 @@ void _start(struct stivale2_struct *stivale2_struct) {
     const struct stivale2_struct_tag_memmap*      memmap_tag;
     const struct stivale2_struct_tag_framebuffer* framebuffer_tag;
     const struct stivale2_struct_tag_rsdp*        rsdp_tag_ptr;
-    const struct stivale2_struct_tag_boot_volume* boot_volume_tag;
+    //const struct stivale2_struct_tag_boot_volume* boot_volume_tag;
 
     term_str_tag    = stivale2_get_tag(stivale2_struct, STIVALE2_STRUCT_TAG_TERMINAL_ID);
     memmap_tag      = stivale2_get_tag(stivale2_struct, STIVALE2_STRUCT_TAG_MEMMAP_ID);
     framebuffer_tag = stivale2_get_tag(stivale2_struct, STIVALE2_STRUCT_TAG_FRAMEBUFFER_ID);
     rsdp_tag_ptr    = stivale2_get_tag(stivale2_struct, STIVALE2_STRUCT_TAG_RSDP_ID);
-    boot_volume_tag = stivale2_get_tag(stivale2_struct, 0x9b4358364c19ee62);
+    //boot_volume_tag = stivale2_get_tag(stivale2_struct, 0x9b4358364c19ee62);
     
 
     // term_str_tag == NULL is not a blocking

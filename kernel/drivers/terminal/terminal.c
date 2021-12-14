@@ -83,7 +83,7 @@ static char*    stream_buffer = NULL;
 // should execute in an IRQ
 void terminal_update(void) {
     return;
-    static unsigned update_cur_line = 0;
+    //static unsigned update_cur_line = 0;
     
 
 
@@ -95,11 +95,6 @@ void terminal_update(void) {
     // flush the buffer
 }
 
-
-
-void terminal_remove(void) {
-    apic_delete_timer(timerID);
-}
 
 void terminal_install_early(void) {
     set_terminal_handler(empty_terminal_handler);
@@ -148,7 +143,7 @@ void terminal_install_early(void) {
 // finish intallation when memory
 // is well initialized
 void terminal_install_late(void) {
-    //timerID = apic_create_timer(terminal_update, UPDATE_PERIOD_MS);
+    timerID = apic_create_timer(terminal_update, UPDATE_PERIOD_MS);
 
     
 
@@ -158,6 +153,15 @@ void terminal_install_late(void) {
     set_terminal_handler(write_string);
 
     terminal_clear();
+}
+
+void terminal_remove(void) {
+    bmp_free(charmap);
+    free(char_buffer);
+    free(stream_buffer);
+    
+    if(timerID != INVALID_TIMER_ID)
+        apic_remove_timer(timerID);
 }
 
 
