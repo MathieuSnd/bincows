@@ -65,18 +65,20 @@ static uint64_t apic_timer_clock_count = 0;
 typedef struct {
     unsigned period;    
     unsigned counter;
-    void (*func)(void);
     char exists;
+    
+    void (*func)(void*);
+    void*    param;
 } timer_t;
 
 
 // realloc(NULL, s) ~ malloc(s)
 timer_t* timers = NULL;
 static unsigned n_timers = 0;
-static unsigned buffsize = 0;
 
 
 static void timers_realloc(void) {
+    static unsigned buffsize = 0;
     
     if(n_timers == 0) {
         // performs a free
@@ -93,7 +95,7 @@ static void timers_realloc(void) {
 }
 
 
-unsigned apic_create_timer(void (*fun)(void), int millisecs) {
+unsigned apic_create_timer(timer_callback_t fun, int millisecs, void* param) {
     unsigned id = n_timers++;
 
     timers_realloc();
@@ -101,6 +103,7 @@ unsigned apic_create_timer(void (*fun)(void), int millisecs) {
     timers[id].counter = 0;
     timers[id].period  = millisecs * CLOCK_FREQUENCY;
     timers[id].func    = fun;
+    timers[id].func    = param;
 
     timers[id].exists  = 1;
 
@@ -116,13 +119,13 @@ int apic_delete_timer(unsigned id) {
 
     // end of the list: 
     // timers[timer_end -> n_timers-1].exist = 0
-    char timer_end = 0; 
-    for(int i = 0; i < n_timers; i++) {
+    unsigned timer_end = 0; 
+    for(unsigned i = 0; i < n_timers; i++) {
         if(timers[i].exists)
             timer_end = i+1;
     } 
 
-    if(timer_end != timer_end) {
+    if(n_timers != timer_end) {
         n_timers = timer_end;
         timers_realloc();
     }
@@ -131,13 +134,14 @@ int apic_delete_timer(unsigned id) {
 }
 
 
-__attribute__((interrupt)) void lapic_timer_handler(struct IFrame* frame) {
+__attribute__((interrupt)) 
+void lapic_timer_handler(struct IFrame* frame) {
     (void) frame;
     ++apic_timer_clock_count;
 
     for(unsigned i = 0; i < n_timers; i++) {
         if(++timers[i].counter >= timers[i].period) {
-            timers[i].func();
+            timers[i].func(timers[i].param);
             timers[i].counter = 0;
         }
     }

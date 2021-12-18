@@ -10,8 +10,10 @@
 void apic_setup_clock(void);
 uint64_t clock(void);
 
+typedef void (* timer_callback_t)(void *);
+
 // return the id of the created timer
-unsigned apic_create_timer(void (*)(void), int millisecs);
+unsigned apic_create_timer(timer_callback_t, int millisecs, void* param);
 
 // zero if it couldn't be deleted
 int apic_delete_timer(unsigned id);
