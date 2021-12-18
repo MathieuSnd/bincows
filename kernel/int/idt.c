@@ -35,6 +35,7 @@ typedef struct {
    uint32_t    zero;      // reserved
 } __packed IDTE;
 
+static_assert_equals(sizeof(IDTE), 16);
 
 
 IDTE idt[256] = {0};
