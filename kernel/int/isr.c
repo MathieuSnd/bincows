@@ -7,8 +7,6 @@
 extern uint64_t _cr2(void);
 
 
-
-
 static void print_frame(char* buff, struct IFrame* interrupt_frame) {
     sprintf(buff,
         "RIP: %16lx\n"
@@ -33,65 +31,60 @@ static void panic_handler(const char* name,struct IFrame* interrupt_frame) {
     __builtin_unreachable();
 }
 
-__attribute__((interrupt)) void ISR_general_handler(struct IFrame* interrupt_frame) {
-    panic_handler("ISR_general_handler", interrupt_frame);
-}
-__attribute__((interrupt)) void ISR_error_handler(struct IFrame* interrupt_frame, uint64_t error_code) {
-    (void) error_code;
-    printf("ERROR CODE: 0x%lx\n", error_code);
-    panic_handler("ISR_error_handler", interrupt_frame);
-}
-__attribute__((interrupt)) void ISR_div_by_zero_handler(struct IFrame* interrupt_frame) {
-    panic_handler("ISR_div_by_zero_handler", interrupt_frame);
-}
-__attribute__((interrupt)) void ISR_debug_handler(struct IFrame* interrupt_frame) {
+
+static void panic_handler_code(
+        const char* name,
+        struct IFrame* interrupt_frame,
+        uint64_t code        
+) {
+    char buff1[256], buff2[512];
+    print_frame(buff1, interrupt_frame);
+    sprintf(buff2, 
+        "%s, code=%lx: \n%s", 
+        name, 
+        code,
+        buff1);
     
-    panic_handler("ISR_debug_handler", interrupt_frame);
+    panic(buff2);
+    __builtin_unreachable();
 }
-__attribute__((interrupt)) void ISR_NMI_handler(struct IFrame* interrupt_frame) {
-    
-    panic_handler("ISR_NMI_handler", interrupt_frame);
+
+
+#define DECLARE_EXCEPTION_HANDLER(NAME) \
+__attribute__((interrupt))\
+void NAME(struct IFrame* ifr) {\
+    panic_handler(#NAME, ifr);\
 }
-__attribute__((interrupt)) void ISR_breakpoint_handler(struct IFrame* interrupt_frame) {
-    
-    panic_handler("ISR_breakpoint_handler", interrupt_frame);
+
+
+#define DECLARE_CODE_EXCEPTION_HANDLER(NAME) \
+__attribute__((interrupt))\
+void NAME(struct IFrame* ifr, uint64_t code) {\
+    panic_handler_code(#NAME, ifr, code);\
 }
-__attribute__((interrupt)) void ISR_overflow_handler(struct IFrame* interrupt_frame) {
-    panic_handler("ISR_overflow_handler", interrupt_frame);
-}
-__attribute__((interrupt)) void ISR_bound_handler(struct IFrame* interrupt_frame) {
-    panic_handler("ISR_bound_handler", interrupt_frame);
-}
-__attribute__((interrupt)) void ISR_invalid_opcode_handler(struct IFrame* interrupt_frame) {
-    panic_handler("ISR_invalid_opcode_handler", interrupt_frame);
-}
-__attribute__((interrupt)) void ISR_device_not_available_handler(struct IFrame* interrupt_frame) {
-    panic_handler("ISR_device_not_available_handler", interrupt_frame);
-}
-__attribute__((interrupt)) void ISR_double_fault_handler(struct IFrame* interrupt_frame, uint64_t error_code) {
-    (void) error_code;
-    panic_handler("ISR_double_fault_handler", interrupt_frame);
-}
-__attribute__((interrupt)) void ISR_coproc_segment_overrun_handler(struct IFrame* interrupt_frame) {
-    panic_handler("ISR_coproc_segment_overrun_handler", interrupt_frame);
-}
-__attribute__((interrupt)) void ISR_invalid_TSS_handler(struct IFrame* interrupt_frame, uint64_t error_code) {
-    (void) error_code;
-    panic_handler("ISR_invalid_TSS_handler", interrupt_frame);
-}
-__attribute__((interrupt)) void ISR_segment_not_present_handler(struct IFrame* interrupt_frame, uint64_t error_code) {
-    (void) error_code;
-    panic_handler("ISR_segment_not_present_handler", interrupt_frame);
-}
-__attribute__((interrupt)) void ISR_stack_segment_fault_handler(struct IFrame* interrupt_frame, uint64_t error_code) {
-    (void) error_code;
-    panic_handler("ISR_stack_segment_fault_handler", interrupt_frame);
-}
-__attribute__((interrupt)) void ISR_general_protection_fault_handler(struct IFrame* interrupt_frame, uint64_t error_code) {
-    (void) error_code;
-    printf("ERROR CODE: 0x%lx\n", error_code);
-    panic_handler("ISR_general_protection_fault_handler", interrupt_frame);
-}
+
+
+DECLARE_EXCEPTION_HANDLER(ISR_general_handler)
+DECLARE_EXCEPTION_HANDLER(ISR_div_by_zero_handler)
+DECLARE_EXCEPTION_HANDLER(ISR_debug_handler)
+DECLARE_EXCEPTION_HANDLER(ISR_NMI_handler)
+DECLARE_EXCEPTION_HANDLER(ISR_breakpoint_handler)
+DECLARE_EXCEPTION_HANDLER(ISR_overflow_handler)
+DECLARE_EXCEPTION_HANDLER(ISR_bound_handler)
+DECLARE_EXCEPTION_HANDLER(ISR_invalid_opcode_handler)
+DECLARE_EXCEPTION_HANDLER(ISR_device_not_available_handler)
+DECLARE_EXCEPTION_HANDLER(ISR_coproc_segment_overrun_handler)
+DECLARE_EXCEPTION_HANDLER(ISR_LAPIC_spurious)
+
+
+DECLARE_CODE_EXCEPTION_HANDLER(ISR_error_handler)
+DECLARE_CODE_EXCEPTION_HANDLER(ISR_double_fault_handler)
+DECLARE_CODE_EXCEPTION_HANDLER(ISR_invalid_TSS_handler)
+DECLARE_CODE_EXCEPTION_HANDLER(ISR_segment_not_present_handler)
+DECLARE_CODE_EXCEPTION_HANDLER(ISR_stack_segment_fault_handler)
+DECLARE_CODE_EXCEPTION_HANDLER(ISR_general_protection_fault_handler)
+
+
 __attribute__((interrupt)) void ISR_page_fault_handler(struct IFrame* interrupt_frame, uint64_t error_code) {
     char buff[128];
     //for(;;);
@@ -99,9 +92,8 @@ __attribute__((interrupt)) void ISR_page_fault_handler(struct IFrame* interrupt_
     sprintf(buff, "PAGE FAULT. illegal address: %16lx, error code %x\n", _cr2(), error_code);
     panic_handler(buff, interrupt_frame);
 }
-__attribute__((interrupt)) void ISR_LAPIC_spurious(struct IFrame* interrupt_frame) {
-    panic_handler("ISR_spurious", interrupt_frame);
-}
+
+
 
 
 
@@ -125,10 +117,13 @@ void setup_isrs(void) {
     set_irs_handler(12, ISR_stack_segment_fault_handler);
     set_irs_handler(13, ISR_general_protection_fault_handler);
     set_irs_handler(14, ISR_page_fault_handler);
-    set_irs_handler(255,ISR_LAPIC_spurious);
+
+
+    for(int i = 15; i < 256; i++)
+        set_irs_handler(i,ISR_LAPIC_spurious);
+
 
     set_irs_handler(32, ISR_coproc_segment_overrun_handler);
-
     setup_idt();
     _sti();
 }
