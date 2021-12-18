@@ -10,10 +10,10 @@ USED_LOOPBACK := /dev/loop2
 
 LIMINE_INSTALL := ./limine-bootloader/limine-install-linux-x86_64
 
-QEMU_PATH := qemu-system-x86_64 -accel kvm
+QEMU_PATH := qemu-system-x86_64
 
-QEMU_ARGS := -monitor stdio \
-			 -bios /usr/share/ovmf/OVMF.fd \
+
+QEMU_COMMON_ARGS := -bios /usr/share/ovmf/OVMF.fd \
 			 -m 8192 \
 			 -M q35 \
 			 -vga virtio \
@@ -21,10 +21,12 @@ QEMU_ARGS := -monitor stdio \
 			 -D qemu.log \
 			 -device nvme,drive=NVME1,serial=nvme-1 \
 			 -drive format=raw,if=none,id=NVME1,file=
+
+QEMU_ARGS := -monitor stdio $(QEMU_COMMON_ARGS)
 #			 -usb \
 #			 -device usb-host \
 
-QEMU_DEBUG_ARGS:= -no-shutdown -d int $(QEMU_ARGS)
+QEMU_DEBUG_ARGS:= -no-shutdown -s -S -d int $(QEMU_COMMON_ARGS)
 
 
 run: all
@@ -41,7 +43,7 @@ prun: kernel $(PARTITION)
 
 debug: all
 	$(QEMU_PATH) $(QEMU_DEBUG_ARGS)$(HDD_FILE)
-
+	gdb-multiarch -x gdb_cfg
 pdebug: $(PARTITION)
 	HDD_FILE := $(PARTITION)
 	$(QEMU_PATH) $(QEMU_ARGS) 
