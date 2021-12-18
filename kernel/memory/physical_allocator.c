@@ -107,9 +107,6 @@ static void init_memory_range(struct memory_range* range, uint64_t addr, size_t 
 
     // zero all the bit maps
     memset(header->bitmap_level3, 0, 128+256+512+2048);
-    memset(addr+0x1000, 
-            0xff, 
-            range->length);
 
     // we use one page per region for the header
     header->available[0] = (length-1);
