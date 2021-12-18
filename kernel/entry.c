@@ -27,6 +27,8 @@
 #include "lib/common.h"
 #include "lib/registers.h"
 #include "lib/dump.h"
+
+#include "early_video.h"
  
 
 #define KERNEL_STACK_SIZE 8192
@@ -92,31 +94,11 @@ static const void *stivale2_get_tag(const struct stivale2_struct *stivale2_struc
 // const char but represents a big string
 extern const char _binary_bootmessage_txt;
 
-// print all chars
-
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-function"
-
-static void debug_terminal() {
-    char buff[256];
-    for(int i = 0; i < 256; i++)
-        buff[i] = i+1;
-    puts(buff);
-}
-
-static void print_fb_infos(struct stivale2_struct_tag_framebuffer* framebuffer_tag) {
-    PRINT_VAL(framebuffer_tag->framebuffer_width);
-    PRINT_VAL(framebuffer_tag->framebuffer_height);
-    PRINT_VAL(framebuffer_tag->framebuffer_pitch);
-    PRINT_VAL(framebuffer_tag->framebuffer_bpp);
-    PRINT_HEX(framebuffer_tag->framebuffer_addr);
-}
-
-#pragma GCC diagnostic pop
-
  
-static void init_memory(const struct stivale2_struct_tag_memmap* memmap_tag,
-                        const struct stivale2_struct_tag_framebuffer* framebuffer_tag) {
+static void init_memory(
+    const struct stivale2_struct_tag_memmap* memmap_tag,
+    const struct stivale2_struct_tag_framebuffer* fb
+) {
     log_debug("init memory...");
     init_physical_allocator(memmap_tag);
 
@@ -125,15 +107,37 @@ static void init_memory(const struct stivale2_struct_tag_memmap* memmap_tag,
 
 // map MMIOs
     map_pages(
-        early_virtual_to_physical((void *)framebuffer_tag->framebuffer_addr), 
+        early_virtual_to_physical((void *)fb->framebuffer_addr), 
         MMIO_BEGIN,
-        (framebuffer_tag->framebuffer_height * framebuffer_tag->framebuffer_pitch+0x0fff) / 0x1000,
+        (fb->framebuffer_height * fb->framebuffer_pitch+0x0fff) / 0x1000,
         PRESENT_ENTRY
     );
 
 // map lapic & hpet registers
     map_acpi_mmios();
+}
 
+static void empty_terminal_handler(const char* s, size_t l) {
+(void) (s + l);
+// empty handler by default,
+// make sure not to execute the address 0 :)
+}
+
+void kbhandler(const struct kbevent* ev) {
+    if(ev->type == KEYRELEASED && ev->scancode == PS2KB_ESCAPE) {
+        shutdown();
+        __builtin_unreachable();
+    }
+    if(ev->type == KEYPRESSED && ev->keycode != 0) {
+        printf("%c", ev->keycode);
+    }
+};
+
+
+static void print_fun(const char* s, size_t len) {
+    driver_t* terminal = get_active_terminal();
+    if(terminal != NULL)
+        write_string(terminal, s, len);
 }
 
 
@@ -162,11 +166,10 @@ void _start(struct stivale2_struct *stivale2_struct) {
     // initializing bincows' terminal
     if (term_str_tag != NULL) {
         void *term_write_ptr = (void *)term_str_tag->term_write;
-    // the default terminal handler does nothing        
-        set_terminal_handler(term_write_ptr);
+
+        set_backend_print_fun(term_write_ptr);
     }
-        
- 
+    // the default terminal handler does nothing        
  // print all logging messages
     set_logging_level(LOG_LEVEL_DEBUG);
 
@@ -175,59 +178,53 @@ void _start(struct stivale2_struct *stivale2_struct) {
 
     init_memory(memmap_tag, framebuffer_tag);
 
+    set_backend_print_fun(empty_terminal_handler);
+    append_paging_initialization();
+
+    
+
+    //set_terminal_handler(empty_terminal_handler);
+
+// init kernel heap
+    heap_init();
+
+// drivers
+    atshutdown(remove_all_drivers);
+    atshutdown(free_all_devices);
+
+
+    video_init(framebuffer_tag);
+
+
+    set_backend_print_fun(print_fun);
 
  // first initialize our terminal 
-    initVideo(framebuffer_tag, (void *)MMIO_BEGIN);
-    init_gdt_table();
+
 // we cannot use stivale2 terminal
 // after loading our gdt
 // so we need to load our gdt after our
 // terminal is successfully installed 
-    append_paging_initialization();
-    void empty_terminal_handler(const char* s, size_t l) {
-    (void) (s + l);
-    // empty handler by default,
-    // make sure not to execute the address 0 :)
-    }
-    set_terminal_handler(empty_terminal_handler);
-
-// init kernel heap
-    heap_init();
+    init_gdt_table();
     
-    
-    terminal_install_early();
-    terminal_set_colors(0xfff0a0, 0x212121);
-    
-
-    terminal_install_late();
-
         
     puts(&_binary_bootmessage_txt);
 
-    
     printf("boot logs:\n");
     puts(log_get());
     log_flush();
 
     pcie_init();
 
-
     pic_init();
     ps2kb_init();
 
-    void kbhandler(const struct kbevent* ev) {
-        if(ev->type == KEYRELEASED && ev->scancode == PS2KB_ESCAPE) {
-            shutdown();
-            __builtin_unreachable();
-        }
-        if(ev->type == KEYPRESSED && ev->keycode != 0) {
-            printf("%c", ev->keycode);
-        }
-    };
     ps2kb_set_event_callback(kbhandler);
 
     hpet_init();
     apic_setup_clock();
+
+
+    //printf("issou");
 
 
     for(;;) {
