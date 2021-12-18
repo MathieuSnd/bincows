@@ -12,8 +12,6 @@ struct node {
 
 static struct node* head = NULL;
 
-static unsigned n_drivers = 0;
-
 
 // alloc the structure and fill with
 // basic info
