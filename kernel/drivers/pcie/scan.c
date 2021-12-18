@@ -6,28 +6,14 @@
 #include "../../lib/assert.h"
 #include "../../memory/heap.h"
 #include "../../memory/paging.h"
+#include "../../memory/vmap.h"
 #include "../../lib/string.h"
+#include "../../lib/sprintf.h"
 
 
 
 struct PCIE_Descriptor pcie_descriptor = {0};
 
-
-// array of all installed devices' functions
-static struct pcie_dev* found_devices = NULL;
-static size_t n_found_devices = 0;
-
-// we construct a linked list first
-// so we need a node struct
-struct early_device_desc {
-    uint16_t bus, device, function, domain;
-    struct PCIE_config_space* config_space;
-
-    struct early_device_desc* next;
-};
-// used to iterate over devices when scanning
-struct early_device_desc head_node = {.next = NULL};
-struct early_device_desc* current = &head_node; 
 
 
 //__attribute__((pure))
@@ -43,11 +29,10 @@ static struct PCIE_config_space*
     struct PCIE_busgroup* group_desc = &pcie_descriptor.array[bus_group];
     
     
-    return group_desc->address + (
+    return translate_address(group_desc->address) + (
         (bus - group_desc->start_bus) << 20 
       | device                        << 15 
-      | func                          << 12);
-    
+      | func                          << 12);    
 }
 
 
@@ -59,50 +44,133 @@ static int __attribute__((pure))
 {
     struct PCIE_config_space* config_space = 
                 get_config_space_base(bus_group, bus,device,func);
-    //return 8086;
     return config_space->vendorID;
 }
 
 
-static void insert(
+static void new_dev(
+        void (*callback)(struct pcie_dev*),
         unsigned bus_group, 
         unsigned bus, 
         unsigned device, 
-        unsigned func)
-{ 
+        unsigned func
+) { 
     
-    struct PCIE_config_space* config_space = 
+    struct PCIE_config_space* cs = 
                get_config_space_base(bus_group,
                                      bus,
                                      device,
                                      func);
 
-    if((config_space->header_type & 0x7f) != 0 ||
-        config_space->classcode == 06)
+    if((cs->header_type & 0x7f) != 0 ||
+        cs->classcode == 06)
         return;
     // the device is a bridge,
     // we won't do anything with it anyway
 
+    // give a unique name to each device
+    static unsigned id = 0;
 
-    current->next = malloc(sizeof(struct early_device_desc));
+    
 
-    current = current->next;
-    current->next           = NULL;
-    // fill the new node
-    current->domain       = bus_group;
-    current->bus          = bus;
-    current->device       = device;
-    current->function     = func;
-    current->config_space = config_space;
+// we hate mallocs.
+// we definitly want to do as few mallocs
+// as we possible.
+// therefore we will trickely make one malloc 
+// call to allocate both the struct and the name
+// string
+// the device manager will invoke a free call
+// with the device's address, so freeing
+// the dev should free the name.
+    struct alloc {
+        struct pcie_dev dev;
+        char name[16];
+        // 16 should always be enough
+    };
+    struct alloc* alloc = malloc(sizeof(struct alloc));
 
-    n_found_devices++;
+    struct pcie_dev* dev      = &alloc->dev;
+    char*            name_buf = alloc->name;
+
+    sprintf(name_buf, "pcie%u", id++);
+
+    
+    // fill the struct 
+    *dev = (struct pcie_dev) {
+        .dev = {
+            .type     = DEVICE_ID_PCIE,
+            .name     = {name_buf, 0},
+            .driver   = NULL,
+        },
+        
+        .config_space = cs,
+
+        .info = (struct dev_info) {
+            .vendorID     = cs->vendorID,
+            .deviceID     = cs->deviceID,
+            .classcode    = cs->classcode,
+            .subclasscode = cs->subclasscode,
+            .progIF       = cs->progIF,
+            .revID        = cs->revID,
+        },
+
+        .path = (pcie_path_t) {
+            .domain = bus_group,
+            .bus    = bus,  
+            .device = device,
+            .func   = func,
+        }, 
+    };
+
+    // BARs scan
+    for(unsigned i = 0; i < 6;) {
+        // next iteration index
+        unsigned next_i = i+1;
+
+        uint32_t bar_reg = cs->bar[i];
+
+        uint64_t addr = bar_reg & ~0xf;
+        unsigned type = (bar_reg>>1) & 3;
+
+
+        switch(type) {
+            case 0: // 32bit address
+                break;
+            case 2: // 64bit address
+                addr |= (uint64_t)cs->bar[i+1] << 32;
+                next_i++; // bar[i+1] is skiped
+                break;
+            default: // illegal value for PCI 3.0
+                log_warn("%s: illega bar%u register",
+                         dev->dev.name.ptr, i);
+        }
+        
+        log_debug("BAR%u: base=%5lx, type%x",i, addr, type);
+        if(addr != 0) {// NULL: unused
+            addr = translate_address(addr);
+        }
+
+        dev->bars[i] = (bar_t){
+            .base         = addr,
+            .io           = bar_reg&1,
+            .type         = type,
+            .prefetchable = (bar_reg >> 3) & 1,
+        };
+
+        i = next_i;
+    }
+
+    // our struct inherits from this one
+    // don't worry
+    callback(dev);
 }
 
 
 // scan a single device
 // adds its functions in the linked list
 // if it finds some
-static void scan_device(unsigned bus_group, 
+static void scan_device(void (*callback)(struct pcie_dev*),
+                        unsigned bus_group, 
                         unsigned bus, 
                         unsigned device)
 {
@@ -113,17 +181,17 @@ static void scan_device(unsigned bus_group,
                                      bus,
                                      device, 
                                      0);
-    //return;
-
     // no device!
     if(vendorID == 0xFFFF)
         return;
     // a device is there!
-    insert(bus_group,
-           bus, 
-           device, 
-           0
+    new_dev(callback,
+            bus_group,
+            bus, 
+            device, 
+            0
     );
+    
     
     // check for additionnal functions for this
     // device
@@ -135,10 +203,11 @@ static void scan_device(unsigned bus_group,
                         func) != vendorID)
             continue;
         
-        insert(bus_group,
-               bus, 
-               device, 
-               func
+        new_dev(callback,
+                bus_group,
+                bus, 
+                device, 
+                func
         );
     }
 }
@@ -146,7 +215,7 @@ static void scan_device(unsigned bus_group,
 /**
  * constructs the found_devices array
  */
-static void scan_devices(void) {
+static void scan_devices(void (*callback)(struct pcie_dev*)) {
 
     // first create a linked list
     // as we dont know how many devices are present
@@ -169,7 +238,7 @@ static void scan_devices(void) {
         {
             for(unsigned device = 0; device < 32; device++) {
                 
-                scan_device(bus_group,bus,device);
+                scan_device(callback, bus_group,bus,device);
             }
         }
     }
@@ -177,68 +246,16 @@ static void scan_devices(void) {
 }
 
 
-// create the output array
-// with the 
-static void create_array(void) {
-
-    // now create the final array
-    found_devices = malloc(
-                    n_found_devices 
-                    * sizeof(struct pcie_dev));
-
-    // now fill it and free the devices structure
-    struct pcie_dev* ptr = found_devices;
-
-    unsigned i = 0;
-
-    for(struct early_device_desc* device = head_node.next;
-                                  device != NULL;
-                                  device = device->next)
-    {
-        struct PCIE_config_space* cs = device->config_space;
-
-        assert(i++ < n_found_devices);
-
-        char* name_buffer = malloc(32);
-        
-        sprintf(name_buffer, "dev%u", i);
-
-        *ptr++ = (struct pcie_dev) {
-                .resources    = NULL,
-                .driver       = NULL,
-                .config_space = cs,
-                .name         = name_buffer,
-
-                .info = (struct dev_info) {
-                    .vendorID     = cs->vendorID,
-                    .deviceID     = cs->deviceID,
-                    .classcode    = cs->classcode,
-                    .subclasscode = cs->subclasscode,
-                    .progIF       = cs->progIF,
-                    .revID        = cs->revID,
-                },
-
-                .path = (pcie_path_t) {
-                    .domain = device->domain,
-                    .bus    = device->bus,
-                    .device = device->device,
-                    .func   = device->function,
-                },
-        };
-
-        free(device);
-    }
-}
-
-
-// identity map every page that might be a config space 
-static void identity_map_possible_config_spaces(void) {
+// map every page that might be a config space 
+// to PHYSICAL
+static void map_possible_config_spaces(void) {
     for(unsigned i = 0; i < pcie_descriptor.size; i++) {
+        void* phys = pcie_descriptor.array[i].address;
 
-        // identity map the corresponding pages
+        // the corresponding pages
         map_pages(
-            (uint64_t)pcie_descriptor.array[i].address, // phys
-            (uint64_t)pcie_descriptor.array[i].address, // virt
+            (uint64_t)phys, // phys
+            (uint64_t)translate_address(phys), // virt
             256 * // busses
             32  * // devices
             8,    // functions
@@ -250,11 +267,14 @@ static void identity_map_possible_config_spaces(void) {
 
 
 static void identity_unmap_possible_config_spaces(void) {
-    for(unsigned i = 0; i < pcie_descriptor.size; i++)
+    for(unsigned i = 0; i < pcie_descriptor.size; i++) {
+        void* phys = pcie_descriptor.array[i].address;
+
         unmap_pages(
-            (uint64_t)pcie_descriptor.array[i].address,
+            (uint64_t)translate_address(phys), // vaddr
             256 * 32 * 8
         );
+    }
 }
 
 /**
@@ -262,16 +282,8 @@ static void identity_unmap_possible_config_spaces(void) {
  * we identity map the pcie configuration spaces
  * 
  */
-struct pcie_dev* pcie_scan(unsigned* size) {
+void pcie_scan(void (*callback)(struct pcie_dev*)) {
+    map_possible_config_spaces();
 
-    identity_map_possible_config_spaces();
-
-    scan_devices();
-    create_array();    
-
-    identity_unmap_possible_config_spaces();
-
-    *size = n_found_devices;
-    return found_devices;
-
+    scan_devices(callback);
 }

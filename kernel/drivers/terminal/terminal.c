@@ -24,19 +24,43 @@ struct Char {
 
 static_assert_equals(sizeof(struct Char), 8);
 
-static void write_string(const char *string, size_t length);
-static struct Char make_Char(char c);
-static void print_char(const struct Char* restrict c, int line, int col);
-static void flush_screen(void);
+static struct Char make_Char(driver_t* this, char c);
+static void print_char      (driver_t* this, const struct Char* restrict c, int line, int col);
+static void flush_screen    (driver_t* this);
 
-static terminal_handler_t terminal_handler = NULL;
+
+struct data {
+    terminal_handler_t terminal_handler;
+    bool need_refresh;
+    struct Char* char_buffer;
+
+    uint16_t ncols, nlines;
+    uint16_t term_nlines;
+    uint16_t first_line;
+    uint16_t cur_col, cur_line;
+    uint32_t current_fgcolor;
+    uint32_t current_bgcolor;
+    unsigned margin_left, margin_top;
+    unsigned timerID;
+};
+
+
+static driver_t* active_terminal = NULL;
+// global functions
+
+
+driver_t* get_active_terminal(void) {
+    return active_terminal;
+}
+
+
 
 // need to redraw the entire terminal
-static bool need_refresh = false;
 
 
-static void empty_terminal_handler(const char* s, size_t l) {
+static void empty_terminal_handler(driver_t* this,const char* s, size_t l) {
     (void) (s + l);
+    (void) this;
     // empty handler by default,
     // make sure not to execute the address 0 :)
 }
@@ -48,19 +72,9 @@ static void empty_terminal_handler(const char* s, size_t l) {
 static void append_string(const char *string, size_t length);
 
 
-
+// common resource
 static Image* charmap = NULL;
-static struct Char* char_buffer = NULL;
 
-static uint16_t ncols, nlines;
-static uint16_t term_nlines;
-static uint16_t first_line = 0;
-static uint16_t cur_col, cur_line;
-
-static uint32_t current_fgcolor = 0xa0a0a0;
-static uint32_t current_bgcolor = 0;
-
-static unsigned margin_left, margin_top;
 
 #define UPDATE_PERIOD_MS (1000 / 60)
 
@@ -69,124 +83,144 @@ static unsigned margin_left, margin_top;
 extern uint8_t _binary_charmap_bmp;
 
 
-static unsigned timerID = INVALID_TIMER_ID;
-
-
-
-static char*    stream_buffer = NULL;
-
-//static unsigned stream_buffer_size = 0;
-//static volatile unsigned stream_buffer_content_size = 0;
-
 
 // should be called every UPDATE_PERIOD ms
 // should execute in an IRQ
-void terminal_update(void) {
+void terminal_update(driver_t* this) {
+    (void) this;
     return;
     //static unsigned update_cur_line = 0;
     
 
 
 
-    if(need_refresh) {
-        need_refresh = 0;
-        flush_screen();
-    }
+    //if(need_refresh) {
+    //    need_refresh = 0;
+    //    flush_screen();
+    //}
     // flush the buffer
 }
 
+// number of currently installed
+// terminals: when it reaches 0 we have to free the charmap
 
-void terminal_install_early(void) {
-    set_terminal_handler(empty_terminal_handler);
-
-//    log_debug("install the terminal...");
-//
-//    assert(charmap == NULL);
-//    assert(char_buffer == NULL);
+static int terminals = 0;
 
 
-    
-    const Image* screenImage = getScreenImage();
+char terminal_install(driver_t* this) {
+
+    struct framebuffer_dev* dev = 
+            (struct framebuffer_dev *)this->device;
+
+    if(!dev ||
+        dev->dev.type != DEVICE_ID_FRAMEBUFFER ||
+        dev->bpp != 32
+       )
+        return false;
+
+    this->remove = terminal_remove;
+    this->name = (string_t){"Terminal",0};
+
+// alloc the data
+    this->data = malloc(sizeof(struct data));
+
+    struct data* restrict d = this->data;
+
+// init the data
+    d->first_line = 0;
     
 // dynamicly create the terminal
 // with right size
-    unsigned console_w = (screenImage->w * 9 ) / 10,
-             console_h = (screenImage->h * 95 ) / 100;
+    unsigned console_w = (dev->width * 9 ) / 10,
+             console_h = (dev->height * 95 ) / 100;
 #ifdef BIGGER_FONT
     ncols       = console_w / TERMINAL_FONTWIDTH / 2 - 1;
     term_nlines = console_h / TERMINAL_LINE_HEIGHT / 2 - 1;
 #else
-    ncols       = console_w / TERMINAL_FONTWIDTH - 1;
-    term_nlines = console_h / TERMINAL_LINE_HEIGHT - 1;
+    d->ncols       = console_w / TERMINAL_FONTWIDTH - 1;
+    d->term_nlines = console_h / TERMINAL_LINE_HEIGHT - 1;
 #endif
 
-    nlines      = TERMINAL_N_PAGES * term_nlines;
+    d->nlines      = TERMINAL_N_PAGES * d->term_nlines;
 
 
     // calculate the margins 
 #ifdef BIGGER_FONT
-    margin_left = (screenImage->w - ncols       * 2 * TERMINAL_FONTWIDTH ) / 2;
-    margin_top  = 0;//(screenImage->h - term_nlines * 2 * TERMINAL_FONTHEIGHT) / 2;
+    d->margin_left = (dev->width - d->ncols * 2 * TERMINAL_FONTWIDTH ) / 2;
+    d->margin_top  = 0;
 #else
-    margin_left = (screenImage->w - ncols       * TERMINAL_FONTWIDTH ) / 2;
-    margin_top  = (screenImage->h - term_nlines * TERMINAL_FONTHEIGHT) / 2;
+    d->margin_left = (dev->width - d->ncols * TERMINAL_FONTWIDTH ) / 2;
+    d->margin_top  = (dev->height - d->term_nlines * TERMINAL_FONTHEIGHT) / 2;
 #endif
 
 
     // allocate the terminal buffer
-    char_buffer   = malloc(ncols * nlines * sizeof(struct Char) * 10);
-    stream_buffer = malloc(ncols * term_nlines);
+    d->char_buffer   = malloc(d->ncols * d->nlines * sizeof(struct Char) * 10);
 
 
-}
-
-// finish intallation when memory
-// is well initialized
-void terminal_install_late(void) {
-    timerID = apic_create_timer(terminal_update, UPDATE_PERIOD_MS);
-
+    //d->timerID = apic_create_timer(
+    //                    (timer_callback_t)terminal_update, 
+    //                    UPDATE_PERIOD_MS,
+    //                    this);
+//
+    if(terminals++ == 0)
+        charmap = loadBMP_24b_1b(&_binary_charmap_bmp);
     
 
-    charmap = loadBMP_24b_1b(&_binary_charmap_bmp);
-    
-    
-    set_terminal_handler(write_string);
+    //set_terminal_handler(this, write_string);
 
-    terminal_clear();
-}
+    terminal_set_colors(this, 0xfff0a0, 0x212121);
+    terminal_clear(this);
 
-void terminal_remove(void) {
-    bmp_free(charmap);
-    free(char_buffer);
-    free(stream_buffer);
-    
-    if(timerID != INVALID_TIMER_ID)
-        apic_remove_timer(timerID);
+    active_terminal = this;
+    return 1;
 }
 
 
-void terminal_clear(void) {
+void terminal_remove(driver_t* this) {
+    struct data* restrict d = this->data;
 
-    cur_col    = 0;
-    cur_line   = 0;
-    first_line = 0;
+// the charmap is shared amoung
+// all terminals
+    if(--terminals == 0)
+        bmp_free(charmap);
+
+    free(d->char_buffer);
     
-    size_t buffer_len = nlines * ncols;
+    if(d->timerID != INVALID_TIMER_ID)
+        apic_delete_timer(d->timerID);
 
-    struct Char* ptr = char_buffer;
+    free(d);
+    //if(active_terminal == this)
+    //    active_terminal = NULL;
+}
+
+
+void terminal_clear(driver_t* this) {
+    struct data* restrict d = this->data;
+
+    d->cur_col    = 0;
+    d->cur_line   = 0;
+    d->first_line = 0;
+    
+    size_t buffer_len = d->nlines * d->ncols;
+
+    struct Char* ptr = d->char_buffer;
+
     for(;buffer_len > 0; --buffer_len)
-        *(ptr++) = make_Char(0);
+        *(ptr++) = make_Char(this, 0);
     
-    flush_screen();
-
+    flush_screen(this);
 }
 
 
-void set_terminal_fgcolor(uint32_t c) {
-    current_fgcolor = c;
+void terminal_set_fgcolor(driver_t* this, uint32_t c) {
+    struct data* restrict d = this->data;
+    d->current_fgcolor = c;
 }
-void set_terminal_bgcolor(uint32_t c) {
-    current_bgcolor = c;
+void terminal_set_bgcolor(driver_t* this, uint32_t c) {
+    struct data* restrict d = this->data;
+    d->current_bgcolor = c;
 }
 
 /*
@@ -196,96 +230,113 @@ static struct Char* get_Char_at(int l, int c) {
 }
 */
 
-static void move_buffer(int lines) {
-    need_refresh = true;
+static void move_buffer(driver_t* this, int lines) {
+    struct data* restrict d = this->data;
+
+    d->need_refresh = true;
 
     if(lines > 0) {// scroll backward
-        size_t bytes = ncols * lines;
-        size_t buff_size = nlines * ncols;
+        size_t bytes = d->ncols * lines;
+        size_t buff_size = d->nlines * d->ncols;
 
-        memmove(char_buffer, char_buffer + bytes, sizeof(struct Char)*(buff_size - bytes));        
+        memmove(
+            d->char_buffer, 
+            d->char_buffer + bytes,
+            sizeof(struct Char)*(buff_size - bytes)
+        );
 
         // cannot touch the first one: it is already written
         for(unsigned i = 1; i < bytes; i++) {
-            char_buffer[i+buff_size-bytes] = make_Char(0);
+            d->char_buffer[i+buff_size-bytes] = make_Char(this,0);
         }
     }
 }
 
-static void next_line(void) {
-    cur_col = 0;
-    cur_line++;
-    if(cur_line >= nlines) {
-        cur_line = nlines-4;
+static void next_line(driver_t* this) {
+    struct data* restrict d = this->data;
+    d->cur_col = 0;
+    d->cur_line++;
+    if(d->cur_line >= d->nlines) {
+        d->cur_line = d->nlines-4;
 
-        move_buffer(4);
+        move_buffer(this, 4);
     }  
-    else if(cur_line >= first_line + term_nlines) {
-        first_line++;
-        need_refresh = true;
+    else if(d->cur_line >= d->first_line + d->term_nlines) {
+        d->first_line++;
+        d->need_refresh = true;
     }
 }
 
 // create the char struct
-static struct Char make_Char(char c) {
+static struct Char make_Char(driver_t* this, char c) {
+    struct data* restrict d = this->data;
+    
     return (struct Char) {
-        .fg_color = current_fgcolor,
+        .fg_color = d->current_fgcolor,
         .c        = c,
-        .bg_color = current_bgcolor
+        .bg_color = d->current_bgcolor
     };
 }
 
 
-static void emplace_normal_char(char c) {
-    if(cur_col >= ncols) {
-        next_line();
+static void emplace_normal_char(driver_t* this, char c) {
+    struct data* restrict d = this->data;
+    
+    if(d->cur_col >= d->ncols) {
+        next_line(this);
     }
     
-    char_buffer[ncols * cur_line + cur_col] = make_Char(c);
+    d->char_buffer[d->ncols * d->cur_line + d->cur_col] = make_Char(this, c);
     
-    struct Char* ch = &char_buffer[ncols * cur_line + cur_col];
+    struct Char* ch = &d->char_buffer[d->ncols * d->cur_line + d->cur_col];
     
-    if(!need_refresh)
-        print_char(ch, cur_line - first_line, cur_col);
+    if(!d->need_refresh)
+        print_char(this, ch, d->cur_line - d->first_line, d->cur_col);
     
-    cur_col += 1;
+    d->cur_col += 1;
 }
 
 
 // emplace the char in the buffer, and maybe draw 
-static void emplace_char(char c) {
+static void emplace_char(driver_t* this, char c) {
+    struct data* restrict d = this->data;
+
     switch(c) {
     default:
         // any character
-        emplace_normal_char(c);
+        emplace_normal_char(this, c);
         break;
     
     case '\n':
     {
-        for(unsigned i=cur_col;i < ncols; i++) 
+        for(unsigned i=d->cur_col;i < d->ncols; i++) 
         {
             //print_char(ch, cur_line - first_line, cur_col);
-            emplace_normal_char(' ');
+            emplace_normal_char(this, ' ');
         }
     }
         break;
     
     case '\t':
     {
-        unsigned new_col = ((cur_col + TAB_SPACE) / TAB_SPACE) * TAB_SPACE;
-        while(cur_col < new_col)
-            emplace_char(' ');
+        unsigned new_col = ((d->cur_col + TAB_SPACE) / TAB_SPACE) * TAB_SPACE;
+        while(d->cur_col < new_col)
+            emplace_char(this, ' ');
 
     }
         break;
     case '\r':
-        cur_col = 0;
+        d->cur_col = 0;
         break;
     }
 }
 
 
-static void print_char(const struct Char* restrict c, int line, int col) {
+static void print_char(driver_t* this, 
+                       const struct Char* restrict c, 
+                       int line, int col) {
+
+    struct data* restrict d = this->data;
 /*
     Pos srcpos = {
         FONTWIDTH  * c_x,
@@ -317,27 +368,30 @@ static void print_char(const struct Char* restrict c, int line, int col) {
     };
 */
 #ifdef BIGGER_FONT
-    blitcharX2(charmap, c->c, c->fg_color, c->bg_color,
-                margin_left + 2 * col  * TERMINAL_FONTWIDTH, 
-                margin_top  + 2 * line * TERMINAL_LINE_HEIGHT);
+    blitcharX2((struct framebuffer_dev *)this->device, 
+                charmap, c->c, c->fg_color, c->bg_color,
+                d->margin_left + 2 * col  * TERMINAL_FONTWIDTH, 
+                d->margin_top  + 2 * line * TERMINAL_LINE_HEIGHT);
     
 
 #else
 
-    blitchar(charmap, c->c, c->fg_color, c->bg_color,
-                margin_left + col  * TERMINAL_FONTWIDTH, 
-                margin_top  + line * TERMINAL_LINE_HEIGHT);
+    blitchar((struct framebuffer_dev *)this->device, 
+             charmap, c->c, c->fg_color, c->bg_color,
+             d->margin_left + col  * TERMINAL_FONTWIDTH, 
+             d->margin_top  + line * TERMINAL_LINE_HEIGHT);
 #endif
 
 }
 
-static void flush_screen(void) {
+static void flush_screen(driver_t* this) {
+    struct data* d = this->data;
         // begins at the terminal's first line
-    const struct Char* curr = char_buffer + first_line * ncols;
+    const struct Char* curr = d->char_buffer + d->first_line * d->ncols;
 
-    for(size_t l = 0; l < term_nlines; l++) {
-        for(size_t c = 0; c < ncols; c++) {
-            print_char(curr++, l, c);
+    for(size_t l = 0; l < d->term_nlines; l++) {
+        for(size_t c = 0; c < d->ncols; c++) {
+            print_char(this, curr++, l, c);
         }
     }
 }
@@ -359,34 +413,34 @@ static void append_string(const char *string, size_t length) {
 }
 */
 
-
-static void write_string(const char *string, size_t length) {
-    need_refresh = false;
+void write_string(driver_t* this, const char *string, size_t length) {
+    struct data* restrict d = this->data;
+    d->need_refresh = false;
 
     for(;length>0;--length) {
         char c = *string++;
         
         if(!c)
             break;
-        emplace_char(c);
+        emplace_char(this, c);
 
     }
-    if(need_refresh)
-        flush_screen();
+    if(d->need_refresh)
+        flush_screen(this);
 }
 
 
-terminal_handler_t get_terminal_handler(void) {
-    return terminal_handler;
+void set_terminal_handler(driver_t* this, terminal_handler_t h) {
+    struct data* restrict d = this->data;
+    d->terminal_handler = h;
 }
 
+void terminal_set_colors(driver_t* this, 
+                         uint32_t foreground, 
+                         uint32_t background) 
+{
+    struct data* restrict d = this->data;
 
-
-void set_terminal_handler(terminal_handler_t h) {
-    terminal_handler = h;
-}
-
-void terminal_set_colors(uint32_t foreground, uint32_t background) {
-    current_fgcolor = foreground;
-    current_bgcolor = background;
+    d->current_fgcolor = foreground;
+    d->current_bgcolor = background;
 }

@@ -2,6 +2,7 @@
 #define VIDEO_H
 
 #include <stdint.h>
+#include "terminal.h"
 
 typedef struct Image
 {
@@ -70,11 +71,19 @@ Image *loadBMP(const void *rawFile);
 // from a 24 bit/px image
 Image *loadBMP_24b_1b(const void *rawFile);
 
-void blitchar(const struct Image *charset,
+void bmp_free(Image* i);
+
+
+
+void blitchar(const struct framebuffer_dev* dev,
+              const struct Image *charset,
               char c, uint32_t fg_color, uint32_t bg_color,
-              uint16_t dstx, uint16_t dsty);
-void blitcharX2(const struct Image *charset,
-              char c, uint32_t fg_color, uint32_t bg_color,
-              uint16_t dstx, uint16_t dsty);
+              uint16_t dstx, uint16_t dsty
+);
+void blitcharX2(const struct framebuffer_dev* dev,
+                const struct Image *charset,
+                char c, uint32_t fg_color, uint32_t bg_color,
+                uint16_t dstx, uint16_t dsty
+);
 
 #endif

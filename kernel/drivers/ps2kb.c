@@ -1,6 +1,5 @@
 #include "ps2kb.h"
 #include "../lib/logging.h"
-#include "../lib/registers.h"
 #include "../lib/sprintf.h"
 #include "../int/idt.h"
 #include "../int/pic.h"

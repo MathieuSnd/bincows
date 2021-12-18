@@ -17,29 +17,11 @@
 
 #define BPP 4
 
-static Image screen;
-
+/*
 inline void lower_blit(const Image* src, const Image* dst,
             uint16_t srcx,  uint16_t srcy,
             uint16_t dstx,  uint16_t dsty,
             uint16_t width, uint16_t height);
-
-void initVideo(const struct stivale2_struct_tag_framebuffer* fbtag, 
-               void* frame_buffer_virtual_address) {
-    assert(fbtag != NULL);
-    
-
-    screen  = (Image){
-        .w    =        fbtag->framebuffer_width,
-        .h    =        fbtag->framebuffer_height,
-        .pitch=        fbtag->framebuffer_pitch,
-        .bpp  =        fbtag->framebuffer_bpp,
-        .pix  =        frame_buffer_virtual_address
-    };
-    
-    assert(screen.bpp == 32);
-
-}
 
 void imageLower_blit(const Image* img,
                      uint16_t     srcx,  uint16_t srcy,
@@ -111,11 +93,13 @@ void imageLower_blitBinaryMask(
     }
 
 }
+*/
 
 /**
  *  blit the image without any verification
  *  (faster than blit but riskier)
  */
+/*
 inline void lower_blit(const Image* src, const Image* dst,
             uint16_t srcx,  uint16_t srcy,
             uint16_t dstx,  uint16_t dsty,
@@ -244,7 +228,7 @@ void imageBlit(const Image* restrict src, Image* restrict dst,
 
     lower_blit(src, dst, sxbegin, sybegin, dxbegin, dybegin, w,h);
 }
-
+*/
 /*
 
 Image* alloc_image(uint32_t width, uint32_t height, uint32_t bpp) {
@@ -304,11 +288,6 @@ inline bool check_BMP_header(const struct BMPFileHeader* header) {
            header->w      >  0         &&
            header->h      >  0         &&
            header->one    == 1         ;
-}
-
-
-const Image* getScreenImage(void) {
-    return &screen;
 }
 
 /*
@@ -440,9 +419,11 @@ for(ptr = col; ; ptr += 2px) {
 */
 __attribute__((optimize("unroll-loops")))
 
-void blitchar(const struct Image* charset,
+void blitchar(const struct framebuffer_dev* dev,
+              const struct Image* charset,
               char c, uint32_t fg_color, uint32_t bg_color,
-              uint16_t dstx, uint16_t dsty) {
+              uint16_t dstx, uint16_t dsty
+) {
 
     const uint64_t colormap[] = {
         ((uint64_t) bg_color << 32) | bg_color,
@@ -454,8 +435,8 @@ void blitchar(const struct Image* charset,
     uint16_t srcy = c * TERMINAL_FONTHEIGHT;
      
 
-    uint64_t* dst_ptr = (uint64_t *)(screen.pix + screen.pitch * dsty + 4 * dstx);
-    uint16_t  dst_skip = screen.pitch - TERMINAL_FONTWIDTH * 4;
+    uint64_t* dst_ptr = (uint64_t *)(dev->pix + dev->pitch * dsty + 4 * dstx);
+    uint16_t  dst_skip = dev->pitch - TERMINAL_FONTWIDTH * 4;
 
     // 4 2-byte lines = 8*8 = 64 (1 access every 4 lines)
 
@@ -489,9 +470,11 @@ void blitchar(const struct Image* charset,
 
 __attribute__((optimize("unroll-loops")))
 
-void blitcharX2(const struct Image* charset,
-              char c, uint32_t fg_color, uint32_t bg_color,
-              uint16_t dstx, uint16_t dsty) {
+void blitcharX2(const struct framebuffer_dev* dev,
+                const struct Image* charset,
+                char c, uint32_t fg_color, uint32_t bg_color,
+                uint16_t dstx, uint16_t dsty
+) {
 
     const uint64_t colormap[] = {
         ((uint64_t) bg_color << 32) | bg_color,
@@ -502,11 +485,11 @@ void blitcharX2(const struct Image* charset,
     
     uint16_t srcy = c * TERMINAL_FONTHEIGHT;
 
-    uint64_t* dst_ptr = (uint64_t *)(screen.pix + screen.pitch * dsty + 4 * dstx);
-    uint16_t  dst_skip = 2 * screen.pitch - 2 * TERMINAL_FONTWIDTH * 4;
+    uint64_t* dst_ptr = (uint64_t *)(dev->pix + dev->pitch * dsty + 4 * dstx);
+    uint16_t  dst_skip = 2 * dev->pitch - 2 * TERMINAL_FONTWIDTH * 4;
 
 /// second line to modify
-    uint64_t* dst_ptr2 = dst_ptr + screen.pitch / 8;
+    uint64_t* dst_ptr2 = dst_ptr + dev->pitch / 8;
 
     uint64_t* lines_ptr = (uint64_t*)charset->pix + srcy / sizeof(uint64_t);
     uint64_t lines = *lines_ptr;
@@ -542,7 +525,7 @@ static_assert(TERMINAL_FONTWIDTH % 2 == 0);
 static_assert(TERMINAL_FONTHEIGHT    == 8);
 
 
-static Image loadBMP_24b_1b_ret;
+//static Image loadBMP_24b_1b_ret;
 
 Image* loadBMP_24b_1b(const void* rawFile) {
     
@@ -565,17 +548,19 @@ Image* loadBMP_24b_1b(const void* rawFile) {
     
     uint32_t pitch = (w+7)/8;
 
-    loadBMP_24b_1b_ret.w     = w;
-    loadBMP_24b_1b_ret.h     = h;
-    loadBMP_24b_1b_ret.bpp   = 1;
-    loadBMP_24b_1b_ret.pitch = pitch;
-    loadBMP_24b_1b_ret.pix   = malloc(pitch * h); 
 
-    assert(loadBMP_24b_1b_ret.pitch == 1);
+    Image* ret = malloc(sizeof(Image));
+    ret->w     = w;
+    ret->h     = h;
+    ret->bpp   = 1;
+    ret->pitch = pitch;
+    ret->pix   = malloc(pitch * h); 
+
+    assert(ret->pitch == 1);
     assert(w == 6);
     assert(h == 2048);
 
-    uint8_t* pix = loadBMP_24b_1b_ret.pix;
+    uint8_t* pix = ret->pix;
 
     
     for(size_t y = 0; y < h; y++) {
@@ -598,6 +583,11 @@ Image* loadBMP_24b_1b(const void* rawFile) {
 
     }
 
-    return &loadBMP_24b_1b_ret;
+    return ret;
+}
+
+void bmp_free(Image* i) {
+    free(i->pix);
+    free(i);
 }
 

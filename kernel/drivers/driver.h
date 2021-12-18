@@ -3,7 +3,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdatomic.h>
-
+#include "../lib/string_t.h"
 
 typedef atomic_bool lock_t;
 
@@ -13,28 +13,28 @@ typedef atomic_bool lock_t;
 
 
 typedef struct {
-    void*  addr;
-    size_t size;
+    void*    addr;
+    unsigned size;
+    unsigned type;
 } resource_t;
 
-typedef struct {
-    void(* install)(driver_t*);
-    void(* remove) (void);
 
-    const char* name;
+typedef struct driver {
+
+    // returns 0 if everything is fine
+    int (*install)(struct driver*);
+
+    void (*remove)(struct driver*);
+
+    string_t name;
 
     uint32_t status;
 
     lock_t lock;
 
-    // things like pci BARs,
-    // hpet registers space, ...
-    resource_t* iores;
-
-    // can be NULL
-    struct pcie_device* device;
+    struct dev* device;
     
-    const driver_t* parent;
+    const struct driver* parent;
 
     void* data;
     size_t data_len;
@@ -42,6 +42,10 @@ typedef struct {
 } driver_t;
 
 
-void register_driver(driver_t* dr);
+
+void driver_register_and_install(
+            int (*install)(struct driver*), 
+            struct dev* dev
+);
 
 void remove_all_drivers(void);

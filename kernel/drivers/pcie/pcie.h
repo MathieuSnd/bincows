@@ -4,17 +4,12 @@
 #include <stddef.h>
 
 #include "../../lib/assert.h"
+#include "../driver.h"
+#include "../dev.h"
 
-void pcie_init(void);
-
-
-typedef void (*driver_init_fun)(void* config_space); 
-typedef void (*driver_callback)(void); 
-
-struct resource {
-    void*  addr;
-    size_t size;
-};
+// pcie devices structures
+// should have this type 
+#define DEVICE_ID_PCIE (0x2c1e)
 
 typedef union {
     struct {
@@ -40,64 +35,79 @@ struct dev_info {
     uint8_t  revID;
 };
 
-static_assert_equals(sizeof(pcie_path_t), 8);
-
+typedef struct {
+    uint64_t base;
+    unsigned io: 1;
+    unsigned type: 2;
+    unsigned prefetchable: 1;
+} bar_t;
 
 struct pcie_dev {
-    struct resource* resources;
-    struct dev_info info;
-    const char* name;
+    struct dev dev;
     
-    void* config_space;
+    void* config_space; // vaddr
+    
+    // if 64 bit bar:
+    // bars[2*i] contains the whole
+    // address along with flags
+    // and bars[2*i+1] is unused
+
+    bar_t bars[6];
 
     pcie_path_t path;
-
-    struct driver* driver;
-
+    struct dev_info info;
 };
 
-struct pcie_driver {
-    const struct pcie_device* dev;
-};
+static_assert_equals(sizeof(pcie_path_t), 8);
+void pcie_init(void);
+
+
+// return 0 if MSIs cannot be enabled
+// 1 instead
+int enable_msi(struct pcie_dev* dev, 
+               unsigned vector, 
+               uint32_t processor,
+               uint32_t edge_trigger,
+               uint8_t  deassert);
+
+// return 0 if MSIXs cannot be enabled
+// 1 instead
+int enable_msix(struct pcie_dev* dev, 
+                unsigned vector, 
+                uint32_t processor,
+                uint32_t edge_trigger,
+                uint8_t  deassert);
+
+
+
+__attribute__((pure))
+unsigned pcie_bar_size(void* config_space, unsigned i);
+
 
 struct PCIE_config_space {
     volatile uint16_t vendorID;
     volatile uint16_t deviceID;
-             uint16_t unused0;
-             uint16_t unused1;
+    volatile uint16_t command;
+    volatile uint16_t status;
     volatile uint8_t  revID;
     volatile uint8_t  progIF;
     volatile uint8_t  subclasscode;
     volatile uint8_t  classcode;
              uint16_t reserved3;
-    volatile uint16_t header_type;
+    volatile uint8_t  header_type;
     volatile uint8_t  BIST;
     volatile uint32_t bar[6];
     volatile uint32_t cardbud_cis_ptr;
-    volatile uint16_t subsystemID;
     volatile uint16_t subsystem_vendorID;
+    volatile uint16_t subsystemID;
     volatile uint32_t expansion_base;
     volatile uint8_t  capabilities;
              uint8_t  reserved0[3];
              uint32_t reserved1;
     volatile uint8_t  interrupt_line;
     volatile uint8_t  interrupt_pin;
-             uint16_t reserved5[2];
+             uint8_t reserved5[2];
 } __packed;
 
-
-
-/**
- * PCIE drivers interfaces:
- * 
- * provide void init(void* config_space_base)
- * 
- * functions to call:
- *      register_irq(unsigned)
- *      unregister_irq(unsigned)
- * 
- *      int  register_timer(void callback(void), unsigned period)
- *      void unregister_timer(int timer_id)
- *     
- */
+static_assert_equals(sizeof(struct PCIE_config_space), 0x40);
 

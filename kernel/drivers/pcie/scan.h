@@ -30,7 +30,12 @@ struct PCIE_Descriptor {
 // defined in pcie.c
 extern struct PCIE_Descriptor pcie_descriptor;
 
+struct pcie_dev;
 
-struct pcie_dev* pcie_scan(unsigned* size);
+// invoke the argument callback function
+// when a pcie device is found
+// also, it maps the configuration spaces to:
+// TRANSLATED_PHYSICAL_MEMORY_BEGIN + phys
+void pcie_scan(void (*callback)(struct pcie_dev*));
 
 

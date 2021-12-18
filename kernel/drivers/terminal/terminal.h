@@ -3,6 +3,10 @@
 #include <stddef.h>
 #include <stdint.h>
 #include "../../lib/assert.h"
+#include "../../lib/string_t.h"
+
+#include "../dev.h"
+#include "../driver.h"
 
 
 #define TERMINAL_CHARMAP_W 6
@@ -19,40 +23,48 @@ static_assert(TERMINAL_CHARMAP_H % 4 == 0);
 #define TERMINAL_N_PAGES 2
 
 
+#define DEVICE_ID_FRAMEBUFFER (0xfa30bffe)
+
+// virtual device
+struct framebuffer_dev {
+    struct dev dev;
+
+    unsigned width, height;
+    unsigned pitch;
+    unsigned bpp;
+    void*    pix;
+};
+
 struct stivale2_struct_tag_framebuffer;
-typedef void (*terminal_handler_t)(const char *string, size_t length);
+typedef void (*terminal_handler_t)(driver_t* dr, const char *string, size_t length);
 
 // the default terminal handler 
-terminal_handler_t get_terminal_handler(void);
 
+char terminal_install(driver_t* this);
+void terminal_remove (driver_t* this);
+void terminal_update (driver_t* this);
 
-// assert everything the setup needs
-// because printing error messages
-// won't be possible between the change
-// of memory paging and the end of the
-// setup_function
-void assert_terminal(void);
-
-void terminal_install_early(void);
-void terminal_install_late (void);
-void terminal_remove(void);
-void terminal_update(void);
-
-void terminal_clear(void);
+void terminal_clear  (driver_t* this);
 
 // change the default terminal handler,
 // which is an empty function
 // h = NULL will make a safe empty handler
-void set_terminal_handler(terminal_handler_t h);
+//void set_terminal_handler(driver_t* this, terminal_handler_t h);
 
+void write_string(driver_t* this, const char *string, size_t length);
+
+
+driver_t* get_active_terminal(void);
 
 /**
  * the arguments of the following functions are expected
  * to be on the little endian RGB format
  */
-void set_terminal_bgcolor(uint32_t c);
-void set_terminal_fgcolor(uint32_t c);
+void terminal_set_bgcolor(driver_t* this,uint32_t c);
+void terminal_set_fgcolor(driver_t* this,uint32_t c);
 
-void terminal_set_colors(uint32_t foreground, uint32_t background);
+void terminal_set_colors(driver_t* this,
+                         uint32_t foreground, 
+                         uint32_t background);
 
 
