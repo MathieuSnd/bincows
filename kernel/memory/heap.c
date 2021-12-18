@@ -62,7 +62,7 @@ static_assert(sizeof(seg_header) % 8 == 0);
 
 static void *heap_begin = (void *)KERNEL_HEAP_BEGIN;
 static size_t heap_size = 0;
-
+static size_t n_allocations = 0;
 // sum of the available heap ranges, 
 // without the last free segment:
 // indice of how fragmented
@@ -73,6 +73,10 @@ static size_t heap_size = 0;
 //static size_t fragmented_available_size = 0;
 
 static seg_header* current_segment = NULL;
+
+size_t get_n_allocation(void) {
+    return n_allocations;
+}
 
 /**
  * expand the heap by size bytes
@@ -104,7 +108,7 @@ static void expand_heap(size_t size) {
 
     heap_size += size;
 
-    log_debug("kernel heap extended to %lu KB", heap_size / 1024);
+    //log_debug("kernel heap extended to %lu KB", heap_size / 1024);
 }
 
 /**
@@ -250,8 +254,8 @@ static seg_header* split_segment(seg_header* pred, seg_header* tosplit, size_t s
 
 
 void heap_init(void) {
-
     log_debug("init kernel heap...");
+
 
     expand_heap(MIN_EXPAND_SIZE);
 }
@@ -267,6 +271,7 @@ void* __attribute__((noinline)) malloc(size_t size) {
     // search for a big enough pool
     seg_header* seg  = current_segment;
     seg_header* pred = NULL;
+
 
     while(1) {
         
@@ -316,7 +321,10 @@ void* __attribute__((noinline)) malloc(size_t size) {
         // wasting a bit of memory
         
         seg->free = 0;
-
+        
+        // one allocation
+        n_allocations++;
+        
         return (void *)seg + sizeof(seg_header);
     }
 
@@ -349,6 +357,7 @@ static void realloc_shrink(seg_header* header, size_t size) {
         // no reallocation will be done
     }
 }
+
 
 // O(n) in case of freeing (size < oldsize)
 void* realloc(void* ptr, size_t size) {
@@ -389,6 +398,10 @@ void* realloc(void* ptr, size_t size) {
             void* new_ptr = malloc(size);
             memcpy(new_ptr, ptr, old_size);
             
+            // malloc increments the number of allocations
+            // but we just reallocated
+            n_allocations--;
+
             return new_ptr;
         }
     }
@@ -408,6 +421,8 @@ void __attribute__((noinline))  free(void *ptr) {
     // defragment the heap every N frees
     if((i++ % 32) == 0)
         defragment();
+
+    n_allocations--;
 }
 
 
