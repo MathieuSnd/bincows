@@ -36,15 +36,103 @@ static struct PCIE_config_space*
 }
 
 
-static int __attribute__((pure)) 
-                get_vendorID(unsigned bus_group,
-                             unsigned bus, 
-                             unsigned device, 
-                             unsigned func) 
-{
-    struct PCIE_config_space* config_space = 
-                get_config_space_base(bus_group, bus,device,func);
-    return config_space->vendorID;
+__attribute__((pure)) 
+static int get_vendorID(unsigned bus_group,
+                        unsigned bus, 
+                        unsigned device, 
+                        unsigned func
+) {
+    return get_config_space_base(
+            bus_group, 
+            bus,
+            device,
+            func
+        )->vendorID;
+}
+
+
+static void map_bar(uint64_t paddr, 
+                    uint64_t vaddr, 
+                    uint32_t size
+) {
+    log_warn("MAP BAR %lx, size=%x", paddr, size);
+    map_pages(
+        paddr & ~0xfff, // align paddr and vaddr
+        vaddr & ~0xfff, // on a page 
+        (size + (vaddr & 0xfff) + 0xfff) / 0x1000,
+        PRESENT_ENTRY | PCD
+    );
+}
+
+// return 1 if the bar is 64 bit,
+// 0 if it is 32
+// fill the dev->bars[index] structure
+static int scan_bar(
+    struct pcie_dev* dev,
+    struct PCIE_config_space* cs, 
+    unsigned index
+) {
+    // var to return
+    int is64 = 0;
+
+    uint32_t bar_reg = cs->bar[index];
+    uint64_t paddr    = bar_reg & ~0xf;
+
+    unsigned type = (bar_reg>>1) & 3;
+
+// check if the bar is 32 or 64 bit
+    switch(type) {
+        case 0: // 32bit physical address
+            break;
+        case 2: // 64bit physical address
+            assert(index != 5);
+            paddr |= (uint64_t)cs->bar[index+1] << 32;
+            is64 = 1;
+            break;
+        default: // illegal value for PCI 3.0
+            log_warn("%s: illegal bar%u register",
+                        dev->dev.name.ptr, index);
+    }
+
+    unsigned io = bar_reg&1;
+
+    uint32_t size = 0;
+
+    uint64_t vaddr = paddr;
+
+// check if the bar is used
+    if(paddr != 0 && !io) {// NULL: unused
+        // the bar is used
+        vaddr = (uint64_t)translate_address(paddr);
+        size  = pcie_bar_size(cs, index);
+
+        // now make it accessible
+        map_bar(paddr, vaddr, size);
+    }
+
+    dev->bars[index] = (bar_t){
+        .base         = vaddr,
+        .size         = size,
+        .io           = io,
+        .type         = type,
+        .prefetchable = (bar_reg >> 3) & 1,
+    };
+
+    return is64;
+}
+
+
+static void scan_bars(struct pcie_dev* dev) {
+    struct PCIE_config_space* cs = dev->config_space;
+    
+    // BARs scan
+    for(unsigned i = 0; i < 6;) {
+        // 64 bit bars take 2 bar registers
+        if(scan_bar(dev, cs, i))
+            i += 2;
+        else
+            i += 1;
+    }
 }
 
 
@@ -94,6 +182,7 @@ static void new_dev(
 
     sprintf(name_buf, "pcie%u", id++);
 
+
     
     // fill the struct 
     *dev = (struct pcie_dev) {
@@ -120,50 +209,29 @@ static void new_dev(
             .device = device,
             .func   = func,
         }, 
+        .msix_table=NULL,
+        .msix_table_size=0,
     };
 
-    // BARs scan
-    for(unsigned i = 0; i < 6;) {
-        // next iteration index
-        unsigned next_i = i+1;
-
-        uint32_t bar_reg = cs->bar[i];
-
-        uint64_t addr = bar_reg & ~0xf;
-        unsigned type = (bar_reg>>1) & 3;
-
-
-        switch(type) {
-            case 0: // 32bit address
-                break;
-            case 2: // 64bit address
-                addr |= (uint64_t)cs->bar[i+1] << 32;
-                next_i++; // bar[i+1] is skiped
-                break;
-            default: // illegal value for PCI 3.0
-                log_warn("%s: illega bar%u register",
-                         dev->dev.name.ptr, i);
-        }
-        
-        log_debug("BAR%u: base=%5lx, type%x",i, addr, type);
-        if(addr != 0) {// NULL: unused
-            addr = translate_address(addr);
-        }
-
-        dev->bars[i] = (bar_t){
-            .base         = addr,
-            .io           = bar_reg&1,
-            .type         = type,
-            .prefetchable = (bar_reg >> 3) & 1,
-        };
-
-        i = next_i;
-    }
+    // now scan bars
+    scan_bars(dev);
 
     // our struct inherits from this one
     // don't worry
+
+    log_info(
+        "ISSOU %x:%x:%x:%x",
+        dev->path.domain,
+        dev->path.bus,
+        dev->path.device,
+        dev->path.func
+    );
     callback(dev);
 }
+
+
+
+
 
 
 // scan a single device

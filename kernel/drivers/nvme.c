@@ -31,18 +31,17 @@ int nvme_install(driver_t* this) {
 
     struct PCIE_config_space* cs = dev->config_space;
 
+
+    //pcie_map_bars(dev);
+
     volatile uint64_t* bar_reg = (uint64_t*)&cs->bar[0];
-    //uint64_t val = *bar_reg;
+    assert(init_msix(dev));
 
-    *bar_reg = ~0llu;
-    
+    set_msix(dev, 0, 0, 50, 0, 0, 0);
+    set_msix(dev, 1, 0, 51, 0, 0, 0);
+    set_msix(dev, 2, 0, 52, 0, 0, 0);
+    set_msix(dev, 3, 0, 53, 0, 0, 0);
 
-    log_warn("size %x", pcie_bar_size(dev, 0));
-
-
-    assert(enable_msi(dev, 50, 0, 0, 0));
-
-    int x = 0;
 
 // installed
     return 1;

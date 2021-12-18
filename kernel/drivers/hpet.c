@@ -46,7 +46,7 @@ struct HPET_MMIO {
 
 static_assert(sizeof(struct HPET_MMIO) == 0x400);
 
-struct HPET_MMIO* const base = (void *)HPET_VIRTUAL_ADDRESS;
+struct HPET_MMIO* const base = (void *)HPET_VADDR;
 
 
 static uint32_t hpet_period = 0;

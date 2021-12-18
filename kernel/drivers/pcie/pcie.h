@@ -37,6 +37,7 @@ struct dev_info {
 
 typedef struct {
     uint64_t base;
+    uint32_t size;
     unsigned io: 1;
     unsigned type: 2;
     unsigned prefetchable: 1;
@@ -56,6 +57,12 @@ struct pcie_dev {
 
     pcie_path_t path;
     struct dev_info info;
+
+// 8-aligned 
+// NULL if msix is not supported
+// or not initialized
+    void*    msix_table;
+    unsigned msix_table_size;
 };
 
 static_assert_equals(sizeof(pcie_path_t), 8);
@@ -70,17 +77,28 @@ int enable_msi(struct pcie_dev* dev,
                uint32_t edge_trigger,
                uint8_t  deassert);
 
+
+// enable msix and masks all interrups
 // return 0 if MSIXs cannot be enabled
 // 1 instead
-int enable_msix(struct pcie_dev* dev, 
-                unsigned vector, 
-                uint32_t processor,
-                uint32_t edge_trigger,
-                uint8_t  deassert);
+int init_msix(struct pcie_dev* dev);
+
+// index:        the index of MSI-X entry 
+// mask:         0: unmasked, 1: masked
+// vector:       idt entry number
+// processor:    target processor lapic id
+// edge_trigger: 0: edge, 1: level
+// deassert:     0: deassert, 1: assert
+void set_msix(struct pcie_dev* dev, 
+              unsigned index,
+              unsigned mask,
+              unsigned vector, 
+              uint32_t processor,
+              uint32_t edge_trigger,
+              uint8_t  deassert);
 
 
-
-__attribute__((pure))
+//__attribute__((pure))
 unsigned pcie_bar_size(void* config_space, unsigned i);
 
 
