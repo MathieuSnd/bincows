@@ -17,4 +17,6 @@ int printf(const char* format, ...);
 
 void puts(const char* s);
 
+void set_backend_print_fun(void (*fun)(const char *string, size_t length));
+
 #endif

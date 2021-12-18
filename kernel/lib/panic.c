@@ -40,31 +40,32 @@ static inline __attribute__((always_inline)) void stack_trace(void) {
 
 __attribute__((noreturn)) void panic(const char* panic_string) {
 
-    // checks if video is operationnal
-    if(get_terminal_handler() != NULL) {
-        terminal_set_colors(0xfff0a0, 0x400000);
+    driver_t* terminal = get_active_terminal();
 
-        if(panic_string == NULL)
-            panic_string = "(null)";
+    if(terminal) // well, we cannot print colors
+        terminal_set_colors(terminal, 0xfff0a0, 0x400000);
 
-        puts(
-            "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n"
-            "!!!!!!!!!!!!!   KERNL PANIC   !!!!!!!!!!!!!\n"
-            "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
-        
-        puts(panic_string);
-        puts("\n\n");
-        
-        stack_trace();
+    if(panic_string == NULL)
+        panic_string = "(null)";
 
-        puts(
-            "\n\n"
-            "type ESCAPE to shutdown the computer.\n"
-        );
-        // do not make any interrupt
-        ps2kb_poll_wait_for_key(PS2KB_ESCAPE);
-        shutdown();
-    }
+    puts(
+        "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n"
+        "!!!!!!!!!!!!!   KERNL PANIC   !!!!!!!!!!!!!\n"
+        "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
+    
+    puts(panic_string);
+    puts("\n\n");
+    
+    stack_trace();
+
+    puts(
+        "\n\n"
+        "type ESCAPE to shutdown the computer.\n"
+    );
+    // do not make any interrupt
+    ps2kb_poll_wait_for_key(PS2KB_ESCAPE);
+    shutdown();
+
     asm volatile("cli");
     asm volatile("hlt");
     

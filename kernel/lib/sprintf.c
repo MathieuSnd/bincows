@@ -193,11 +193,20 @@ int sprintf(char* str, const char* format, ...) {
 //
 //}
 
-void puts(const char* s) {
-    terminal_handler_t print_fun = get_terminal_handler();
+void default_backend(const char* string, size_t len) {
+    (void)(string + len);
+}
 
-    if(print_fun)
-        print_fun(s, strlen(s));
+static void (* backend_fun)(const char *, size_t) = default_backend;
+
+
+void set_backend_print_fun(void (*fun)(const char *string, size_t length)) {
+    backend_fun = fun;
+}
+
+
+void puts(const char* s) {
+    backend_fun(s, strlen(s));
 }
 
 int printf(const char* format, ...) {
@@ -215,13 +224,13 @@ int printf(const char* format, ...) {
 }
 
 int vprintf(const char* format, va_list ap) {
-    terminal_handler_t print_fun = get_terminal_handler();
 
     char buf[1024];
 
     int ret = vsprintf(buf, format, ap);
 
-    print_fun(buf, strlen(buf));
+
+    puts(buf);
 
     return ret;
 }

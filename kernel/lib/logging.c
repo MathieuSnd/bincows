@@ -29,17 +29,21 @@ static inline void append_string(const char* str) {
 }
 
 static const char* get_level_names_and_set_terminal_color(unsigned level) {
+    driver_t* terminal = get_active_terminal();
     switch(level) {
         case LOG_LEVEL_DEBUG:
-            set_terminal_fgcolor(LOG_DEBUG_COLOR);
+            if(terminal)
+                terminal_set_fgcolor(terminal,LOG_DEBUG_COLOR);
             return "[DEBUG]   ";
         case LOG_LEVEL_INFO:
-            set_terminal_fgcolor(LOG_INFO_COLOR);
+            if(terminal)
+                terminal_set_fgcolor(terminal,LOG_INFO_COLOR);
             return "[INFO]    ";
 
         default:// level > warning -> warning.
         case LOG_LEVEL_WARN:
-            set_terminal_fgcolor(LOG_WARNIN_COLOR);
+            if(terminal)
+                terminal_set_fgcolor(terminal,LOG_WARNIN_COLOR);
             return "[WARNING] ";
     }
 }
@@ -50,11 +54,14 @@ void log(unsigned level, const char* string) {
 
     const char* level_name = get_level_names_and_set_terminal_color(level);
 
+    driver_t* terminal = get_active_terminal();
 
 // print on the screen
 // with fancy colors
     puts(level_name);
-    set_terminal_fgcolor(TEXT_COLOR);
+
+    if(terminal)
+        terminal_set_fgcolor(terminal, TEXT_COLOR);
     
     puts(string);
     puts("\n");
