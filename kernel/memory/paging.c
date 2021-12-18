@@ -51,18 +51,8 @@ typedef pdpte* pml4e;
 
 static pml4e pml4[512]   __page = {0};
 
-// 1st entry 0 -> 0x0000007fffffffff
-//static pdpte pdpt_low[512] __page = {0}; 
-// 256th          0xffff800000000000 -> 0xffff807fffffffff
-//static pdpte pdpt_mid[512] __page = {0};
-// 511st entry 0xffffff8000000000 -> 0xffffffffffffffff
-//static pdpte pdpt_high[512] __page = {0};
 
 static_assert_equals(sizeof(pml4),     0x1000);
-//static_assert_equals(sizeof(pdpt_high), 0x1000);
-//static_assert_equals(sizeof(pdpt_mid),  0x1000);
-//static_assert_equals(sizeof(pdpt_low),  0x1000);
-
 
 
 // the alloc_page_table function  has the right
@@ -70,6 +60,8 @@ static_assert_equals(sizeof(pml4),     0x1000);
 // unset it to avoid nasty recursions
 static int alloc_page_table_realloc = 1;
 static void fill_page_table_allocator_buffer(size_t n);
+static void* alloc_page_table(void);
+
 
 static void internal_map_pages(uint64_t physical_addr, 
                                uint64_t virtual_addr, 
@@ -160,9 +152,10 @@ static void map_physical_memory(const struct stivale2_struct_tag_memmap* memmap)
     for(unsigned i = 0; i < memmap->entries; i++) {
         const struct stivale2_mmap_entry* e = &memmap->memmap[i];
 
-        if(e->type ==  STIVALE2_MMAP_USABLE || e->type == STIVALE2_MMAP_BOOTLOADER_RECLAIMABLE
-          || e->type == STIVALE2_MMAP_ACPI_RECLAIMABLE || 
-          e->type == STIVALE2_MMAP_ACPI_NVS) {
+        if(e->type ==  STIVALE2_MMAP_USABLE 
+        || e->type == STIVALE2_MMAP_BOOTLOADER_RECLAIMABLE
+        || e->type == STIVALE2_MMAP_ACPI_RECLAIMABLE
+        || e->type == STIVALE2_MMAP_ACPI_NVS) {
             // be inclusive!
             uint64_t phys_addr = (uint64_t) (e->base / 0x1000) * 0x1000;
 
@@ -176,7 +169,10 @@ static void map_physical_memory(const struct stivale2_struct_tag_memmap* memmap)
             void* virtual_addr = translate_address((void *)phys_addr);
 
 
-            internal_map_pages(phys_addr, (uint64_t)virtual_addr, size, PRESENT_ENTRY | PL_XD);
+            internal_map_pages(phys_addr, 
+                               (uint64_t)virtual_addr, 
+                               size, 
+                               PRESENT_ENTRY | PL_XD);
             // use the allocator to allocate page tables
             // to map its own data
         }
@@ -300,23 +296,39 @@ void init_paging(const struct stivale2_struct_tag_memmap* memmap) {
 // so memory is both identity mapped and transtated 
 // so *x = *translate_address(x)
 
-    //pml4[0]   = create_table_entry(
-    //                    (void*)early_virtual_to_physical(pdpt_low), 
-    //                    PRESENT_ENTRY
-    //                );
-    //pml4[256] = create_table_entry(
-    //                    (void*)early_virtual_to_physical(pdpt_mid), 
-    //                    PRESENT_ENTRY | PL_US
-    //                );
-                    
+// initialization: we map some memory regions
+// statically: we don't use the pmm in order to
+// find what is to map.
+// we therefore can allocate page tables on
+// the fly
+    alloc_page_table_realloc = 1;
 
-    // the high half memory is supervisor only
-    // so that no user can access it eventhough the entry
-    // stays in the pml4!  
-    //pml4[511] = create_table_entry(
-    //                    (void*)early_virtual_to_physical(pdpt_high), 
-    //                    PRESENT_ENTRY | PL_US
-    //                );
+
+
+// first, let's create the main memory regions:
+// 1st   user:       0x0000000000000000 -> 0x0000007fffffffff
+// 256th supervisor: 0xffff800000000000 -> 0xffff807fffffffff
+// 511st supervisor: 0xffffff8000000000 -> 0xffffffffffffffff
+    pml4[0]   = create_table_entry(
+            alloc_page_table(), // alloc a new page table
+                                // with pmm
+            PRESENT_ENTRY       // execute enable, read 
+                                // write for all the lower half
+    );
+
+// the two high half memory regions are supervisor only
+// so that no user can access it eventhough the entry
+// stays in the pml4 table  
+    pml4[256] = create_table_entry(
+            alloc_page_table(),   // once again use the pmm
+            PRESENT_ENTRY | PL_US // supervisor flag the whole
+    );
+                    
+// same as above
+    pml4[511] = create_table_entry(
+            alloc_page_table(),   // once again use the pmm
+            PRESENT_ENTRY | PL_US
+    );
 
 
 // map all the memory to 0xffff800000000000
