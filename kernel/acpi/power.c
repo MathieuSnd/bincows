@@ -1,7 +1,10 @@
 #include "power.h"
 #include "../lib/assert.h"
+#include "../lib/panic.h"
+#include "../lib/logging.h"
 #include "../drivers/ps2kb.h"
 #include "../int/idt.h"
+#include "../memory/heap.h"
 
 static void (*funcs[MAX_SHUTDOWN_FUNCS])(void);
 static int n_funcs = 0;
@@ -26,6 +29,15 @@ void reboot(void) {
     for(int i = 0; i < n_funcs; i++)
         funcs[i]();
 
+
+
+    unsigned still_allocated = get_n_allocation();
+
+    if(still_allocated) {
+        log_warn("%u FREE BLOCKS AT SHUTDOWN, %u", still_allocated);
+        panic("oui");
+    }
+    panic("non");
     _cli();
     
     ps2_trigger_CPU_reset();

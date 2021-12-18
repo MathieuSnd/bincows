@@ -54,7 +54,7 @@ struct APICConfig
 static_assert(sizeof(struct APICConfig) == 0x400);
 
 
-static volatile struct APICConfig* apic_config = (void *)APIC_VIRTUAL_ADDRESS;
+static volatile struct APICConfig* apic_config = (void *)APIC_VADDR;
 
 
 static uint64_t apic_timer_clock_count = 0;

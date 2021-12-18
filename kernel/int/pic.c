@@ -33,10 +33,6 @@ void pic_eoi(unsigned char irq)
 	outb(PIC1_COMMAND,PIC_EOI);
 } 
 
-static void io_wait(void) {
-    outb(0x80,0);
-}
-
 static uint16_t mask = 0xff;
 
 void pic_init(void) {

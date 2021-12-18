@@ -105,9 +105,9 @@ void read_acpi_tables(const void* rsdp_location) {
 void map_acpi_mmios(void) {
     // mmios to map: HPET, PCIE
     // cache disable
-    map_pages((uint64_t)apic_config_base, APIC_VIRTUAL_ADDRESS, 1,
+    map_pages((uint64_t)apic_config_base, APIC_VADDR, 1,
                                  PRESENT_ENTRY | PCD | PL_XD);
-    map_pages((uint64_t)hpet_config_space, HPET_VIRTUAL_ADDRESS, 1,
+    map_pages((uint64_t)hpet_config_space, HPET_VADDR, 1,
                                  PRESENT_ENTRY | PCD | PL_XD);
 }
 
