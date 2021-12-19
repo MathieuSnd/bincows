@@ -15,6 +15,9 @@ struct stivale2_struct_tag_memmap;
 void init_paging(const struct stivale2_struct_tag_memmap* memmap);
 void append_paging_initialization(void);
 
+// asserts that the vaddr is in
+// a mapped page
+uint64_t get_paddr(const void* vaddr);
 
 // page table flags
 

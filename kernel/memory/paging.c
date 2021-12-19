@@ -70,21 +70,25 @@ static void internal_map_pages(uint64_t physical_addr,
 
 // extract the offset of the page table 
 // from a virtual address
+__attribute__((pure))
 static uint32_t pt_offset(uint64_t virt) {
     return (virt >> 12) & 0x1ff;
 }
 // extract the offset of the page directory 
 // from a virtual address
+__attribute__((pure))
 static uint32_t pd_offset(uint64_t virt) {
     return (virt >> 21) & 0x1ff;
 }
 // extract the offset of the pdp 
 // from a virtual address
+__attribute__((pure))
 static uint32_t pdpt_offset(uint64_t virt) {
     return (virt >> 30) & 0x1ff;
 }
 // extract the offset of the page directory 
 // from a virtual address
+__attribute__((pure))
 static uint32_t pml4_offset(uint64_t virt) {
     return (virt >> 39) & 0x1ff;
 }
@@ -584,29 +588,43 @@ static int is_table_empty(pte* page_table, unsigned begin, unsigned end) {
     return 1;
 }
 
+static pte* get_page_table_or_panic(uint64_t vaddr) {
+    unsigned pml4i = pml4_offset(vaddr),
+             pdpti = pdpt_offset(vaddr),
+             pdi   = pd_offset(vaddr);
+
+    assert(pml4i == 0 || pml4i == 511 || pml4i == 256);
+    // those entries should exist
+
+    pml4e restrict pml4entry = extract_pointer(
+                    get_entry_or_panic((void**)pml4,      pml4i));
+    
+    pdpte restrict pdptentry = extract_pointer(
+                    get_entry_or_panic((void**)pml4entry, pdpti));
+    
+
+    return extract_pointer(get_entry_or_panic((void**)pdptentry, pdi));
+}
+
 void unmap_pages(uint64_t virtual_addr, size_t count) {
 
     while(count > 0) {
         // fetch table indexes
-        unsigned pml4i = pml4_offset(virtual_addr),
-                 pdpti = pdpt_offset(virtual_addr),
-                 pdi   = pd_offset(virtual_addr),
-                 pti   = pt_offset(virtual_addr);
+        void** pt = translate_address(
+                        get_page_table_or_panic(virtual_addr));
+        
 
-        assert(pml4i == 0 || pml4i == 511 || pml4i == 256);
-        // those entries should exist
-
-        pml4e restrict pml4entry = extract_pointer(get_entry_or_panic((void**)pml4,      pml4i));
-        pdpte restrict pdptentry = extract_pointer(get_entry_or_panic((void**)pml4entry, pdpti));
-        pde   restrict pdentry   = extract_pointer(get_entry_or_panic((void**)pdptentry, pdi));
-
+        // unmap multiple pages in the page table
+        // without recalculating it
+        unsigned pti   = pt_offset(virtual_addr);
+        
         // keep track of the first & last element
         // to unmap, we are sure that in this range
         // everything is unmapped
         unsigned begin = pti;
 
         while(count > 0 && pti < 512) {
-            void** entry_ptr = (void**)translate_address(pdentry) + pti;
+            void** entry_ptr = pt + pti;
             
 
             if(!present_entry(*entry_ptr)) {
@@ -640,4 +658,16 @@ void unmap_pages(uint64_t virtual_addr, size_t count) {
         }
         */
     }
+}
+
+uint64_t get_paddr(const void* vaddr) {
+    unsigned pti = pt_offset(vaddr);
+
+    pte entry = get_page_table_or_panic((vaddr))[pti];
+    
+    assert(present_entry(entry));
+
+    uint64_t page_paddr = extract_pointer(entry);
+
+    return page_paddr | ((uint64_t)vaddr & 0x0fff);
 }
