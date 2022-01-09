@@ -667,7 +667,7 @@ uint64_t get_paddr(const void* vaddr) {
     
     assert(present_entry(entry));
 
-    uint64_t page_paddr = extract_pointer(entry);
+    uint64_t page_paddr = (uint64_t)extract_pointer(entry);
 
     return page_paddr | ((uint64_t)vaddr & 0x0fff);
 }
