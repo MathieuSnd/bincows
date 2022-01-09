@@ -37,6 +37,10 @@ typedef void (*PHYSALLOC_CALLBACK)(
 
 void physalloc(size_t size, void* virtual_addr, PHYSALLOC_CALLBACK callback);
 
+// alloc a single physical page
+// without mapping it or anything
+uint64_t physalloc_single(void);
+
 void physfree(void* physical_page_addr);
 
 // return the number of available pages in the system

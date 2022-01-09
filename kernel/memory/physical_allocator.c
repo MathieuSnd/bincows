@@ -532,6 +532,28 @@ void physalloc(size_t size, void* virtual_addr, PHYSALLOC_CALLBACK callback) {
 }
 
 
+uint64_t physalloc_single(void) {
+    uint64_t paddr = 0;
+
+    void callback(
+        uint64_t physical_address, 
+        uint64_t virtual_address, 
+        size_t size
+    ) {
+        (void)(virtual_address + size);
+
+        paddr = physical_address;
+    }
+
+    physalloc(1, NULL, callback);
+
+    // check that it has actually
+    // allocated something
+    assert(paddr != 0);
+    return paddr;
+}
+
+
 // return the memory range in which the given page is
 // contained
 static const struct memory_range* get_memory_range(const void* addr) {
