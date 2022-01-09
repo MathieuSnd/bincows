@@ -10,7 +10,7 @@ struct queue create_queue(
     unsigned element_size
 ) {
     uint64_t paddr = physalloc_single();
-    void*    vaddr = translate_address(paddr);
+    void*    vaddr = translate_address((void*)paddr);
 
 
     // we know that all the memory is mapped
@@ -37,7 +37,7 @@ struct queue create_queue(
 }
 
 void free_queue(struct queue* q) {
-    unmap_pages(q->base, 1);
+    unmap_pages((uint64_t)q->base, 1);
 
     // vaddr -> paddr 
     physfree((uint64_t)q->base & ~TRANSLATED_PHYSICAL_MEMORY_BEGIN);

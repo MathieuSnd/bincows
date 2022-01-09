@@ -7,7 +7,7 @@
 typedef struct framebuffer_dev fd_t;
 
 void video_init(
-        struct stivale2_struct_tag_framebuffer* framebuffer_tag
+        const struct stivale2_struct_tag_framebuffer* framebuffer_tag
 ) {
 
 // framebuffer virtual device

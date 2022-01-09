@@ -140,7 +140,7 @@ int enable_msi(struct pcie_dev* dev,
 
     // message data
 
-	cap[3] = cap[3]&0xffff0000 // keep the high part
+	cap[3] = (cap[3] & 0xffff0000) // keep the high part
           | vector
           | (edge_trigger == 1 ? 0 : (1 << 15)) 
           | (deassert     == 1 ? 0 : (1 << 14));
@@ -199,7 +199,7 @@ int init_msix(struct pcie_dev* dev) {
     dev->msix_table_size = table_size;
 
 // global enable
-    cap[0] = cap[0] & 0x3fffffff | 0x80000000;
+    cap[0] = (cap[0] & 0x3fffffff) | 0x80000000;
     // set   'enable'        bit 31
     // unset 'function mask' bit 30
     // keep other bits

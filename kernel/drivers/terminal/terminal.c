@@ -53,23 +53,8 @@ driver_t* get_active_terminal(void) {
     return active_terminal;
 }
 
-
-
-// need to redraw the entire terminal
-
-
-static void empty_terminal_handler(driver_t* this,const char* s, size_t l) {
-    (void) (s + l);
-    (void) this;
-    // empty handler by default,
-    // make sure not to execute the address 0 :)
-}
-
 #define NCOLS_MAX 133
 #define TERMINAL_LINES_MAX 75
-
-
-static void append_string(const char *string, size_t length);
 
 
 // common resource

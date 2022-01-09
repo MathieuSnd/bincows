@@ -575,7 +575,7 @@ void map_pages(uint64_t physical_addr,
 }
 
 // return 1 iif the no entry is present in the range
-static int is_table_empty(pte* page_table, unsigned begin, unsigned end) {
+static inline int is_table_empty(pte* page_table, unsigned begin, unsigned end) {
     assert(begin <= end);
     assert(end <= 512);
 
@@ -646,6 +646,11 @@ void unmap_pages(uint64_t virtual_addr, size_t count) {
             count--;
             virtual_addr  += 0x1000;      
         }
+
+        (void) begin;
+        /** @TODO unmap pages if empty
+         * 
+         */
         /*
         unsigned end = pti;
         // unmap the page map if empty
@@ -661,9 +666,9 @@ void unmap_pages(uint64_t virtual_addr, size_t count) {
 }
 
 uint64_t get_paddr(const void* vaddr) {
-    unsigned pti = pt_offset(vaddr);
+    unsigned pti = pt_offset((uint64_t)vaddr);
 
-    pte entry = get_page_table_or_panic((vaddr))[pti];
+    pte entry = get_page_table_or_panic((uint64_t)vaddr)[pti];
     
     assert(present_entry(entry));
 

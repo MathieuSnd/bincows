@@ -206,12 +206,12 @@ void _start(struct stivale2_struct *stivale2_struct) {
 // terminal is successfully installed 
     init_gdt_table();
     
-        
     puts(&_binary_bootmessage_txt);
 
     printf("boot logs:\n");
     puts(log_get());
     log_flush();
+
 
     pcie_init();
 
