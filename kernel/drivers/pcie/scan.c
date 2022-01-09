@@ -16,17 +16,17 @@ struct PCIE_Descriptor pcie_descriptor = {0};
 
 
 
-//__attribute__((pure))
-static struct PCIE_config_space*  
-                get_config_space_base(unsigned bus_group,
-                                      unsigned bus, 
-                                      unsigned device, 
-                                      unsigned func
-                                      ) 
-{
+__attribute__((pure)) static 
+struct PCIE_config_space*  get_config_space_base(
+        unsigned bus_group,
+        unsigned bus, 
+        unsigned device, 
+        unsigned func
+) {
     assert(bus_group < pcie_descriptor.size);
     assert(bus_group == 0);
-    struct PCIE_busgroup* group_desc = &pcie_descriptor.array[bus_group];
+    struct PCIE_busgroup* group_desc = 
+                &pcie_descriptor.array[bus_group];
     
     
     return translate_address(group_desc->address) + (
@@ -52,14 +52,16 @@ static int get_vendorID(unsigned bus_group,
 
 
 static void map_bar(uint64_t paddr, 
-                    uint64_t vaddr, 
+                    void*    vaddr, 
                     uint32_t size
 ) {
-    log_warn("MAP BAR %lx, size=%x", paddr, size);
+    //log_warn("MAP BAR %lx, size=%x", paddr, size);
     map_pages(
         paddr & ~0xfff, // align paddr and vaddr
-        vaddr & ~0xfff, // on a page 
-        (size + (vaddr & 0xfff) + 0xfff) / 0x1000,
+        (uint64_t)vaddr & ~0xfff, // on a page 
+        (size 
+        + ((uint64_t)vaddr & 0xfff) // take account
+        + 0xfff) / 0x1000,          // of missalignment
         PRESENT_ENTRY | PCD
     );
 }
@@ -98,12 +100,12 @@ static int scan_bar(
 
     uint32_t size = 0;
 
-    uint64_t vaddr = paddr;
+    void* vaddr = (void*)paddr;
 
 // check if the bar is used
     if(paddr != 0 && !io) {// NULL: unused
         // the bar is used
-        vaddr = (uint64_t)translate_address(paddr);
+        vaddr = translate_address((void *)paddr);
         size  = pcie_bar_size(cs, index);
 
         // now make it accessible
@@ -218,7 +220,7 @@ static void new_dev(
 
     // our struct inherits from this one
     // don't worry
-
+/*
     log_info(
         "ISSOU %x:%x:%x:%x",
         dev->path.domain,
@@ -226,6 +228,7 @@ static void new_dev(
         dev->path.device,
         dev->path.func
     );
+*/
     callback(dev);
 }
 
@@ -333,17 +336,6 @@ static void map_possible_config_spaces(void) {
     }
 }
 
-
-static void identity_unmap_possible_config_spaces(void) {
-    for(unsigned i = 0; i < pcie_descriptor.size; i++) {
-        void* phys = pcie_descriptor.array[i].address;
-
-        unmap_pages(
-            (uint64_t)translate_address(phys), // vaddr
-            256 * 32 * 8
-        );
-    }
-}
 
 /**
  * during the init,
