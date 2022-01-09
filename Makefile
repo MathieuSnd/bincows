@@ -2,7 +2,7 @@
 .PHONY: clean all run disk kernel force_look threaded_build
 
 HDD_ROOT := disc_root 
-HDD_FILE := disk.hdd
+DISK_FILE := disk.bin
 
 PARTITION := /dev/nvme0n1p5
 
@@ -19,8 +19,9 @@ QEMU_COMMON_ARGS := -bios /usr/share/ovmf/OVMF.fd \
 			 -vga virtio \
 			 -no-reboot \
 			 -D qemu.log \
-			 -device nvme,drive=NVME1,serial=nvme-1 \
-			 -drive format=raw,if=none,id=NVME1,file=
+			-device nvme,drive=NVME1,serial=deadbeef \
+			-drive format=raw,if=none,id=NVME1,file=
+			
 
 QEMU_ARGS := -monitor stdio $(QEMU_COMMON_ARGS)
 #			 -usb \
@@ -31,7 +32,7 @@ QEMU_DEBUG_ARGS:= -no-shutdown -s -S -d int $(QEMU_COMMON_ARGS)
 
 run: all
 	./write_disk.sh
-	$(QEMU_PATH) $(QEMU_ARGS)$(HDD_FILE)
+	$(QEMU_PATH) $(QEMU_ARGS)$(DISK_FILE)
 
 
 prun: kernel $(PARTITION)
@@ -42,10 +43,10 @@ prun: kernel $(PARTITION)
 
 
 debug: all
-	$(QEMU_PATH) $(QEMU_DEBUG_ARGS)$(HDD_FILE)
+	$(QEMU_PATH) $(QEMU_DEBUG_ARGS)$(DISK_FILE)
 	gdb-multiarch -x gdb_cfg
 pdebug: $(PARTITION)
-	HDD_FILE := $(PARTITION)
+	DISK_FILE := $(PARTITION)
 	$(QEMU_PATH) $(QEMU_ARGS) 
 
 
@@ -60,16 +61,16 @@ $(PARTITION): kernel
 #sudo $(LIMINE_INSTALL) $(PARTITION)
 
 
-$(HDD_FILE): kernel/entry.c
-	dd if=/dev/zero bs=1M count=0 seek=64 of=$(HDD_FILE)
-	sudo /sbin/parted -s $(HDD_FILE) mklabel gpt
-	sudo /sbin/parted -s $(HDD_FILE) mkpart ESP fat32 2048s 100%
-	sudo /sbin/parted -s $(HDD_FILE) set 1 esp on
-#	$(LIMINE_INSTALL) $(HDD_FILE)
+$(DISK_FILE): kernel/entry.c
+	dd if=/dev/zero bs=1M count=0 seek=64 of=$(DISK_FILE)
+	sudo /sbin/parted -s $(DISK_FILE) mklabel gpt
+	sudo /sbin/parted -s $(DISK_FILE) mkpart ESP fat32 2048s 100%
+	sudo /sbin/parted -s $(DISK_FILE) set 1 esp on
+#	$(LIMINE_INSTALL) $(DISK_FILE)
 
-diskfile: kernel $(HDD_FILE)
+diskfile: kernel $(DISK_FILE)
 
-	sudo losetup -P $(USED_LOOPBACK) $(HDD_FILE)
+	sudo losetup -P $(USED_LOOPBACK) $(DISK_FILE)
 	
 	sudo mkfs.fat -F 32 $(USED_LOOPBACK)p1
 	mkdir -p img_mount
@@ -88,7 +89,7 @@ kernel: force_look
 
 clean:
 	cd ./kernel/ && make clean
-	rm -f $(HDD_FILE)
+	rm -f $(DISK_FILE)
 
 force_look:
 	true
