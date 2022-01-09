@@ -134,8 +134,8 @@ char terminal_install(driver_t* this) {
     unsigned console_w = (dev->width * 9 ) / 10,
              console_h = (dev->height * 95 ) / 100;
 #ifdef BIGGER_FONT
-    ncols       = console_w / TERMINAL_FONTWIDTH / 2 - 1;
-    term_nlines = console_h / TERMINAL_LINE_HEIGHT / 2 - 1;
+    d->ncols       = console_w / TERMINAL_FONTWIDTH / 2 - 1;
+    d->term_nlines = console_h / TERMINAL_LINE_HEIGHT / 2 - 1;
 #else
     d->ncols       = console_w / TERMINAL_FONTWIDTH - 1;
     d->term_nlines = console_h / TERMINAL_LINE_HEIGHT - 1;
