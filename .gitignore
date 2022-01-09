@@ -1,5 +1,5 @@
 .vscode
-disk.hdd
+disk.bin
 img_moint
 limine-bootloader/
 *.o
