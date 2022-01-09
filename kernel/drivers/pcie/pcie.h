@@ -36,7 +36,7 @@ struct dev_info {
 };
 
 typedef struct {
-    uint64_t base;
+    void*    base;
     uint32_t size;
     unsigned io: 1;
     unsigned type: 2;
