@@ -2,7 +2,7 @@
 #include "scan.h"
 #include "../driver.h"
 
-#include "../nvme.h"
+#include "../nvme/nvme.h"
 
 #include "../../lib/logging.h"
 #include "../../lib/assert.h"
@@ -12,6 +12,7 @@
 #include "../../memory/paging.h"
 #include "../../memory/vmap.h"
 #include "../../lib/string.h"
+#include "../../lib/dump.h"
 
 ////__attribute__((pure))
 unsigned pcie_bar_size(void* config_space, 
@@ -98,7 +99,6 @@ static void* get_capability(struct PCIE_config_space* cs,
             reg != NULL;
     ) {
 
-        log_warn("issou %x", (*reg & 0xff));
         if(capabilityID == (*reg & 0xff))
             return reg;
 
@@ -140,7 +140,8 @@ int enable_msi(struct pcie_dev* dev,
 
     // message data
 
-	*(uint16_t*)(cap+3) = vector
+	cap[3] = cap[3]&0xffff0000 // keep the high part
+          | vector
           | (edge_trigger == 1 ? 0 : (1 << 15)) 
           | (deassert     == 1 ? 0 : (1 << 14));
 
@@ -156,10 +157,11 @@ int enable_msi(struct pcie_dev* dev,
 
 
 struct msix_entry {
-    uint64_t msg_addr;
-    uint32_t msg_data;
-    uint32_t vector_ctrl;
-};
+    volatile uint32_t msg_addr_low;
+    volatile uint32_t msg_addr_high;
+    volatile uint32_t msg_data;
+    volatile uint32_t vector_ctrl;
+} __attribute__((packed));
 
 
 int init_msix(struct pcie_dev* dev) {
@@ -173,42 +175,38 @@ int init_msix(struct pcie_dev* dev) {
         // no MSI-X support on the device
         return 0;
     }
-    unsigned table_reg = cap[2];
+    uint32_t table_reg = cap[1];
 
 
 // bar index
-    unsigned bir          = table_reg &  0x7u;
+    unsigned bir          = table_reg & 0x7u;
 
 // offset in bar[bir]
-    unsigned table_offset = table_reg & ~0x7u;
+    unsigned table_offset = table_reg & ~0x7;
 
     unsigned table_size   = ((cap[0] >> 16) & 0x3ff);
 
 //  bar0 ... bar5
     assert(bir < 6);
-    assert(dev->bars[bir].base != 0);
+    assert(dev->bars[bir].base != NULL);
     assert(table_offset + table_size <= dev->bars[bir].size);
 
 
-    struct msix_entry* table = (void*)(
-        dev->bars[bir].base
-        + table_offset);
+    struct msix_entry* table = dev->bars[bir].base 
+                             + table_offset;
 
-
-    dev->msix_table = table; 
+    dev->msix_table      = table; 
     dev->msix_table_size = table_size;
+
+// global enable
+    cap[0] = cap[0] & 0x3fffffff | 0x80000000;
+    // set   'enable'        bit 31
+    // unset 'function mask' bit 30
+    // keep other bits
 
     // mask every entry
     for(unsigned i = 0; i < table_size; i++)
         table[i].vector_ctrl = 1;
-
-
-
-// global enable
-    ((uint16_t*)cap)[1] = (((uint16_t*)cap)[1] & 0x3fff) | 0x8000;
-    // set   'enable'        bit 15
-    // unset 'function mask' bit 14
-    // keep other bits
 
     return 1;
 }
@@ -234,10 +232,11 @@ void set_msix(struct pcie_dev* dev,
     struct msix_entry* table = dev->msix_table;
     struct msix_entry* e = table + index;
 
-
-    e->msg_addr = 0xFEE00000 | (processor << 12);
+    // msi stuff, see Intel IA-32 Manual 3A
+    e->msg_addr_high = 0;
+    e->msg_addr_low  = 0xFEE00000 | (processor << 12);
     e->msg_data = (vector & 0xFF) 
           | (edge_trigger == 1 ? 0 : (1 << 15)) 
           | (deassert     == 1 ? 0 : (1 << 14));
-    e->vector_ctrl = mask;
+    e->vector_ctrl = 0;
 }
