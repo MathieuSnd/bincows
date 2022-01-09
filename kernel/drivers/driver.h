@@ -10,6 +10,7 @@ typedef atomic_bool lock_t;
 #define DRIVER_STATE_UNINITIALIZED 0
 #define DRIVER_STATE_OK 1
 #define DRIVER_STATE_FAULT 2
+#define DRIVER_STATE_SHUTDOWN 3
 
 
 typedef struct {
