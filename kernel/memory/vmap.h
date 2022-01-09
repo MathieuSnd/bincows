@@ -114,6 +114,13 @@ static inline uint64_t early_virtual_to_physical(
 }
 
 
+// translated virtual address 
+// (phys + TRANSLATED_PHYSICAL_MEMORY_BEGIN)
+// to physical address
+static inline uint64_t trv2p(void* trvaddr) {
+    return ((uint64_t)trvaddr & ~TRANSLATED_PHYSICAL_MEMORY_BEGIN);
+}
+
 // translate a physical memory address
 // to access it where it is mapped
 static inline void* __attribute__((pure)) translate_address(void* phys_addr) {
