@@ -18,3 +18,7 @@ unsigned apic_create_timer(timer_callback_t, int millisecs, void* param);
 // zero if it couldn't be deleted
 int apic_delete_timer(unsigned id);
 
+
+// acknowledge an apic IRQ
+void apic_eoi(void);
+

@@ -133,6 +133,10 @@ int apic_delete_timer(unsigned id) {
     return 1;
 }
 
+void apic_eoi(void) {
+    apic_config->end_of_interrupt.reg = 0;
+}
+
 
 __attribute__((interrupt)) 
 void lapic_timer_handler(struct IFrame* frame) {
@@ -145,11 +149,11 @@ void lapic_timer_handler(struct IFrame* frame) {
             timers[i].counter = 0;
         }
     }
-
-
-    apic_config->end_of_interrupt.reg = 0;
-
+    
+    apic_eoi();
 }  
+
+
 
 uint64_t clock(void)  {
     return apic_timer_clock_count;
