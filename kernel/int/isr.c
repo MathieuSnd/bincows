@@ -66,6 +66,10 @@ void NAME(struct IFrame* ifr, uint64_t code) {\
 }
 
 
+#define DECLARE_IRQ_HANDLER(H) extern void __attribute__((interrupt)) H(void*);
+
+
+
 DECLARE_EXCEPTION_HANDLER(ISR_div_by_zero_handler)
 DECLARE_EXCEPTION_HANDLER(ISR_debug_handler)
 DECLARE_EXCEPTION_HANDLER(ISR_NMI_handler)
@@ -97,6 +101,25 @@ DECLARE_CODE_EXCEPTION_HANDLER(ISR_vmm_communication_exception_handler)
 DECLARE_CODE_EXCEPTION_HANDLER(ISR_security_exception_handler)
 
 
+// those handlers are declared in irq.s
+DECLARE_IRQ_HANDLER(_irq_handler32)
+DECLARE_IRQ_HANDLER(_irq_handler33)
+DECLARE_IRQ_HANDLER(_irq_handler34)
+DECLARE_IRQ_HANDLER(_irq_handler35)
+DECLARE_IRQ_HANDLER(_irq_handler36)
+DECLARE_IRQ_HANDLER(_irq_handler37)
+DECLARE_IRQ_HANDLER(_irq_handler38)
+DECLARE_IRQ_HANDLER(_irq_handler39)
+DECLARE_IRQ_HANDLER(_irq_handler40)
+DECLARE_IRQ_HANDLER(_irq_handler41)
+DECLARE_IRQ_HANDLER(_irq_handler42)
+DECLARE_IRQ_HANDLER(_irq_handler43)
+DECLARE_IRQ_HANDLER(_irq_handler44)
+DECLARE_IRQ_HANDLER(_irq_handler45)
+DECLARE_IRQ_HANDLER(_irq_handler46)
+DECLARE_IRQ_HANDLER(_irq_handler47)
+DECLARE_IRQ_HANDLER(_irq_handler48)
+
 
 static __attribute__((interrupt)) 
 void ISR_page_fault_handler(struct IFrame* interrupt_frame, 
@@ -114,13 +137,9 @@ void ISR_page_fault_handler(struct IFrame* interrupt_frame,
 __attribute__((interrupt)) 
 void IRQ_dummy_handler(struct IFrame* interrupt_frame) {
     (void) interrupt_frame;
-    panic("an unregistered irq number fired\n");
+    panic("Uregistered irq number fired\n");
     __builtin_unreachable();
 }
-
-
-
-
 
 void setup_isrs(void) {
 // cli just in case the idt was already 
@@ -161,8 +180,25 @@ void setup_isrs(void) {
     
     set_irs_handler(31, ISR_reserved_handler);
 
+// IRQs 
+    set_irq_handler(32, _irq_handler32);
+    set_irq_handler(33, _irq_handler33);
+    set_irq_handler(34, _irq_handler34);
+    set_irq_handler(35, _irq_handler35);
+    set_irq_handler(36, _irq_handler36);
+    set_irq_handler(37, _irq_handler37);
+    set_irq_handler(38, _irq_handler38);
+    set_irq_handler(39, _irq_handler39);
+    set_irq_handler(40, _irq_handler40);
+    set_irq_handler(41, _irq_handler41);
+    set_irq_handler(42, _irq_handler42);
+    set_irq_handler(43, _irq_handler43);
+    set_irq_handler(44, _irq_handler44);
+    set_irq_handler(45, _irq_handler45);
+    set_irq_handler(46, _irq_handler46);
+    set_irq_handler(47, _irq_handler47);
 
-    for(int i = 32; i <= 254; i++)
+    for(int i = 48; i <= 254; i++)
         set_irs_handler(i, IRQ_dummy_handler);
 
 
