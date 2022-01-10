@@ -7,3 +7,6 @@ include_cp
 *.elf
 qemu.log
 lai/
+kernel/symbols.txt
+kernel/symbols.dat
+disk_root/boot/kernel.symbols
