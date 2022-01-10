@@ -5,19 +5,14 @@
 %macro create_irq 1
 [extern _irq_handler%1]
 _irq_handler%1:
-    iret
     ; enter stack frame
-    ;push %1
     ; push rbp
     ; mov rbp, rsp
-
-    ;mov dil, byte %1
+    push rdi
+    mov dil, byte %1
     
-    ; call common_stub
+    jmp common_stub
     
-    ; mov rsp, rbp
-    ; pop rbp
-    ;add rsp, 8
 
 %endmacro
 
@@ -38,3 +33,29 @@ create_irq 44
 create_irq 45
 create_irq 46
 create_irq 47
+
+
+common_stub:
+    push rax
+    push rcx
+    push rdx
+    push rsi
+    push r8
+    push r9
+    push r10
+    push r11
+
+    call irq_common_handler
+
+    pop r11
+    pop r10
+    pop r9
+    pop r8
+    pop rsi
+    pop rdx
+    pop rcx
+    pop rax
+    pop rdi
+    ; mov rsp, rbp
+    ; pop rbp
+    iretq
