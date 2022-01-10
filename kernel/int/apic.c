@@ -179,7 +179,7 @@ void apic_setup_clock(void) {
 
 
     assert(apic_config != NULL);
-    set_irq_handler(32, lapic_timer_handler);
+    set_irq_handler(48, lapic_timer_handler);
 
     // enable apic and set spurious int to 0xff
     apic_config->spurious_interrupt_vector.reg = 0x100 | LAPIC_SPURIOUS_IRQ; 
@@ -201,8 +201,8 @@ void apic_setup_clock(void) {
     apic_config->timer_initial_count.reg = t;
 
     // enable apic and set spurious int to 0xff
-// unmask the IRQ, periodic mode, timer on irq 32
-    apic_config->LVT_timer.reg = 0x20020;
+// unmask the IRQ, periodic mode, timer on irq 48
+    apic_config->LVT_timer.reg = 0x20000 | 48;
 
     hpet_disable();
 
