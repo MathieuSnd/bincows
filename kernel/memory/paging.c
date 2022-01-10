@@ -243,8 +243,12 @@ static void map_kernel(const struct stivale2_struct_tag_memmap* memmap) {
                 flags |= PL_XD;
                 flags |= PL_RW;
                 break;
+            case 2:
+                /* data+bss */
+                break;
             default:
-                /* data */
+                //modules: do not map in higher half!
+                virtual_addr = base | TRANSLATED_PHYSICAL_MEMORY_BEGIN;
                 break;
             }
             //alloc the page table pages
