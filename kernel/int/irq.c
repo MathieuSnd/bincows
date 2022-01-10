@@ -13,7 +13,7 @@ typedef struct {
 } irq_data_t;
 
 // handler == NULL:     no irq is mapped
-static irq_data_t irqs[IRQ_END - IRQ_BEGIN + 1];
+static irq_data_t irqs[IRQ_END - IRQ_BEGIN + 1] = {0};
 
 
 extern __attribute__((interrupt)) 
@@ -65,7 +65,6 @@ void release_irq(unsigned n) {
 
 // called from irq.s
 void irq_common_handler(uint8_t irq_n) {
-    log_warn("IRQ%x fired", irq_n);
     assert(irq_n <= IRQ_END);
     assert(irq_n >= IRQ_BEGIN);
     // the irq_n th irq just fired
