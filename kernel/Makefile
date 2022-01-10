@@ -51,6 +51,7 @@ all: $(KERNEL)
 $(KERNEL): $(OBJ) $(LDSCRIPT)
 	$(CC) $(INTERNALLDFLAGS) $(OBJ) $(LAI_FILE) -o $@
 
+	rm symbols.txt
 	nm ../disk_root/boot/kernel.elf -n >> symbols.txt
 	
 	$(PY) ./parse_symbols.py
