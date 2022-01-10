@@ -1,7 +1,9 @@
 KERNEL 		:= ../disk_root/boot/kernel.elf
 CC  		:= x86_64-elf-gcc
+LD          := x86_64-elf-ld
 ASM			:= nasm
 ASM_FLAGS 	:= -felf64
+PY          := python3
  
 CFLAGS = -Wall -Wextra -O3 -pipe
 
@@ -24,7 +26,7 @@ INTERNALCFLAGS  :=  -mgeneral-regs-only    \
 					-fcompare-debug-second \
 					-I/opt/cross/include/  \
 					-I../lai/include       \
-					-fpie                  \
+					-fPIE                  \
 #					-D BIGGER_FONT
 
 
@@ -48,7 +50,11 @@ all: $(KERNEL)
  
 $(KERNEL): $(OBJ) $(LDSCRIPT)
 	$(CC) $(INTERNALLDFLAGS) $(OBJ) $(LAI_FILE) -o $@
- 
+
+	nm ../disk_root/boot/kernel.elf -n >> symbols.txt
+	
+	$(PY) ./parse_symbols.py
+	mv symbols.dat ../disk_root/boot/kernel.symbols
 
 %.c.o: %.c
 	$(CC) $(CFLAGS) $(INTERNALCFLAGS) -c $< -o $@
