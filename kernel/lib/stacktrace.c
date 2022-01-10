@@ -2,10 +2,11 @@
 
 #include "../memory/vmap.h"
 #include "../lib/assert.h"
+#include "../lib/dump.h"
 #include "../lib/logging.h"
 #include "sprintf.h"
 
-#define MAX_STACK_TRACE 15
+#define MAX_STACK_TRACE 40
 
 extern uint64_t _rbp(void);
 
@@ -21,7 +22,7 @@ static const struct  {
 
 void stacktrace_file(const void* f) {
     file = f;
-}
+} 
 
 // offset: output offset
 // addr = addr(symbol) + offset
@@ -40,8 +41,6 @@ static const char* get_symbol_name(
     uint64_t addrA = file->symbols[0].addr;
     uint64_t addrB = file->symbols[file->n_symbols - 1].addr;
     
-    
-
     if(addr < addrA)
         return NULL;
     if(addr >= addrB) {
@@ -49,10 +48,10 @@ static const char* get_symbol_name(
 
         return file->symbols[file->n_symbols - 1].addr;
     }
-    uint64_t C = (A+B)>>2;
 
     while(A+1 != B) {
-        uint64_t  addrC = file->symbols[C].addr;
+        uint64_t C     = (A+B) >> 1;
+        uint64_t addrC = file->symbols[C].addr;
 
         if(addr < addrC) {
             B     = C;
@@ -62,7 +61,6 @@ static const char* get_symbol_name(
             A     = C;
             addrA = addrC;
         }       
-        log_warn("issou");
     }
 
 
@@ -74,10 +72,8 @@ static const char* get_symbol_name(
 void stacktrace_print(void) {
     void** ptr = (void**)_rbp();
     puts("backtrace:\n");
-//      printf("BAR = %x", bar);
     
     for(unsigned i = 0; i < MAX_STACK_TRACE; i++) {
-        //printf("oui. %lx ", ptr);
         
         if(*ptr == 0) // reached the top
             break;
@@ -95,14 +91,13 @@ void stacktrace_print(void) {
         printf("%llx    ", rip);
 
         unsigned* offset;
-        const char* symbol = get_symbol_name(rip, &offset);
-        for(;;);
-
+        const char* symbol  = get_symbol_name(rip, &offset);
 
         if(symbol)
-            printf("<%s+%x>", symbol, offset);
+            printf("<%s + %x>", symbol, offset);
         else
             printf("<??>");
+
         
         if(!interrupt_routine)
             puts("\n");

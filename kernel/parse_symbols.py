@@ -31,7 +31,7 @@ for line in f.readlines():
     
     addr = int(words[0], 16)
     name = words[2]
-    outf.write(addr.to_bytes(8, 'big'))
+    outf.write(addr.to_bytes(8, 'little'))
 
     bin = bytes(name, 'ascii')
 
@@ -50,4 +50,4 @@ for line in f.readlines():
 
 outf.seek(0)
 
-outf.write((n_symbols).to_bytes(8, 'big'))
+outf.write((n_symbols).to_bytes(8, 'little'))
