@@ -1,7 +1,7 @@
 #include "ps2kb.h"
 #include "../lib/logging.h"
 #include "../lib/sprintf.h"
-#include "../int/idt.h"
+#include "../int/irq.h"
 #include "../int/pic.h"
 #include "../lib/registers.h"
 
@@ -130,8 +130,11 @@ static void process_byte(uint8_t b) {
 }
 
 
-static void __attribute__((interrupt)) irq_handler(void* r) {
-    (void) r;
+static void irq_handler(struct driver* dr) {
+    // no driver context: unused 
+    // there is not point in having a driver
+    // context as it could only be one PS/2 controller
+    (void) dr;
 
     uint8_t status = inb(0x64);
     
@@ -147,7 +150,8 @@ static void __attribute__((interrupt)) irq_handler(void* r) {
 void ps2kb_init(void) {
     
     log_debug("init ps/2 keyboard...");
-    set_irq_handler(33, irq_handler);
+
+    register_irq(41, irq_handler, NULL);
     
     unsigned status = inb(0x64);
     if(status & 0xc0) {
