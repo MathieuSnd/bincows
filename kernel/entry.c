@@ -2,20 +2,21 @@
 #include <stdint.h>
 #include <stivale2.h>
 
-#include "memory/gdt.h"
-#include "drivers/terminal/video.h"
-#include "drivers/terminal/terminal.h"
 #include "acpi/acpi.h"
 #include "acpi/power.h"
+
 #include "int/apic.h"
 #include "int/idt.h"
 #include "int/pic.h"
 
+#include "drivers/terminal/video.h"
+#include "drivers/terminal/terminal.h"
 #include "drivers/hpet.h"
 #include "drivers/ps2kb.h"
 #include "drivers/pcie/pcie.h"
 #include "drivers/pcie/scan.h"
 
+#include "memory/gdt.h"
 #include "memory/physical_allocator.h"
 #include "memory/paging.h"
 #include "memory/vmap.h"
@@ -27,6 +28,7 @@
 #include "lib/common.h"
 #include "lib/registers.h"
 #include "lib/dump.h"
+#include "lib/stacktrace.h"
 
 #include "early_video.h"
  
@@ -88,11 +90,19 @@ static const void *stivale2_get_tag(const struct stivale2_struct *stivale2_struc
 }
 
 
-#define PRINT_VAL(v) printf(#v "=%ld\n", (uint64_t)v);
-#define PRINT_HEX(v) printf(#v "=%lx\n", (uint64_t)v);
-
 // const char but represents a big string
 extern const char _binary_bootmessage_txt;
+
+
+static void read_modules(unsigned module_count, 
+                         struct stivale2_module* modules) {
+    for(unsigned i = 0; i < module_count; i++) {
+        struct stivale2_module* module = &modules[i];
+        if(!strcmp(module->string, "kernel.symbols")) {
+            stacktrace_file(module->begin);
+        }
+    }
+}
 
  
 static void init_memory(
@@ -151,12 +161,14 @@ void _start(struct stivale2_struct *stivale2_struct) {
     const struct stivale2_struct_tag_memmap*      memmap_tag;
     const struct stivale2_struct_tag_framebuffer* framebuffer_tag;
     const struct stivale2_struct_tag_rsdp*        rsdp_tag_ptr;
+    const struct stivale2_struct_tag_modules*     modules_tag;
     //const struct stivale2_struct_tag_boot_volume* boot_volume_tag;
 
     term_str_tag    = stivale2_get_tag(stivale2_struct, STIVALE2_STRUCT_TAG_TERMINAL_ID);
     memmap_tag      = stivale2_get_tag(stivale2_struct, STIVALE2_STRUCT_TAG_MEMMAP_ID);
     framebuffer_tag = stivale2_get_tag(stivale2_struct, STIVALE2_STRUCT_TAG_FRAMEBUFFER_ID);
     rsdp_tag_ptr    = stivale2_get_tag(stivale2_struct, STIVALE2_STRUCT_TAG_RSDP_ID);
+    modules_tag     = stivale2_get_tag(stivale2_struct, STIVALE2_STRUCT_TAG_MODULES_ID);
     //boot_volume_tag = stivale2_get_tag(stivale2_struct, 0x9b4358364c19ee62);
     
 
@@ -169,6 +181,11 @@ void _start(struct stivale2_struct *stivale2_struct) {
 
         set_backend_print_fun(term_write_ptr);
     }
+    if(modules_tag != NULL) {
+        read_modules(modules_tag->module_count, modules_tag->modules);
+    }
+    else 
+        log_warn("no stivale2 modules found");
     // the default terminal handler does nothing        
  // print all logging messages
     set_logging_level(LOG_LEVEL_DEBUG);
