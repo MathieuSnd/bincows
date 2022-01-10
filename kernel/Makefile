@@ -38,17 +38,14 @@ SFILES := $(shell find ./ -type f -name '*.s')
 OBJ    :=  $(SFILES:.s=.s.o) $(CFILES:.c=.c.o)
 
 LDSCRIPT := linker.ld 
-#charmap.bmp.o
+
 .PHONY: all clean
  
 all: $(KERNEL)
 
 
-
-
-
  
-$(KERNEL): $(OBJ) $(LDSCRIPT)
+$(KERNEL): $(OBJ) $(LDSCRIPT) parse_symbols.py
 	$(CC) $(INTERNALLDFLAGS) $(OBJ) $(LAI_FILE) -o $@
 
 	rm symbols.txt
