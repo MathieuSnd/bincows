@@ -275,11 +275,10 @@ static struct MR_header* get_header_base(const struct memory_range* range) {
 // the ith page in the 64 MB segment
 static void alloc_page_bitmaps(struct MR_header* header, unsigned page) {
 // process on bytes: calculate the right masks
-    uint8_t mask_level0 = 1 << page        % 8,
+    uint8_t mask_level0 = 1 <<  page       % 8,
             mask_level1 = 1 << (page /  4) % 8,
             mask_level2 = 1 << (page /  8) % 8,
             mask_level3 = 1 << (page / 16) % 8;
-
 
 // calculate the new number of free blocks for all the sizes
 
@@ -311,7 +310,7 @@ static void alloc_page_bitmaps(struct MR_header* header, unsigned page) {
 // the ith page in the 64 MB segment
 static void free_page_bitmaps(struct MR_header* header, unsigned page) {
 // process on bytes: calculate the right masks
-    uint8_t mask_level0 = 1 << page        % 8,
+    uint8_t mask_level0 = 1 <<  page       % 8,
             mask_level1 = 1 << (page /  4) % 8,
             mask_level2 = 1 << (page /  8) % 8,
             mask_level3 = 1 << (page / 16) % 8;
@@ -321,7 +320,6 @@ static void free_page_bitmaps(struct MR_header* header, unsigned page) {
     header->bitmap_level1[page/8/4]  &= ~mask_level1;
     header->bitmap_level2[page/8/8]  &= ~mask_level2;
     header->bitmap_level3[page/8/16] &= ~mask_level3;
-
 
 // calculate the new number of free blocks for all the sizes
 
@@ -604,7 +602,8 @@ void physfree(void* physical_page_addr) {
 
     const struct memory_range* range = get_memory_range(physical_page_addr);
 
-    unsigned position = ((uint64_t)physical_page_addr - (uint64_t)range->base) / 0x1000;
+    unsigned position = ((uint64_t)physical_page_addr 
+                       - (uint64_t)range->base) / 0x1000 - 1;
 
     free_page_bitmaps(get_header_base(range), position);
 
