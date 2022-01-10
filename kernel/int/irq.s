@@ -45,6 +45,11 @@ common_stub:
     push r10
     push r11
 
+; clear DF flag
+;  DF need to be clear on function 
+; entry and exit (System-V ABI)
+    cld
+
     call irq_common_handler
 
     pop r11
