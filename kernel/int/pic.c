@@ -44,9 +44,9 @@ void pic_init(void) {
     // starts the initialization sequence (in cascade mode)
 	outb(PIC2_COMMAND, ICW1_INIT | ICW1_ICW4);
 
-	outb(PIC1_DATA, 32);                 
+	outb(PIC1_DATA, 40);                 
     // ICW2: Master PIC vector offset
-	outb(PIC2_DATA, 40);                 
+	outb(PIC2_DATA, 48);                 
     // ICW2: Slave PIC vector offset
 	outb(PIC1_DATA, 4);                       
     // ICW3: tell Master PIC that there is a slave PIC at IRQ2 (0000 0100)
