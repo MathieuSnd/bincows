@@ -1,5 +1,18 @@
+
+/**
+ * @autor Mathieu Serandour
+ * 
+ * At installation, this driver first configures the 
+ * administration queues. When this is done, it creates
+ * one pair of IO queues. As long as the initialization
+ * process is not finished, all of the operations
+ * (identify, IO queue creation) are blocking. This might 
+ * slow the system initialization down.
+ */
+
 #include "nvme.h"
 #include "queue.h"
+#include "spec.h"
 
 #include "../pcie/pcie.h"
 #include "../driver.h"
@@ -8,82 +21,54 @@
 #include "../../lib/sprintf.h"
 #include "../../lib/registers.h"
 #include "../../lib/dump.h"
+#include "../../lib/time.h"
+#include "../../lib/string.h"
 #include "../../memory/physical_allocator.h"
 #include "../../memory/paging.h"
 #include "../../memory/vmap.h"
-#include "../../int/idt.h"
+#include "../../int/irq.h"
+
+// for apic_eoi()
+#include "../../int/apic.h"
 
 static void remove(driver_t* this);
 
-struct data {
-    unsigned doorbell_stride;
-    struct queue_pair admin_queues;
+#define HANDLED_NAMESPACES 4
+#define ADMIN_QUEUE_SIZE 4
+
+struct namespace {
+    uint32_t id;
+
+    // block size: 1 << block_size_shift
+    uint32_t block_size_shift;
+    uint64_t capacity;
+    uint32_t pref_granularity;
+    uint32_t pref_write_alignment;
+    uint32_t pref_write_size;
+    int      flags; // bit 0: optperf
 };
 
-#define NSSRS_SUPPORT(CAP) ((CAP & (1llu << 36)) != 0)
+struct data {
 
+    // for blocking mode only:
+    // the IRQ handler sets it to 1 to 
+    // indicate to the install thread that 
+    // the current command is completed
+    volatile int irq_admin_doorbell;
 
-struct regs {
-             uint64_t cap;
-             uint32_t version;
-             uint32_t intmask_set;
-             uint32_t intmask_clear;
-    volatile uint32_t config;
-    volatile uint32_t subsystem_reset;
-    volatile uint32_t status;
-             uint32_t reserved1;
-    volatile uint32_t queue_attr;
-    volatile uint32_t asq_low;  // admin submission queue
-    volatile uint32_t asq_high; // base address
+    unsigned          doorbell_stride;
+    struct queue_pair admin_queues;
+    struct queue_pair io_queues;
 
-    volatile uint32_t acq_low;  // admin completion queue
-    volatile uint32_t acq_high; // base address
-} __attribute__((packed));
+    // alias for this->dev->bars[0]
+    struct regs* registers;
 
+    // number of namespaces 
+    unsigned          nns;
 
-struct subqueuee {
-    uint32_t cmd;
-    uint32_t nsid;
-    uint32_t cdw2; // cmd specific
-    uint32_t cdw3; // cmd specific
-    uint64_t metadata_ptr;
-    uint64_t data_ptr[2];
-    uint32_t cdw10;
-    uint32_t cdw11;
-    uint32_t cdw12;
-    uint32_t cdw13;
-    uint32_t cdw14;
-    uint32_t cdw15;
-} __attribute__((packed));
-
-
-static inline
-uint32_t make_cmd(
-            uint8_t opcode,
-            unsigned fused, // 2 bits
-            unsigned cmdid  // 16 bits
-) {
-    return ((unsigned)opcode) 
-         | (fused << 8)
-         | (0 << 14)   // 0: PRP; 1: SGL
-         | (cmdid << 16);
-}
-
-
-struct compqueuee {
-    uint32_t cmd_specific;
-    uint32_t reserved;
-    uint16_t sq_head_pointer;
-    uint16_t iq_id;
-    uint16_t cmd_id;
-    unsigned phase: 1;
-    unsigned status: 15;
-} __attribute__((packed));
-
-
-static_assert_equals(sizeof(struct subqueuee),  64);
-static_assert_equals(sizeof(struct compqueuee), 16);
-
+    // namespace ids array
+    struct namespace  namespaces[HANDLED_NAMESPACES];
+};
 
 static void rename_device(struct pcie_dev* dev) {
     string_free(&dev->dev.name);
@@ -122,25 +107,17 @@ static void enable(struct regs* regs) {
           | 1;    // busy wait for the ready bit
 
 
+    log_debug("wait for the controller to be ready");
+
     // wait for the controller to be ready
     while((regs->status & 1) == 0)
         asm("pause");
-}
+    log_debug("OK");
 
-static 
-void reset(struct regs* regs) {
-    regs->subsystem_reset = 0x4E564D65;
-    //regs->subsystem_reset = 0;
-}
-
-static 
-int is_shutdown(struct regs* regs) {
-    return ((regs->status >> 2) & 3) == 0b10;
 }
 
 
-
-static
+static inline
 void print_status(driver_t* this) {
     struct pcie_dev* dev = 
             (struct pcie_dev*)this->device;
@@ -172,23 +149,38 @@ void print_status(driver_t* this) {
 static uint64_t createPRP(void) {
     uint64_t paddr = physalloc_single();
     uint64_t vaddr = (uint64_t)translate_address((void*)paddr);
+
+    // disable cache for this page:
+    // unmap it, the remap it as not cachable
     unmap_pages(vaddr, 1);
     
-    map_pages(paddr, 
-              vaddr, 
-              1,
-              PRESENT_ENTRY | PL_XD | PCD              
-              ); 
+    map_pages(
+        paddr, 
+        vaddr, 
+        1,
+        PRESENT_ENTRY | PL_XD | PCD              
+    ); 
     
     return paddr;
 }
 
 
 static void freePRP(uint64_t paddr) {
+    uint64_t vaddr = (uint64_t)translate_address((void*)paddr);
     
+
+    // reset for this page:
+    // unmap it, the remap it as cachable
+
     unmap_pages(
         (uint64_t)translate_address((void*)paddr), 
         1
+    );
+    map_pages(
+        paddr, 
+        vaddr, 
+        1,
+        PRESENT_ENTRY | PL_XD // cache enable
     );
     physfree((void*)paddr);
 }
@@ -202,8 +194,8 @@ static void setup_admin_queues(
     struct data* data = this->data;
 
     data->admin_queues = (struct queue_pair) {
-        .sq=create_queue(64, 64), // 64x64=4K
-        .cq=create_queue(16, 64), // 16x64<4K
+        .sq=create_queue(ADMIN_QUEUE_SIZE, 64), // 64x64=4K
+        .cq=create_queue(ADMIN_QUEUE_SIZE, 16), // 16x64<4K
     };
 // let the controller know about those
     regs->asq_low  = trv2p(data->admin_queues.sq.base) & 0xffffffff;
@@ -213,11 +205,6 @@ static void setup_admin_queues(
 }
 
 
-static void free_admin_queues(driver_t* this) {
-    struct data* data = this->data;
-    free_queue(&data->admin_queues.sq);
-    free_queue(&data->admin_queues.cq);
-}
 
 
 static
@@ -252,6 +239,41 @@ void doorbell_completion(driver_t* this,
     *doorbell = head;
 }
 
+
+static void irq_handler(driver_t* this) {
+    // check if an admin command is completed
+    struct data* data = this->data;
+    if(this->status != DRIVER_STATE_OK) {
+        // blocking mode
+        data->irq_admin_doorbell = 1;
+        
+        // signal that the controller produced
+        // an entry in the completion queue
+        // and that we just consumed it
+        queue_produce(&data->admin_queues.cq);
+        doorbell_completion(
+            this,
+            data->registers,
+            0,
+            queue_consume(&data->admin_queues.cq)
+        );
+
+        // signal that the controller consumed 
+        // an entry in the submission queue
+        queue_consume(&data->admin_queues.sq);
+    }
+
+    // acknowledge the irq to the apic
+    apic_eoi();
+    return;
+/*
+    struct data* data = this->data;
+    if(!queue_empty(&data->admin_queues.cq)) {
+        data->admin_queues.cq
+    }
+*/  
+}
+
 // the caller should first
 // update the head
 static void insert_command(
@@ -271,55 +293,103 @@ static void insert_command(
     doorbell_submission(
         data,       
         regs,       
-        0,          // admin queue
-        ++sq->tail  // new tail value 
+        0,                // admin queue
+        queue_produce(sq) // new tail value 
     );
 }
 
 
-static void createIOqueue(
-    driver_t* this,
-    struct regs* regs
+static void admin_command(
+    struct data* data,
+    struct regs* regs,
+
+    uint8_t  opcode, 
+    uint16_t cmdid,
+    uint32_t nsid,
+    uint64_t prp0,
+    uint64_t prp1,
+    uint64_t cdw10,
+    uint64_t cdw11
 ) {
 
-    struct data* data = this->data;
-
-    // physical address
-    uint64_t pprp = createPRP();
-    
-    struct subqueuee identifye = {
+    struct subqueuee commande = {
         .cmd = make_cmd(
-            0x01,               // opcode
+            opcode,             // opcode
             0,                  // fused
-            0                   // cmdid
-        ),                      //
-        .nsid     = 0,       // unused
+            cmdid               
+        ),                      
+        .nsid     = nsid,       
         .cdw2     = 0,          // unused
         .cdw3     = 0,          // unused
         .metadata_ptr = 0,      // unused
         .data_ptr = {
-            pprp,               // prp0
-            0                   // prp1:
-                                // none
+            prp0,               // prp0
+            prp1                // prp1
         },  
-        .cdw10    = (64 << 16) | 1,
-        .cdw11    = (0 << 16)   // IVT
-                  | 2           // interrupt enable
-                  | 1,          // physically
-                                // contiguous
+        .cdw10    = cdw10,
+        .cdw11    = cdw11
     };
     
     insert_command(
         data, 
         regs,
         &data->admin_queues.sq, 
-        &identifye);
+        &commande
+    );
 
-
-    for(int i = 0; i < 100; i++)
-            outb(0x80, 0);
-
+    // blocking mode:
+    // wait for the controller to process
+    // the command
+    while(!data->irq_admin_doorbell)
+        sleep(1);
+    data->irq_admin_doorbell = 0;
 }
+
+
+// create IO submission and completion queues
+static void createIOqueues(
+    driver_t* this,
+    struct data* data,
+    struct regs* regs
+) {
+
+
+    // physical address
+    uint64_t pbase = createPRP();
+    
+    admin_command( // create IO submission queue
+        data,
+        regs,
+        0x01,                    // opcode: create submission 
+                                 // queue
+        1,                       // cmdid
+        0,                       // nsid - unused
+        pbase,                   // prp0
+        0,                       // prp1
+        (ADMIN_QUEUE_SIZE << 16) // high word: queue size
+        | 1,                     // low word:  queue id
+        (1 << 16)                // completion queue id
+       | 1                       // physically contiguous
+    );
+
+
+    admin_command( // create IO completion queue
+        data,
+        regs,
+        0x05,                    // opcode: create completion 
+                                 // queue
+        2,                       // cmdid
+        0,                       // nsid - unused
+        pbase,                   // prp0
+        0,                       // prp1
+        (ADMIN_QUEUE_SIZE << 16) // high word: queue size
+        | 1,                     // low word:  queue id
+        (0 << 16)                // IVT
+       | 2                       // interrupt enable
+       | 1                       // physically contiguous
+    );
+}
+
 
 // cns:  0 to idenfity a ns
 //       1 for the controller
@@ -328,55 +398,192 @@ static void createIOqueue(
 // put nsid = 0
 static void identify(
     driver_t* this,
+    struct data* data,
+    struct regs* regs,
+
+    uint16_t  cmdid,
     uint32_t  nsid,     
     uint8_t   cns,
+    uint64_t  dest_paddr
+) {
+    assert(cns <= 2);
+
+    admin_command(
+        data,
+        regs,
+        0x06,       // opcode
+        cmdid,
+        nsid,
+        dest_paddr,
+        0,          // PRP1 - unused
+        cns,
+        0           // CNTID
+    );
+}
+
+
+static void identify_controller(
+    driver_t*    this,
+    struct data* data,
     struct regs* regs
 ) {
-    assert(cns < 2);
-
-    struct data* data = this->data;
 
     // physical address
-    uint64_t pprp = createPRP();
+    uint64_t pdata = createPRP();
     
-    struct subqueuee identifye = {
-        .cmd = make_cmd(
-            0x06,               // opcode
-            0,                  // fused
-            0                   // cmdid
-        ),                      //
-        .nsid     = nsid,       // unused
-        .cdw2     = 0,          // unused
-        .cdw3     = 0,          // unused
-        .metadata_ptr = 0,      // unused
-        .data_ptr = {
-            pprp,               // prp0
-            0                   // prp1:
-                                // none
-        },  
-        .cdw10    = cns,
-        .cdw11    = 0           // CNTID
-    };
-    
-    insert_command(
-        data, 
+    identify( // identify controller
+        this,
+        data,
         regs,
-        &data->admin_queues.sq, 
-        &identifye);
+        0,    // CMDID
+        0,    // NSID: unused for this cns
+        1,    // CNS, controller: 1
+        pdata
+    );
+
+    uint8_t* vdata = translate_address((void*)pdata);
+    
+    //data->transfert_max_size = 1 << vdata[77];
+    //log_warn("MAX: %u pages", vdata[77]);
+
+    // no need to keep this.
+    // very dumb to copy 4K to just keep 1 byte...
+    freePRP(pdata);
+}
 
 
-    for(int i = 0; i < 100; i++)
-            outb(0x80, 0);
+// we identify the ith namespace
+// in the structure 
+static void identify_namespace(
+    driver_t*    this,
+    struct data* data,
+    struct regs* regs,
+    uint32_t     i
+) {
+    // physical base address
+    // of the destination NS 
+    // data structure
+    uint64_t pdata = createPRP();
 
+    uint32_t nsid = data->namespaces[i].id;
 
-    print_status(this);
+    log_info("nsid=%x", nsid);
+    
+    identify(    // identify namespaces
+        this,
+        data,
+        regs,
+        nsid + 3,// CMDID: begins at 4,
+                 // we can pick nsid+3 as 
+                 // NSIDs are distincs and
+                 // >= 1.
+        nsid,    // NSID
+        0,       // CNS, NSID list: 2
+        pdata
+    );
+
+    void* vdata = translate_address((void*)pdata);
     
     dump(
-        translate_address((void*)pprp),
-        64,
-        20,
+        vdata,
+        128,
+        16,
         DUMP_HEX8
     );
+
+    struct namespace* ns = &data->namespaces[i];
+    
+    ns->capacity             = *(uint64_t*)(vdata +  8);
+
+    // OPTPERF bit: validity of fields:
+    // pref_granularity, 
+    // pref_write_alignment, 
+    // pref_write_size
+    ns->flags                    = *(uint64_t *)(vdata + 24)&16>>4;
+    if(ns->flags) { 
+        ns->pref_granularity     = *(uint16_t *)(vdata + 64);
+        ns->pref_write_alignment = *(uint16_t *)(vdata + 66);
+        ns->pref_write_size      = *(uint16_t *)(vdata + 72);
+    }
+    uint8_t flbas                = *(uint8_t  *)(vdata + 26);
+
+    uint8_t lbaid = flbas & 0xf;
+    struct lbaf* lbafs = vdata + 128;
+
+    ns->block_size_shift = lbafs[lbaid].ds;
+    if(!ns->block_size_shift)
+        ns->block_size_shift = 9;
+
+
+    log_info("namespace:\n"
+    "    ns->id                   : %lx\n"
+    "    ns->capacity             : %u K, %u M\n"
+    "    ns->flags                : %lx\n"
+    "    ns->block_size_shift     : 1 << %lx = %lu bytes\n"
+    "    ns->pref_granularity     : %lx\n"
+    "    ns->pref_write_alignment : %lx\n"
+    "    ns->pref_write_size      : %lx",
+    ns->id,
+    ns->capacity >> 10,
+    ns->capacity >> 20,
+    ns->flags,
+    ns->block_size_shift,
+    1<< ns->block_size_shift,
+    ns->pref_granularity,
+    ns->pref_write_alignment,
+    ns->pref_write_size
+    );
+
+    // no need to keep this.
+    // very dumb to copy 4K to just keep 16 byte...
+    freePRP(pdata);
+}
+
+
+
+static void identify_active_namespaces(
+    driver_t*    this,
+    struct data* data,
+    struct regs* regs
+) {
+    // physical base address
+    // of the destination data
+    // containing the active Namespaces
+    uint64_t pdata = createPRP();
+    
+    identify( // identify namespaces
+        this,
+        data,
+        regs,
+        3,    // CMDID
+        0,    // NSID: the returned NSIDs are
+              // higher than this field. We want
+              // them all
+        2,    // CNS, NSID list: 2
+        pdata
+    );
+
+    uint32_t* vdata = translate_address((void*)pdata);
+    
+    // keep it outside the loop to keep track of the 
+    // end iteration
+    int i;
+
+    for(i = 0; i < HANDLED_NAMESPACES; i++) {
+        uint32_t nsid = *vdata++;
+        if(nsid == 0) // end
+            break;
+        data->namespaces[i].id = nsid;
+    }
+
+    data->nns = i;
+    
+    
+    log_warn("%u found namespaces: %x", data->nns, data->namespaces[0].id);
+
+    // no need to keep this.
+    // very dumb to copy 4K to just keep 16 byte...
+    freePRP(pdata);
 }
 
 
@@ -419,16 +626,6 @@ int is_supported(struct pcie_dev* dev,
     return 1;
 }
 
-static
-void init_struct(driver_t* this) {
-// init struct
-    this->remove = remove;
-    this->name = (string_t) {"Bincows NVMe driver", 0};
-    this->data = malloc(sizeof(struct data));
-    this->data_len = sizeof(struct data);
-    rename_device((struct pcie_dev*)this->device);
-}
-
 
 static void set_pci_cmd(driver_t* this) {
     struct pcie_dev* dev = (struct pcie_dev*)this->device;
@@ -438,46 +635,48 @@ static void set_pci_cmd(driver_t* this) {
     // bus master enable   (bit 02),
     // Memory Space Enable (bit 01),
     // I/O Space Enable    (bit 0)
-    cs->command = 7; // ou bien 6 jsp....
-
-    log_warn("PCICMD=%x\n"
-             "PCISTS=%x", 
-             cs->command,
-             cs->status);
+    cs->command = 7;
 }
 
 
-static __attribute__((interrupt))
-void nvme_irq_handler(void* ifr) {
-    (void) ifr;
+static void init_struct(driver_t* this) {
+// init struct
+    this->remove = remove;
+    this->name = (string_t) {"Bincows NVMe driver", 0};
+    this->data = malloc(sizeof(struct data));
+    // zero it
+    memset(this->data, 0, sizeof(struct data));
 
-    log_warn("AYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
+    this->data_len = sizeof(struct data);
+    rename_device((struct pcie_dev*)this->device);
 }
+
 
 void setup_irqs(
+            driver_t* this,
             struct pcie_dev* dev,
             struct regs*     regs
 ) {
     int using_msix = init_msix(dev);
 
-    assert(using_msix);
     
     // this register shall not be accessed
     // when using msix
     if(! using_msix)
         regs->intmask_clear = 0xff;
 
-    set_irq_handler(50, nvme_irq_handler);
+    
+    assert(using_msix);
 
-    set_msix(dev, 0, 0, 50, 0, 0, 0);
-    set_msix(dev, 1, 0, 19, 0, 0, 0);
-    set_msix(dev, 2, 0, 19, 0, 0, 0);
-    set_msix(dev, 3, 0, 19, 0, 0, 0);
+    unsigned admin_irq = install_irq(irq_handler, this);
+
+    set_msix(dev, 0, 0, admin_irq, 0, 0, 0);
     _sti();
 }
 
 
 int nvme_install(driver_t* this) {
+    log_info("NVME: installing...");
 
     struct pcie_dev* dev = (struct pcie_dev*)this->device;
     struct regs* bar0 = (struct regs*)dev->bars[0].base;
@@ -495,6 +694,7 @@ int nvme_install(driver_t* this) {
     
     init_struct(this);
 
+
     if(! NSSRS_SUPPORT(cap)) {
         // no reset support ...
         // I'm not sure what to do 
@@ -510,15 +710,13 @@ int nvme_install(driver_t* this) {
         bar0->config = 0x00;
     }
 
-    log_debug("reseted");
-
-
     bar0->queue_attr = 
-            (4 << 16) // 4 entries for 
-          | (4 << 0); // admin queues
+            (ADMIN_QUEUE_SIZE << 16) // admin queues
+          | (ADMIN_QUEUE_SIZE << 0);
     
 
     struct data* data = this->data;
+    data->registers = bar0;
 
     // CAP.DSTRD
     data->doorbell_stride = 4 << ((cap>>32) & 0xf);
@@ -527,46 +725,21 @@ int nvme_install(driver_t* this) {
     // setup interrupts
 //
     setup_admin_queues(this, bar0);
-
-    print_status(this);
-
-//    createIOqueue(this, bar0);
-
-
-    setup_irqs(dev, bar0);
-
+    setup_irqs(this, dev, bar0);    
     enable(bar0);
+
+// actually it holds no usefull information
+    //identify_controller(this,data, bar0);
     
-
-
-
-    _sti();
-    set_pci_cmd(this);
-
-    identify( // identify controller
-        this, 
-        0,    // unused for this cns
-        1,     // controller: cns=1
-        bar0
-    );
-    asm("hlt");
-    //dump(data->admin_queues.cq.base, 16, 8, DUMP_HEX8);
-
-    set_pci_cmd(this);
-
-
-    struct PCIE_config_space* cs = dev->config_space;
-
-
-    //pcie_map_bars(dev);
-
-    volatile uint64_t* bar_reg = (uint64_t*)&cs->bar[0];
-
     
+    createIOqueues(this, data, bar0);
 
-    //set_msix(dev, 1, 0, 51, 0, 0, 0);
-    //set_msix(dev, 2, 0, 52, 0, 0, 0);
-    //set_msix(dev, 3, 0, 53, 0, 0, 0);
+    identify_active_namespaces(this, data, bar0);
+
+    // iterate over identified namespaces
+    for(unsigned i = 0; i < data->nns; i++)
+        identify_namespace(this, data, bar0, i);
+
 
     this->status = DRIVER_STATE_OK; 
 // installed
@@ -574,31 +747,51 @@ int nvme_install(driver_t* this) {
 }
 
 
-static void remove(driver_t* this) {
-
-    free(this->data);
-}
-
 static void shutdown(struct driver* this) {
-    assert(this);
 
-    this->status = DRIVER_STATE_SHUTDOWN;
+    struct data* data = this->data;
+
+    // wait for every operations to finish
+    if(data->admin_queues.cq.base) {
+        // if initialized...
+        while(queue_tail(&data->admin_queues.cq) 
+           != queue_tail(&data->admin_queues.sq))
+            sleep(1); 
+    }
+    if(data->io_queues.cq.base) {
+        // if initialized...
+        while(queue_tail(&data->io_queues.cq) 
+           != queue_tail(&data->io_queues.sq))
+            sleep(1); 
+    }
+    // all done! we can safely send a shutdown request
+    // without the risk of losing data
 
     struct pcie_dev* dev = (struct pcie_dev*)this->device;
     struct regs* bar0    = (struct regs*)dev->bars[0].base;
 
+    //  controller shutdown request
     bar0->config = (bar0->config & ~0xc000) | (0b10 << 14);
+    
+    
+    this->status = DRIVER_STATE_SHUTDOWN;
 }
 
 
-// don't forget to delete it afterward!
-unsigned nvme_create_ioqueue(struct driver* this) {
-    (void) (this);
-    return NVME_INVALID_IO_QUEUE;
-}
+static void remove(driver_t* this) {
+    shutdown(this);
+    struct data* data = this->data;
+    
+    // free all the initialized queues
+    if(data->admin_queues.cq.base) {
+        free_queue(&data->admin_queues.sq);
+        free_queue(&data->admin_queues.cq);
+    }
+    if(data->io_queues.cq.base) {
+        free_queue(&data->io_queues.sq);
+        free_queue(&data->io_queues.cq);
+    }
 
-void nvme_delete_ioqueue(struct driver* this, 
-                         unsigned queueid) {
-    (void) (this + queueid);
+    // finally free the data structure
+    free(this->data);
 }
-
