@@ -8,6 +8,10 @@ _irq_handler%1:
     ; enter stack frame
     ; push rbp
     ; mov rbp, rsp
+
+; enter stack frame
+    push rbp
+    mov rbp, rsp
     push rdi
     mov dil, byte %1
     
@@ -36,6 +40,7 @@ create_irq 47
 
 
 common_stub:
+
     push rax
     push rcx
     push rdx
@@ -52,6 +57,7 @@ common_stub:
 
     call irq_common_handler
 
+
     pop r11
     pop r10
     pop r9
@@ -63,4 +69,5 @@ common_stub:
     pop rdi
     ; mov rsp, rbp
     ; pop rbp
+    leave
     iretq
