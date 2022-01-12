@@ -125,7 +125,7 @@ struct PCIE_config_space {
     volatile uint8_t  interrupt_line;
     volatile uint8_t  interrupt_pin;
              uint8_t reserved5[2];
-} __packed;
+} __attribute__((packed));
 
 static_assert_equals(sizeof(struct PCIE_config_space), 0x40);
 
