@@ -12,7 +12,7 @@ struct regs {
     volatile uint32_t subsystem_reset;
     volatile uint32_t status;
              uint32_t reserved1;
-    volatile uint32_t queue_attr;
+    volatile uint32_t aqattr;
     volatile uint32_t asq_low;  // admin submission queue
     volatile uint32_t asq_high; // base address
 

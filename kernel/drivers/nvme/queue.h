@@ -6,17 +6,25 @@
 
 
 struct queue {
-    void* __restrict__ base; // vaddr
-    uint16_t size;
-    uint16_t element_size;
-    uint16_t head, // consumer
-             tail; // producer
+    volatile void*     base; // vaddr
+    uint16_t           size;
+    uint16_t           element_size;
+    volatile uint16_t  head; // consumer
+    volatile uint16_t  tail; // producer
     
-    uint16_t id;
+    uint16_t           id;
 };
 
+// sizes must be powers of two
+// because admin_completion_counter 
+// can overflow.
 struct queue_pair {
     struct queue sq, cq;
+
+    // used to calculate the phase bits
+    // and therefore dectect new entries 
+    // form the controller
+    unsigned completion_counter;
 };
 
 struct driver;
@@ -25,21 +33,22 @@ struct driver;
 // ! only 1 page max !
 struct queue create_queue(
                     unsigned size, 
-                    unsigned element_size);
+                    unsigned element_size,
+                    unsigned id);
 
 void free_queue(struct queue*);
 
 
-static inline void* queue_tail(struct queue* queue) {
+static inline void* queue_tail_ptr(struct queue* queue) {
     return queue->base 
          + queue->tail
          * queue->element_size;
 }
 
 
-static inline void* queue_head(struct queue* queue) {
+static inline void* queue_head_ptr(struct queue* queue) {
     return queue->base 
-         + queue->tail
+         + queue->head
          * queue->element_size;
 }
 
@@ -75,3 +84,16 @@ static inline uint16_t queue_consume(struct queue* queue) {
     return queue->head = next_index(queue, queue->head);
 }
 
+// return the predicted bit phase of the tail pointer
+// of the completion queue
+static inline int cq_tail_phase(struct queue_pair* queues) {
+    return (queues->completion_counter 
+            / queues->cq.size) % 2;
+}
+
+// update the completion queue, by checking the phase
+// bits of the entries and adding those to the queue 
+// structure
+// and update the submission queue (mark as consumed the 
+// entries that are produced in the completion queue)
+void update_queues(struct queue_pair* queues);

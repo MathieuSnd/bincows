@@ -1,4 +1,3 @@
-
 /**
  * @autor Mathieu Serandour
  * 
@@ -21,7 +20,10 @@
 #include "../../lib/sprintf.h"
 #include "../../lib/registers.h"
 #include "../../lib/dump.h"
-#include "../../lib/time.h"
+//#include "../../lib/time.h"
+static void sleep(int o) {
+    asm volatile("pause");
+}
 #include "../../lib/string.h"
 #include "../../memory/physical_allocator.h"
 #include "../../memory/paging.h"
@@ -34,7 +36,8 @@
 static void remove(driver_t* this);
 
 #define HANDLED_NAMESPACES 4
-#define ADMIN_QUEUE_SIZE 4
+#define ADMIN_QUEUE_SIZE 2
+#define IO_QUEUE_SIZE    64
 
 struct namespace {
     uint32_t id;
@@ -60,8 +63,10 @@ struct data {
     struct queue_pair admin_queues;
     struct queue_pair io_queues;
 
+    uint32_t          admin_completion_counter;
+
     // alias for this->dev->bars[0]
-    struct regs* registers;
+    struct regs*      registers;
 
     // number of namespaces 
     unsigned          nns;
@@ -69,6 +74,8 @@ struct data {
     // namespace ids array
     struct namespace  namespaces[HANDLED_NAMESPACES];
 };
+
+
 
 static void rename_device(struct pcie_dev* dev) {
     string_free(&dev->dev.name);
@@ -131,7 +138,7 @@ void print_status(driver_t* this) {
               "mask clear: %x\n"
               "config:     %x\n"
               "status:     %x\n"
-              "queue_attr: %x\n",
+              "aqattr: %x\n",
 
               regs->cap,
               (regs->cap>>37)&0xff,
@@ -140,7 +147,7 @@ void print_status(driver_t* this) {
               regs->intmask_clear,
               regs->config,
               regs->status,
-              regs->queue_attr
+              regs->aqattr
               );
 }
 
@@ -194,8 +201,8 @@ static void setup_admin_queues(
     struct data* data = this->data;
 
     data->admin_queues = (struct queue_pair) {
-        .sq=create_queue(ADMIN_QUEUE_SIZE, 64), // 64x64=4K
-        .cq=create_queue(ADMIN_QUEUE_SIZE, 16), // 16x64<4K
+        .sq=create_queue(ADMIN_QUEUE_SIZE, sizeof(struct subqueuee),0),
+        .cq=create_queue(ADMIN_QUEUE_SIZE, sizeof(struct compqueuee),0),
     };
 // let the controller know about those
     regs->asq_low  = trv2p(data->admin_queues.sq.base) & 0xffffffff;
@@ -243,24 +250,45 @@ void doorbell_completion(driver_t* this,
 static void irq_handler(driver_t* this) {
     // check if an admin command is completed
     struct data* data = this->data;
+    log_warn("irq!");
     if(this->status != DRIVER_STATE_OK) {
         // blocking mode
-        data->irq_admin_doorbell = 1;
+
+        update_queues(&data->admin_queues);
         
-        // signal that the controller produced
-        // an entry in the completion queue
-        // and that we just consumed it
-        queue_produce(&data->admin_queues.cq);
+        if(data->io_queues.cq.base)
+            update_queues(&data->io_queues);
+
+        if(!queue_empty(&data->io_queues.cq)) {
+            panic("wtf");
+        }
+        assert(!queue_empty(&data->admin_queues.cq));
+        //assert(!queue_empty(&data->io_queues.cq));
+
+        data->irq_admin_doorbell = 1;
+
+
+        while(!queue_empty(&data->admin_queues.cq)) {
+            struct compqueuee* entry = queue_head_ptr(&data->admin_queues.cq);
+
+            if(entry->status) {
+                dump(entry, 16, 8, DUMP_HEX8);
+                panic(
+                    "NVMe: a problem occured "
+                    "(see the above dump for any nerdish debug"
+                );
+            }
+
+            queue_consume(&data->admin_queues.cq);
+        }
+
+
         doorbell_completion(
             this,
             data->registers,
             0,
-            queue_consume(&data->admin_queues.cq)
+            data->admin_queues.cq.head
         );
-
-        // signal that the controller consumed 
-        // an entry in the submission queue
-        queue_consume(&data->admin_queues.sq);
     }
 
     // acknowledge the irq to the apic
@@ -284,7 +312,7 @@ static void insert_command(
 ) {
     assert(!queue_full(sq));
 
-    struct subqueuee* tail = queue_tail(sq);
+    struct subqueuee* tail = queue_tail_ptr(sq);
 
 
     *tail = *sqe;
@@ -293,7 +321,7 @@ static void insert_command(
     doorbell_submission(
         data,       
         regs,       
-        0,                // admin queue
+        sq->id,                // admin queue
         queue_produce(sq) // new tail value 
     );
 }
@@ -330,6 +358,8 @@ static void admin_command(
         .cdw11    = cdw11
     };
     
+    data->irq_admin_doorbell = 0;
+
     insert_command(
         data, 
         regs,
@@ -342,7 +372,6 @@ static void admin_command(
     // the command
     while(!data->irq_admin_doorbell)
         sleep(1);
-    data->irq_admin_doorbell = 0;
 }
 
 
@@ -354,23 +383,16 @@ static void createIOqueues(
 ) {
 
 
-    // physical address
-    uint64_t pbase = createPRP();
     
-    admin_command( // create IO submission queue
-        data,
-        regs,
-        0x01,                    // opcode: create submission 
-                                 // queue
-        1,                       // cmdid
-        0,                       // nsid - unused
-        pbase,                   // prp0
-        0,                       // prp1
-        (ADMIN_QUEUE_SIZE << 16) // high word: queue size
-        | 1,                     // low word:  queue id
-        (1 << 16)                // completion queue id
-       | 1                       // physically contiguous
-    );
+    data->io_queues = (struct queue_pair) {
+        .sq=create_queue(IO_QUEUE_SIZE, sizeof(struct subqueuee ),1),
+        .cq=create_queue(IO_QUEUE_SIZE, sizeof(struct compqueuee),1),
+    };
+
+
+    // physical addresses
+    uint64_t p_compque_buff = trv2p(data->io_queues.sq.base);
+    uint64_t p_subque_buff  = trv2p(data->io_queues.cq.base);
 
 
     admin_command( // create IO completion queue
@@ -378,14 +400,29 @@ static void createIOqueues(
         regs,
         0x05,                    // opcode: create completion 
                                  // queue
-        2,                       // cmdid
+        1,                       // cmdid
         0,                       // nsid - unused
-        pbase,                   // prp0
+        p_compque_buff,          // prp0
         0,                       // prp1
-        (ADMIN_QUEUE_SIZE << 16) // high word: queue size
+        ((IO_QUEUE_SIZE-1) << 16)// high word: queue size-1
         | 1,                     // low word:  queue id
         (0 << 16)                // IVT
        | 2                       // interrupt enable
+       | 1                       // physically contiguous
+    );
+    
+    admin_command( // create IO submission queue
+        data,
+        regs,
+        0x01,                    // opcode: create submission 
+                                 // queue
+        2,                       // cmdid
+        0,                       // nsid - unused
+        p_subque_buff,           // prp0
+        0,                       // prp1
+        ((IO_QUEUE_SIZE-1) << 16)// high word: queue size-1
+        | 1,                     // low word:  queue id
+        (1 << 16)                // completion queue id
        | 1                       // physically contiguous
     );
 }
@@ -710,9 +747,9 @@ int nvme_install(driver_t* this) {
         bar0->config = 0x00;
     }
 
-    bar0->queue_attr = 
-            (ADMIN_QUEUE_SIZE << 16) // admin queues
-          | (ADMIN_QUEUE_SIZE << 0);
+    bar0->aqattr = 
+            ((ADMIN_QUEUE_SIZE-1) << 16) // admin queues
+          | ((ADMIN_QUEUE_SIZE-1) << 0);
     
 
     struct data* data = this->data;
@@ -724,16 +761,21 @@ int nvme_install(driver_t* this) {
     
     // setup interrupts
 //
+    //log_warn("setup_admin_queues(this, bar0);");
+
     setup_admin_queues(this, bar0);
     setup_irqs(this, dev, bar0);    
+    log_warn("enable(bar0);");
     enable(bar0);
 
 // actually it holds no usefull information
-    //identify_controller(this,data, bar0);
-    
-    
+//    identify_controller(this,data, bar0);
+
+    log_warn("creating IO queues");
     createIOqueues(this, data, bar0);
 
+
+    log_warn("identify_active_namespaces");
     identify_active_namespaces(this, data, bar0);
 
     // iterate over identified namespaces
@@ -754,14 +796,16 @@ static void shutdown(struct driver* this) {
     // wait for every operations to finish
     if(data->admin_queues.cq.base) {
         // if initialized...
-        while(queue_tail(&data->admin_queues.cq) 
-           != queue_tail(&data->admin_queues.sq))
+        while(data->admin_queues.cq.head 
+           != data->admin_queues.sq.tail)
             sleep(1); 
+        log_debug("done");
+
     }
     if(data->io_queues.cq.base) {
         // if initialized...
-        while(queue_tail(&data->io_queues.cq) 
-           != queue_tail(&data->io_queues.sq))
+        while(data->io_queues.cq.head
+           != data->io_queues.sq.tail)
             sleep(1); 
     }
     // all done! we can safely send a shutdown request
