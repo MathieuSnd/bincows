@@ -597,17 +597,17 @@ static const struct memory_range* get_memory_range(const void* addr) {
  * size is in pages 
  * 
  */
-void physfree(void* physical_page_addr) {
+void physfree(uint64_t physical_page_addr) {
     assert_aligned(physical_page_addr, 0x1000);
 
-    const struct memory_range* range = get_memory_range(physical_page_addr);
+    const struct memory_range* range = get_memory_range((void*)physical_page_addr);
 
-    unsigned position = ((uint64_t)physical_page_addr 
+    unsigned position = (physical_page_addr 
                        - (uint64_t)range->base) / 0x1000 - 1;
 
     free_page_bitmaps(get_header_base(range), position);
 
-    memset(translate_address(physical_page_addr), 0, 0x1000);
+    memset(translate_address((void*)physical_page_addr), 0, 0x1000);
     
     total_available_pages++;
 }

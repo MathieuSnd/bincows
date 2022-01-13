@@ -41,7 +41,7 @@ void physalloc(size_t size, void* virtual_addr, PHYSALLOC_CALLBACK callback);
 // without mapping it or anything
 uint64_t physalloc_single(void);
 
-void physfree(void* physical_page_addr);
+void physfree(uint64_t physical_page_addr);
 
 // return the number of available pages in the system
 int available_pages(void);
