@@ -1,5 +1,8 @@
 #pragma once
 
+#include <stdint.h>
+#include "../../lib/assert.h"
+
 #define NSSRS_SUPPORT(CAP) ((CAP & (1llu << 36)) != 0)
 
 

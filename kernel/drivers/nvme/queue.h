@@ -39,14 +39,14 @@ struct queue create_queue(
 void free_queue(struct queue*);
 
 
-static inline void* queue_tail_ptr(struct queue* queue) {
+static inline volatile void* queue_tail_ptr(struct queue* queue) {
     return queue->base 
          + queue->tail
          * queue->element_size;
 }
 
 
-static inline void* queue_head_ptr(struct queue* queue) {
+static inline volatile void* queue_head_ptr(struct queue* queue) {
     return queue->base 
          + queue->head
          * queue->element_size;
