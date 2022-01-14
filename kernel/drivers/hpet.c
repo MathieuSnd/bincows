@@ -114,9 +114,8 @@ void hpet_mask_irq(void) {
 void hpet_wait(void) {
     base->general_config |= 1;
 
-    while(base->main_counter_value > 0x1000) {
-            
-    }
+    while(base->main_counter_value > 0x80000000lu)
+        asm("pause");
 }
 
 void hpet_disable(void) {
