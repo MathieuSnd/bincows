@@ -111,9 +111,7 @@ static void init_memory(
 ) {
     log_debug("init memory...");
     init_physical_allocator(memmap_tag);
-
-
-    init_paging(memmap_tag);
+    init_paging            (memmap_tag);
 
 // map MMIOs
     map_pages(
@@ -191,6 +189,7 @@ void _start(struct stivale2_struct *stivale2_struct) {
     set_logging_level(LOG_LEVEL_DEBUG);
 
     setup_isrs();
+
     read_acpi_tables((void*)rsdp_tag_ptr->rsdp);
 
     init_memory(memmap_tag, framebuffer_tag);
@@ -223,13 +222,17 @@ void _start(struct stivale2_struct *stivale2_struct) {
 // terminal is successfully installed 
     init_gdt_table();
     
+
     puts(&_binary_bootmessage_txt);
 
     printf("boot logs:\n");
     puts(log_get());
     log_flush();
 
+    hpet_init();
+    apic_setup_clock();
 
+    
     pcie_init();
 
     pic_init();
@@ -237,8 +240,7 @@ void _start(struct stivale2_struct *stivale2_struct) {
 
     ps2kb_set_event_callback(kbhandler);
 
-    hpet_init();
-    apic_setup_clock();
+
 
 
     //printf("issou");
@@ -246,6 +248,7 @@ void _start(struct stivale2_struct *stivale2_struct) {
 
     for(;;) {
         asm volatile("hlt");
+        //log_info("clock()=%lu", clock());
     }
 
     __builtin_unreachable();

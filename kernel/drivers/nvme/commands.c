@@ -18,54 +18,6 @@ void doorbell_submission(
 }
 
 
-/**
- * @brief enqueue the sqe sbmission queue entry
- * structure to the given submission queue. Update
- * the associated doorbell register and the 
- * submission tail value in the sq queue structure.
- * 
- * 
- * @param doorbell_stride the NVM doorbell stride
- * @param regs the virtual address of the NVME 
- *           register space (bar0 base) 
- * @param sq  a pointer to the submission queue 
- *           structure in which the command is to 
- *           be enqueued
- * @param sqe a pointer to the submission queue 
- *           entry structure describing the command
- *           be enqueue
- * @return int 
- */
-static int insert_command(
-        unsigned          doorbell_stride,
-        struct regs*      regs,
-        struct queue*     sq, 
-        struct subqueuee* sqe
-) {
-    assert(!queue_full(sq));
-
-    volatile
-    struct subqueuee* tail = queue_tail_ptr(sq);
-
-    memcpy(tail, sqe, sizeof(struct subqueuee));
-
-    log_warn("INSERT COMMAND %lx IN QUEUE %x", tail, sq->id);
-
-
-    uint16_t tail_idx = queue_produce(sq);
-    // doorbell
-    doorbell_submission(
-        doorbell_stride,       
-        regs,       
-        sq->id,          // admin queue
-        tail_idx         // new tail value 
-    );
-
-
-    return tail_idx;
-}
-
-
 void async_command(
     unsigned doorbell_stride,
     struct regs* regs,
@@ -76,12 +28,18 @@ void async_command(
     uint32_t nsid,
     uint64_t prp0,
     uint64_t prp1,
-    uint64_t cdw10,
-    uint64_t cdw11,
-    uint64_t cdw12
+    uint32_t cdw10,
+    uint32_t cdw11,
+    uint32_t cdw12
 ) {
-    
-    struct subqueuee commande = {
+    assert(!queue_full(sq));
+
+    volatile
+    struct subqueuee* tail = queue_tail_ptr(sq);
+
+
+
+    *tail = (struct subqueuee) {
         .cmd = make_cmd(
             opcode,             // opcode
             0,                  // fused
@@ -100,12 +58,14 @@ void async_command(
         .cdw12    = cdw12,
     };
     
+    uint16_t tail_idx = queue_produce(sq);
 
-    insert_command(
-        doorbell_stride, 
-        regs,
-        sq, 
-        &commande
+    // doorbell
+    doorbell_submission(
+        doorbell_stride,       
+        regs,       
+        sq->id,          // admin queue
+        tail_idx         // new tail value 
     );
 }
 
@@ -120,9 +80,9 @@ void sync_command(
     uint32_t nsid,
     uint64_t prp0,
     uint64_t prp1,
-    uint64_t cdw10,
-    uint64_t cdw11,
-    uint64_t cdw12
+    uint32_t cdw10,
+    uint32_t cdw11,
+    uint32_t cdw12
 ) {
 
     async_command(

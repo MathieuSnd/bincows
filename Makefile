@@ -19,6 +19,8 @@ QEMU_COMMON_ARGS := -bios /usr/share/ovmf/OVMF.fd \
 			 -vga virtio \
 			 -no-reboot \
 			 -D qemu.log \
+			 -trace "pci_nvme_*" \
+			 -trace "apic_*" \
 			-device nvme,drive=NVME1,serial=deadbeef \
 			-drive format=raw,if=none,id=NVME1,file=
 			

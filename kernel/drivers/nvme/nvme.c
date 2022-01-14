@@ -34,7 +34,7 @@
 
 static void remove(driver_t* this);
 
-#define HANDLED_NAMESPACES 4
+#define HANDLED_NAMESPACES 1
 #define ADMIN_QUEUE_SIZE 2
 #define IO_QUEUE_SIZE    64
 
@@ -76,11 +76,8 @@ void perform_read_command(
     struct data* data,
     struct regs* regs,
     uint64_t lba,
-    void*    buf,
-    size_t   count,
-
-    uint16_t  cmdid,
-    uint32_t  nsid
+    void*    _buf,
+    size_t   count
 );
 
 
@@ -471,7 +468,7 @@ static void identify_namespace(
     ns->block_size_shift = lbafs[lbaid].ds;
     if(!ns->block_size_shift)
         ns->block_size_shift = 9;
-
+    
 
     log_info("namespace:\n"
     "    ns->id                   : %lx\n"
@@ -501,8 +498,9 @@ static void identify_namespace(
 
 static 
 void identify_active_namespaces(
-    struct data* data,
-    struct regs* regs
+    struct driver* this,
+    struct data*   data,
+    struct regs*   regs
 ) {
     // physical base address
     // of the destination data
@@ -535,7 +533,17 @@ void identify_active_namespaces(
 
     data->nns = i;
     
-    
+    if(data->nns == 0)
+        log_warn("NVMe: no namespace found");
+    else if(data->nns > 1)
+        log_warn("NVMe: Bincows currently only handles"
+                 "one NVMe namespace per controller. "
+                 "%u namespaces are ignored for device %s.",
+                 
+                 data->nns-1,
+                 this->device->name
+        );
+
     log_warn("%u found namespaces: %x", data->nns, data->namespaces[0].id);
 
     // no need to keep this.
@@ -690,17 +698,14 @@ int nvme_install(driver_t* this) {
 // actually it holds no usefull information
     identify_controller(data, bar0);
 
-    log_warn("creating IO queues");
     createIOqueues(data, bar0);
 
-
-    log_warn("identify_active_namespaces");
-    identify_active_namespaces(data, bar0);
+    identify_active_namespaces(this, data, bar0);
 
     // iterate over identified namespaces
-    for(unsigned i = 0; i < data->nns; i++)
-        identify_namespace(data, bar0, i);
-
+    //for(unsigned i = 0; i < data->nns; i++)
+    identify_namespace(data, bar0, 0);
+    sleep(10000);
 
     this->status = DRIVER_STATE_OK; 
 
@@ -710,18 +715,17 @@ int nvme_install(driver_t* this) {
     perform_read_command(
         data,
         bar0,
-        0,
+        0x001fca00 >> 9,
         vaddr,
-        1,
-        10,
-        1
+        8
     );
     
     while(! queue_empty(&data->io_queues.sq))
         sleep(1);
+    
     dump(
         vaddr,
-        512,
+        0x1000 /8,
         32,
         DUMP_HEX8
     );
@@ -783,32 +787,80 @@ static void remove(driver_t* this) {
 }
 
 
+// better be well alligned
 static
 void perform_read_command(
     struct data* data,
     struct regs* regs,
     uint64_t lba,
-    void*    buf,
-    size_t   count,
-
-    uint16_t  cmdid,
-    uint32_t  nsid
+    void*    _buf,
+    size_t   count
 ) {
-    uint64_t paddr = trv2p(buf);
+    // general assert protection
+    assert(lba         < data->namespaces[0].capacity);
+    assert(lba + count < data->namespaces[0].capacity);
+    assert(data->namespaces[0].id == 1);
+    assert(data->nns >= 1);
 
-    async_command( // create IO completion queue
-        data->doorbell_stride,
-        regs,                    // NVMe register space
-        &data->io_queues.sq,  // admin submission queue
-        OPCODE_IO_READ,
-        cmdid,                   // cmdid
-        nsid,                    // nsid
-        paddr,                   // prp0
-        0,                       // prp1
-        lba&0xffffffff,          // cdw10: low lba part
-        lba>>32,                 // cdw11: high lba part
-        count                    // cdw12 low part: count
+    // NVME PRP: must be dword aligned
+    assert_aligned(_buf, 4);
+
+    uint64_t buf_vaddr = (uint64_t)_buf;
+
+    
+    unsigned shift = data->namespaces[0].block_size_shift;
+
+
+    // must not cross a 4K page boudary
+    assert(
+        ((buf_vaddr + (1 << shift)) & ~0x0fff)
+      ==( buf_vaddr                 & ~0x0fff)
     );
+
+
+    while(count != 0) {
+        unsigned c = 0;
+        
+        uint64_t page_base = buf_vaddr & ~0x0fff;
+
+        // find the biggest size for the access 
+        // that does not cross a page border (in 
+        // our shitty architecture)
+        int i = 0;
+        while(1) {
+            uint64_t next = buf_vaddr + (1 << shift);
+            
+            // crossed a 4K page border
+            if((next & ~0x0fff) != page_base)
+                break; 
+            
+            c++;
+            count--;
+        log_warn("%lx - %lx - %lx", next, page_base, (1 << shift));
+
+            buf_vaddr = next;
+        }
+
+        // c == 0 if the buffer is not well aligned
+        assert(c != 0);
+        
+
+        uint64_t paddr = trv2p((void*)buf_vaddr);
+
+        async_command( // create IO completion queue
+            data->doorbell_stride,
+            regs,                    // NVMe register space
+            &data->io_queues.sq,  // admin submission queue
+            OPCODE_IO_READ,
+            0,                       // cmdid - unused
+            1,                       // nsid
+            paddr,                   // prp0
+            0,                       // prp1
+            lba&0xffffffff,          // cdw10: low lba part
+            lba>>32,                 // cdw11: high lba part
+            c                        // cdw12 low part: count
+        );
+
+        buf_vaddr += c >> shift;
+    }
 }
-
-

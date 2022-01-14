@@ -9,6 +9,10 @@ struct driver;
 int nvme_install(struct driver*);
 
 
+// 512 - 1024 - 2048 - 4096
+int nvme_get_blocksize(struct driver*);
+
+
 /**
  * @brief read contiguous memory region from 
  * NVME drive. On error, a kernel panic occurs.

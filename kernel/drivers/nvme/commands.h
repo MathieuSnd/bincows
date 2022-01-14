@@ -44,9 +44,9 @@ void async_command(
     uint32_t nsid,
     uint64_t prp0,
     uint64_t prp1,
-    uint64_t cdw10,
-    uint64_t cdw11,
-    uint64_t cdw12
+    uint32_t cdw10,
+    uint32_t cdw11,
+    uint32_t cdw12
 );
 
 
@@ -84,7 +84,7 @@ void sync_command(
     uint32_t nsid,
     uint64_t prp0,
     uint64_t prp1,
-    uint64_t cdw10,
-    uint64_t cdw11,
-    uint64_t cdw12
+    uint32_t cdw10,
+    uint32_t cdw11,
+    uint32_t cdw12
 );
