@@ -9,8 +9,8 @@ struct driver;
 int nvme_install(struct driver*);
 
 
-// 512 - 1024 - 2048 - 4096
-int nvme_get_blocksize(struct driver*);
+// the block size is 1 << lbashift
+int nvme_get_lbashift(struct driver*);
 
 
 /**
@@ -19,8 +19,7 @@ int nvme_get_blocksize(struct driver*);
  * 
  * @param this  the driver structure
  * @param lba   the lba address
- * @param buf   the destination. It better be 
- *              block size-aligned
+ * @param buf   the destination.
  * @param count the number of blocks to read
  */
 
@@ -37,13 +36,14 @@ void nvme_sync_read(struct driver* this,
  * 
  * @param this  the driver structure
  * @param lba   the lba address
- * @param buf   the destination. It better be 
- *              block size-aligned
+ * @param buf   the source buffer base virtual
+ *              address.
  * @param count the number of blocks to read
  */
 void nvme_sync_write(struct driver* this,
                      uint64_t lba,
                      void*    buf,
                      size_t   count);
+
  
 #define NVME_INVALID_IO_QUEUE (~0u)

@@ -80,6 +80,15 @@ void perform_read_command(
     size_t   count
 );
 
+static
+void perform_write_command(
+    struct data* data,
+    struct regs* regs,
+    uint64_t lba,
+    void*    _buf,
+    size_t   count
+);
+
 
 static void rename_device(struct pcie_dev* dev) {
     string_free(&dev->dev.name);
@@ -705,30 +714,26 @@ int nvme_install(driver_t* this) {
     // iterate over identified namespaces
     //for(unsigned i = 0; i < data->nns; i++)
     identify_namespace(data, bar0, 0);
-    sleep(10000);
+    //sleep(3000);
 
-    this->status = DRIVER_STATE_OK; 
+    this->status = DRIVER_STATE_OK;
 
+    void* buff = malloc(0x2000);
 
-    void* vaddr = translate_address((void*)createPRP());
-
-    perform_read_command(
-        data,
-        bar0,
-        0x001fca00 >> 9,
-        vaddr,
-        8
+    nvme_sync_read(
+        this,
+        0x1fca00 >> 9,
+        buff,
+        16
     );
-    
-    while(! queue_empty(&data->io_queues.sq))
-        sleep(1);
-    
+
     dump(
-        vaddr,
-        0x1000 /8,
+        buff,
+        8192,
         32,
         DUMP_HEX8
     );
+
 
 // installed
     return 1;
@@ -787,7 +792,44 @@ static void remove(driver_t* this) {
 }
 
 
-// better be well alligned
+int nvme_get_lbashift(struct driver* driver) {
+    struct data* data = driver->data;
+    return data->namespaces[0].block_size_shift;
+}
+
+
+// find the biggest size for the access 
+// that does not cross a page border (in 
+// our shitty architecture)
+// and advance the vaddr ptr
+static 
+uint16_t get_max_count_and_advance(uint64_t* vaddr, unsigned shift) {
+    uint16_t c = 0;
+
+    uint64_t page_base = (*vaddr) & ~0x0fff;
+
+
+    while(1) {
+        c++;
+
+        uint64_t next = *vaddr + (1 << shift);
+        
+        // crossed a 4K page border
+        if((next & ~0x0fff) != page_base)
+            break; 
+
+        *vaddr = next;
+    }
+
+    return c;
+}
+
+/** _buf constraints:
+ *      - if the transfert crosses a page
+ *        border, _buf must be LBA size aligned
+ *      
+ *      - else it only must be 4 aligned
+ */
 static
 void perform_read_command(
     struct data* data,
@@ -819,35 +861,22 @@ void perform_read_command(
 
 
     while(count != 0) {
-        unsigned c = 0;
+
+        uint64_t paddr = trv2p((void*)buf_vaddr);
         
-        uint64_t page_base = buf_vaddr & ~0x0fff;
 
-        // find the biggest size for the access 
-        // that does not cross a page border (in 
-        // our shitty architecture)
-        int i = 0;
-        while(1) {
-            uint64_t next = buf_vaddr + (1 << shift);
-            
-            // crossed a 4K page border
-            if((next & ~0x0fff) != page_base)
-                break; 
-            
-            c++;
-            count--;
-        log_warn("%lx - %lx - %lx", next, page_base, (1 << shift));
+        uint16_t c = get_max_count_and_advance(&buf_vaddr, shift);
+        
+        if(c > count)
+            c = count;
 
-            buf_vaddr = next;
-        }
 
         // c == 0 if the buffer is not well aligned
         assert(c != 0);
-        
 
-        uint64_t paddr = trv2p((void*)buf_vaddr);
 
-        async_command( // create IO completion queue
+
+        async_command( // read command
             data->doorbell_stride,
             regs,                    // NVMe register space
             &data->io_queues.sq,  // admin submission queue
@@ -858,9 +887,148 @@ void perform_read_command(
             0,                       // prp1
             lba&0xffffffff,          // cdw10: low lba part
             lba>>32,                 // cdw11: high lba part
-            c                        // cdw12 low part: count
+            c - 1                    // cdw12 low part: count-1
         );
 
-        buf_vaddr += c >> shift;
+        lba += c;
+        count -= c;
     }
 }
+
+
+/** _buf constraints:
+ *      - if the transfert crosses a page
+ *        border, _buf must be LBA size aligned
+ *      
+ *      - else it only must be 4 aligned
+ */
+static
+void perform_write_command(
+    struct data* data,
+    struct regs* regs,
+    uint64_t lba,
+    void*    _buf,
+    size_t   count
+) {
+    // general assert protection
+    assert(lba         < data->namespaces[0].capacity);
+    assert(lba + count < data->namespaces[0].capacity);
+    assert(data->namespaces[0].id == 1);
+    assert(data->nns >= 1);
+
+    // NVME PRP: must be dword aligned
+    assert_aligned(_buf, 4);
+
+    uint64_t buf_vaddr = (uint64_t)_buf;
+
+    
+    unsigned shift = data->namespaces[0].block_size_shift;
+
+
+    // must not cross a 4K page boudary
+    assert(
+        ((buf_vaddr + (1 << shift)) & ~0x0fff)
+      ==( buf_vaddr                 & ~0x0fff)
+    );
+
+
+    while(count != 0) {
+        uint64_t paddr = trv2p((void*)buf_vaddr);
+
+        uint16_t c = get_max_count_and_advance(&buf_vaddr, shift);
+
+        if(c > count)
+            c = count;
+
+        // c == 0 if the buffer is not well aligned
+        assert(c != 0);
+
+
+        async_command( // read command
+            data->doorbell_stride,
+            regs,                    // NVMe register space
+            &data->io_queues.sq,     // admin submission queue
+            OPCODE_IO_WRITE,
+            0,                       // cmdid - unused
+            1,                       // nsid
+            paddr,                   // prp0
+            0,                       // prp1
+            lba&0xffffffff,          // cdw10: low lba part
+            lba>>32,                 // cdw11: high lba part
+            c - 1                    // cdw12 low part: count-1
+        );
+        count -= c;
+        lba   += c;
+    }
+}
+
+
+void nvme_sync_read(struct driver* this,
+                    uint64_t lba,
+                    void*    buf,
+                    size_t   count
+) {
+    assert(this->status == DRIVER_STATE_OK);
+    struct data* data = this->data;
+    assert(data->nns);
+
+
+
+    unsigned shift = data->namespaces[0].block_size_shift;
+
+    unsigned max_count = 0x1000 >> shift;
+
+    // we only use one prp.
+    // this is slow.    
+    uint64_t* prp_paddr = createPRP();    
+
+
+    while(queue_full(&data->io_queues.sq))
+        sleep(1);
+
+    while(count != 0) {
+        // busy wait for a submission entry to be 
+        // available
+
+        unsigned c;
+
+        if(count < max_count)
+            c = count;
+        else
+            c = max_count;
+        
+
+        perform_read_command(
+            data, 
+            data->registers,
+            lba,
+            (void*)translate_address((void*)prp_paddr),
+            c
+        );
+
+        while(!queue_empty(&data->io_queues.sq))
+            sleep(1);
+        
+        memcpy(buf, translate_address(prp_paddr), c << shift);
+        buf += c << shift;
+
+        lba   += c;
+        count -= c;
+    }
+
+
+    freePRP(prp_paddr);
+}
+
+
+void nvme_sync_write(struct driver* this,
+                     uint64_t lba,
+                     void*    buf,
+                     size_t   count
+) {
+    panic("nvme_sync_write: unimplented");
+}
+
+
+
+
