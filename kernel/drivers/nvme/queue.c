@@ -70,6 +70,7 @@ void update_queues(struct queue_pair* queues) {
         DUMP_HEX8
     );*/
     while(1) {
+        volatile
         struct compqueuee* entry = 
                     queue_tail_ptr(&queues->cq);
         

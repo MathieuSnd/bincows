@@ -2,6 +2,7 @@
 #include "../lib/assert.h"
 #include "../lib/panic.h"
 #include "../lib/logging.h"
+#include "../lib/sprintf.h"
 
 #include "irq.h"
 
