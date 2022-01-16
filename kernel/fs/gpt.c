@@ -82,6 +82,8 @@ int issouguidcmp(GUID const a, GUID const b) {
     return PARTITION_UNKNOWNED;
 }
 
+//partition_t* find_partition(GUID guid);
+
 
 void gpt_scan(const struct storage_interface* sti) {
     void* buffer = malloc(1 << sti->lbashift);

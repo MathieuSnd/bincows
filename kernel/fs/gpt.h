@@ -39,6 +39,8 @@ typedef struct partition {
 void gpt_scan(const struct storage_interface* sti);
 
 
+partition_t* find_partition(GUID guid);
+
 // release partition information memory
 void gpt_cleanup(void);
 
