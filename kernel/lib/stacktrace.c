@@ -46,7 +46,7 @@ static const char* get_symbol_name(
     if(addr >= addrB) {
         *offset = addr - file->symbols[file->n_symbols - 1].addr;
 
-        return file->symbols[file->n_symbols - 1].addr;
+        return (void*)file->symbols[file->n_symbols - 1].addr;
     }
 
     while(A+1 != B) {
@@ -81,16 +81,16 @@ void stacktrace_print(void) {
         
         int interrupt_routine = 0;
         
-        void* rip = *(ptr+1);
-        if(!is_kernel_memory((uint64_t)rip)) {
+        uint64_t rip = (uint64_t) *(ptr+1);
+        if(!is_kernel_memory(rip)) {
             //maybe it is an exception error code
             interrupt_routine = 1;
-            rip = *(ptr+2);
+            rip = (uint64_t) *(ptr+2);
             
         }
         printf("%llx    ", rip);
 
-        unsigned* offset;
+        unsigned offset;
         const char* symbol  = get_symbol_name(rip, &offset);
 
         if(symbol)
