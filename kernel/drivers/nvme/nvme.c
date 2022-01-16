@@ -285,7 +285,6 @@ static void handle_queue(
 static void irq_handler(driver_t* this) {
     // check if an admin command is completed
     struct data* data = this->data;
-    log_warn("irq!");
 
     handle_queue(
             this, 
@@ -366,7 +365,6 @@ static void createIOqueues(
        | 1,                      // physically contiguous
         0                        // cdw12: unused for this 
     );                           // command
-    log_warn("SQ=%lx", p_subque_buff);
 }
 
 
@@ -422,7 +420,6 @@ static void identify_controller(
     uint8_t* vdata = translate_address((void*)pdata);
     
     data->transfert_max_size = 1 << vdata[77];
-    log_warn("MAX: %u pages", vdata[77]);
 
     // no need to keep this.
     // very dumb to copy 4K to just keep 1 byte...
@@ -444,7 +441,6 @@ static void identify_namespace(
 
     uint32_t nsid = data->namespaces[i].id;
 
-    log_info("nsid=%x", nsid);
     
     identify(    // identify namespaces
         data,
@@ -559,8 +555,6 @@ void identify_active_namespaces(
                  this->device->name
         );
 
-    log_warn("%u found namespaces: %x", data->nns, data->namespaces[0].id);
-
     // no need to keep this.
     // very dumb to copy 4K to just keep 16 byte...
     freePRP(pdata);
@@ -597,12 +591,6 @@ int is_supported(struct pcie_dev* dev,
     // min page size is 2^(12 + MPSMIN)
     if((cap & (0xfllu << 48)) != 0)
         return 0;
-
-    // check if the device is resetable
-    if(! NSSRS_SUPPORT(cap)) {
-        log_warn("NSSRS is not supported on %s.", dev->dev.name.ptr);
-        //return 0;        
-    }
 
     return 1;
 }
@@ -657,7 +645,6 @@ void setup_irqs(
 
 
 int nvme_install(driver_t* this) {
-    log_info("NVME: installing...");
 
     struct pcie_dev* dev = (struct pcie_dev*)this->device;
     struct regs* bar0 = (struct regs*)dev->bars[0].base;
@@ -683,7 +670,6 @@ int nvme_install(driver_t* this) {
         // let's just unset the enable bit
         // maybe the computer won't explode
         bar0->config = 0x460000;
-        log_warn("NO NSSRS");
     }
     else // reset properly
     {
@@ -707,7 +693,7 @@ int nvme_install(driver_t* this) {
 
     setup_admin_queues(this, bar0);
     setup_irqs(this, dev, bar0);    
-    log_warn("enable(bar0);");
+
     enable(bar0);
 
 // actually it holds no usefull information
@@ -717,10 +703,7 @@ int nvme_install(driver_t* this) {
 
     identify_active_namespaces(this, data, bar0);
 
-    // iterate over identified namespaces
-    //for(unsigned i = 0; i < data->nns; i++)
     identify_namespace(data, bar0, 0);
-    //sleep(3000);
 
     this->status = DRIVER_STATE_OK;
 
@@ -909,6 +892,7 @@ void perform_read_command(
  *      
  *      - else it only must be 4 aligned
  */
+inline
 static
 void perform_write_command(
     struct data* data,
@@ -988,7 +972,7 @@ void nvme_sync_read(struct driver* this,
 
     // we only use one prp.
     // this is slow.    
-    uint64_t* prp_paddr = createPRP();    
+    uint64_t prp_paddr = createPRP();    
 
 
     while(queue_full(&data->io_queues.sq))
@@ -1010,14 +994,19 @@ void nvme_sync_read(struct driver* this,
             data, 
             data->registers,
             lba,
-            (void*)translate_address((void*)prp_paddr),
+            translate_address((void*)prp_paddr),
             c
         );
 
         while(!queue_empty(&data->io_queues.sq))
             sleep(1);
         
-        memcpy(buf, translate_address(prp_paddr), c << shift);
+        memcpy(
+            buf, 
+            translate_address((void*)prp_paddr), 
+            c << shift
+        );
+        
         buf += c << shift;
 
         lba   += c;
@@ -1035,6 +1024,10 @@ void nvme_sync_write(struct driver* this,
                      size_t   count
 ) {
     panic("nvme_sync_write: unimplented");
+    (void) this;
+    (void) lba;
+    (void) buf;
+    (void) count;
 }
 
 
