@@ -14,7 +14,7 @@ struct gpt_partition_descriptor {
     uint64_t begin;
     uint64_t end;
     uint64_t attributes;
-    wchar_t  name[];
+    uint16_t  name[];
 } __attribute__((packed));
 
 static partition_t* partitions = NULL;
@@ -29,7 +29,58 @@ static void register_partition(partition_t p) {
     partitions[last] = p;
 }
 
+static GUID makeGUID(
+            uint32_t a, uint16_t b, 
+            uint16_t c, uint16_t d, 
+            uint64_t e) {
+    return (GUID) {
+        .low  = a | ((uint64_t)b << 32) | ((uint64_t)c << 48),
+        .high = d | (e << 16)
+    };
+}
 
+int issouguidcmp(GUID const a, GUID const b) {
+    return ((a.high ^ b.high) | (a.low ^ b.low));
+}
+
+
+// return 0 if equals, non zero else
+ inline int guidcmp(GUID const a, GUID const b) {
+     log_info("issou %lx, %lx", a.high , b.high);
+    return ((a.high ^ b.high) | (a.low ^ b.low));
+}
+
+ uint32_t get_type(GUID guid) {
+                                                              
+    if     (!guidcmp(guid,makeGUID(0xC12A7328,0xF81F,0x11D2,0x4BBA,0x3bc93ec9a000)))
+        return PARTITION_ESP;
+    else if(!guidcmp(guid,makeGUID(0x0FC63DAF,0x8483,0x4772,0x798E,0xE47D47D8693D)))
+        return PARTITION_LINUX_FS;
+    else if(!guidcmp(guid,makeGUID(0x44479540,0xF297,0x41B2,0xF79A,0x8A45F0D531D1))
+         || !guidcmp(guid,makeGUID(0x4F68BCE3,0xE8CD,0x4DB1,0xE796,0x09B784F9CAFB)))
+        return PARTITION_LINUX_ROOT;
+    else if(!guidcmp(guid,makeGUID(0xBC13C2FF,0x59E6,0x4262,0x52A3,0x72716FFD75B2)))
+        return PARTITION_LINUX_BOOT;
+    else if(!guidcmp(guid,makeGUID(0x0657FD6D,0xA4AB,0x43C4,0xE584,0x4F4F4BC83309)))
+        return PARTITION_LINUX_SWAP;
+    else if(!guidcmp(guid,makeGUID(0xE6D6D379,0xF507,0x44C2,0x3CA2,0x28F93D2A8F23)))
+        return PARTITION_LINUX_LVM;
+    else if(!guidcmp(guid,makeGUID(0x933AC7E1,0x2EB4,0x4F13,0x44B8,0x15F9AEE2140E)))
+        return PARTITION_LINUX_HOME;
+    else if(
+           !guidcmp(guid,makeGUID(0xE3C9E316,0x0B5C,0x4DB8,0x7D81,0xAE1502F02DF9))
+        || !guidcmp(guid,makeGUID(0xEBD0A0A2,0xB9E5,0x4433,0xC087,0xC79926B7B668))
+        || !guidcmp(guid,makeGUID(0x5808C8AA,0x7E8F,0x42E0,0xD285,0xB3CF3404E9E1))
+        || !guidcmp(guid,makeGUID(0xAF9B60A0,0x1431,0x4F62,0x68BC,0xAD694A711133))
+        || !guidcmp(guid,makeGUID(0xDE94BBA4,0x06D1,0x4D40,0x6AA1,0xACD67901D5BF))
+        || !guidcmp(guid,makeGUID(0x37AFFC90,0xEF7D,0x4E96,0xC391,0x74B155E07A2D))
+        || !guidcmp(guid,makeGUID(0xE75CAF8F,0xF680,0x4CEE,0xA3AF,0x2DFC6EE501B0))
+        || !guidcmp(guid,makeGUID(0x558D43C5,0xA1AC,0x43C0,0xC8AA,0xD123292B47D1))
+        )
+        return PARTITION_WINDOWS;
+        
+    return PARTITION_UNKNOWNED;
+}
 
 
 void gpt_scan(const struct storage_interface* sti) {
@@ -83,23 +134,44 @@ void gpt_scan(const struct storage_interface* sti) {
         if(entry->type_guid.low  == 0 &&
            entry->type_guid.high == 0)
             continue;
+        
+        log_warn(
+            "typeguid:   %lx-%lx\n", 
 
-        char* name[36];
+            entry->type_guid.low,
+            entry->type_guid.high);
 
-        utf16le2ascii(name, entry->name, 35);
+        partition_t p = (partition_t) {
+            .begin      = entry->begin,
+            .end        = entry->end,
+            .attributes = entry->attributes,
+            .type       = get_type(entry->type_guid),
+
+            .partition_guid = entry->partition_guid,
+            .interface = sti,
+        };
+
+        utf16le2ascii(p.name, entry->name, 35);
 
         log_info(
             "GPT Partition %s\n"
             "LBA begin:  %lx\n"
             "LBA end:    %lx\n"
-            "attributes: %lx\n", 
+            "attributes: %lx\n"
+            "type:       %x\n"
+            "typeguid:   %lx-%lx\n", 
             
-            name,
+            p.name,
             entry->begin,
             entry->end,
-            entry->attributes
+            entry->attributes,
+            p.type,
+            entry->type_guid.low,
+            entry->type_guid.high
         );
+
+        register_partition(p);
     }
     
-    
+    free(buffer);
 }

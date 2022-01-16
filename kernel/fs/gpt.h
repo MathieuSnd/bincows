@@ -22,8 +22,18 @@ typedef struct partition {
     char     name[36];
 } partition_t;
 
-#define PARTITION_TYPE_
+#define PARTITION_UNKNOWNED 0
 
+// efi system partition
+#define PARTITION_ESP 1 
+#define PARTITION_BIOS 2 
+#define PARTITION_WINDOWS 3 
+#define PARTITION_LINUX_FS 4
+#define PARTITION_LINUX_ROOT 4
+#define PARTITION_LINUX_BOOT 5
+#define PARTITION_LINUX_SWAP 6
+#define PARTITION_LINUX_HOME 7
+#define PARTITION_LINUX_LVM 8
 
 
 void gpt_scan(const struct storage_interface* sti);
