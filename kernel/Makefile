@@ -22,7 +22,7 @@ INTERNALCFLAGS  :=  -mgeneral-regs-only    \
 					-mno-80387             \
 					-fno-omit-frame-pointer\
 					-std=gnu11 			   \
-					-Wall -Wextra          \
+					-Wall -Wextra -Wno-trigraphs \
 					-fcompare-debug-second \
 					-I/opt/cross/include/  \
 					-I../lai/include       \
