@@ -31,13 +31,15 @@ static void flush_screen    (driver_t* this);
 
 struct data {
     terminal_handler_t terminal_handler;
-    bool need_refresh;
     struct Char* char_buffer;
 
     uint16_t ncols, nlines;
     uint16_t term_nlines;
     uint16_t first_line;
     uint16_t cur_col, cur_line;
+    
+    bool need_refresh;
+
     uint32_t current_fgcolor;
     uint32_t current_bgcolor;
     unsigned margin_left, margin_top;
@@ -58,7 +60,7 @@ driver_t* get_active_terminal(void) {
 
 
 // common resource
-static Image* charmap = NULL;
+static Image charmap;
 
 
 #define UPDATE_PERIOD_MS (1000 / 60)
@@ -93,7 +95,7 @@ static int terminals = 0;
 
 
 char terminal_install(driver_t* this) {
-
+    log_info("installing terminal...");
     struct framebuffer_dev* dev = 
             (struct framebuffer_dev *)this->device;
 
@@ -107,11 +109,10 @@ char terminal_install(driver_t* this) {
     this->name = (string_t){"Terminal",0};
 
 // alloc the data
-    this->data = malloc(sizeof(struct data));
+// don't put it in this->data yet,
+// as we will realloc it
+    struct data* restrict d = this->data = malloc(sizeof(struct data));
 
-    struct data* restrict d = this->data;
-
-// init the data
     d->first_line = 0;
     
 // dynamicly create the terminal
@@ -126,6 +127,9 @@ char terminal_install(driver_t* this) {
     d->term_nlines = console_h / TERMINAL_LINE_HEIGHT - 1;
 #endif
 
+    // align width on 16 pixels
+    d->ncols &= ~0x0f;
+
     d->nlines      = TERMINAL_N_PAGES * d->term_nlines;
 
 
@@ -138,9 +142,18 @@ char terminal_install(driver_t* this) {
     d->margin_top  = (dev->height - d->term_nlines * TERMINAL_FONTHEIGHT) / 2;
 #endif
 
+    // align margin
+    d->margin_left = d->margin_left & ~0xf;
+
 
     // allocate the terminal buffer
-    d->char_buffer   = malloc(d->ncols * d->nlines * sizeof(struct Char) * 10);
+    // to minimize the number of heap allocations,
+    // we realloc our data buffer
+    d = this->data = realloc(d, 
+                        sizeof(struct data) 
+                     + d->ncols * d->nlines * sizeof(struct Char));
+
+    d->char_buffer = ((void*) d) + sizeof(struct data);
 
 
     //d->timerID = apic_create_timer(
@@ -149,7 +162,7 @@ char terminal_install(driver_t* this) {
     //                    this);
 //
     if(terminals++ == 0)
-        charmap = loadBMP_24b_1b(&_binary_charmap_bmp);
+        loadBMP_24b_1b(&_binary_charmap_bmp, &charmap);
     
 
     //set_terminal_handler(this, write_string);
@@ -164,19 +177,21 @@ char terminal_install(driver_t* this) {
 
 void terminal_remove(driver_t* this) {
     struct data* restrict d = this->data;
-
+    
 // the charmap is shared amoung
 // all terminals
     if(--terminals == 0)
-        bmp_free(charmap);
+        bmp_free(&charmap);
 
-    free(d->char_buffer);
+    //free(d->char_buffer);
     
     if(d->timerID != INVALID_TIMER_ID)
         apic_delete_timer(d->timerID);
 
+    // the allocation of data also 
+    // contains the char buffer
     free(d);
-    //if(active_terminal == this)
+    //if(active_terminal == this)   
     //    active_terminal = NULL;
 }
 
@@ -354,7 +369,7 @@ static void print_char(driver_t* this,
 */
 #ifdef BIGGER_FONT
     blitcharX2((struct framebuffer_dev *)this->device, 
-                charmap, c->c, c->fg_color, c->bg_color,
+                &charmap, c->c, c->fg_color, c->bg_color,
                 d->margin_left + 2 * col  * TERMINAL_FONTWIDTH, 
                 d->margin_top  + 2 * line * TERMINAL_LINE_HEIGHT);
     
@@ -362,7 +377,7 @@ static void print_char(driver_t* this,
 #else
 
     blitchar((struct framebuffer_dev *)this->device, 
-             charmap, c->c, c->fg_color, c->bg_color,
+             &charmap, c->c, c->fg_color, c->bg_color,
              d->margin_left + col  * TERMINAL_FONTWIDTH, 
              d->margin_top  + line * TERMINAL_LINE_HEIGHT);
 #endif

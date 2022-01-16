@@ -29,10 +29,10 @@ static_assert(TERMINAL_CHARMAP_H % 4 == 0);
 struct framebuffer_dev {
     struct dev dev;
 
+    void*    pix;
     unsigned width, height;
     unsigned pitch;
     unsigned bpp;
-    void*    pix;
 };
 
 struct stivale2_struct_tag_framebuffer;

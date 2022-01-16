@@ -69,8 +69,9 @@ Image *loadBMP(const void *rawFile);
 
 // load 1 BIT/px image
 // from a 24 bit/px image
-Image *loadBMP_24b_1b(const void *rawFile);
+void loadBMP_24b_1b(const void *rawFile, Image* dst);
 
+// frees the pix buffer
 void bmp_free(Image* i);
 
 

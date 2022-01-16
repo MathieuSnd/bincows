@@ -9,6 +9,7 @@
 #include "../../lib/logging.h"
 #include "../../lib/common.h"
 #include "../../lib/assert.h"
+#include "../../lib/panic.h"
 
 #include "video.h"
 #include "terminal.h"
@@ -282,7 +283,7 @@ struct BMPFileHeader {
 } __packed;
 
 
-inline bool check_BMP_header(const struct BMPFileHeader* header) {
+static bool check_BMP_header(const struct BMPFileHeader* header) {
     return header         != NULL      &&
            header->magic  != BMP_MAGIC &&
            header->w      >  0         &&
@@ -527,7 +528,7 @@ static_assert(TERMINAL_FONTHEIGHT    == 8);
 
 //static Image loadBMP_24b_1b_ret;
 
-Image* loadBMP_24b_1b(const void* rawFile) {
+void loadBMP_24b_1b(const void* rawFile, Image* dst) {
     
     const struct BMPFileHeader* header = rawFile;
 
@@ -537,7 +538,7 @@ Image* loadBMP_24b_1b(const void* rawFile) {
     assert(first++ == 0);
 
     if(check_BMP_header(header))
-        return NULL;
+        panic("loadBMP_24b_1b: wrong file");
 
 
     uint32_t w = header->w;
@@ -549,18 +550,17 @@ Image* loadBMP_24b_1b(const void* rawFile) {
     uint32_t pitch = (w+7)/8;
 
 
-    Image* ret = malloc(sizeof(Image));
-    ret->w     = w;
-    ret->h     = h;
-    ret->bpp   = 1;
-    ret->pitch = pitch;
-    ret->pix   = malloc(pitch * h); 
+    dst->w     = w;
+    dst->h     = h;
+    dst->bpp   = 1;
+    dst->pitch = pitch;
+    dst->pix   = malloc(pitch * h); 
 
-    assert(ret->pitch == 1);
+    assert(dst->pitch == 1);
     assert(w == 6);
     assert(h == 2048);
 
-    uint8_t* pix = ret->pix;
+    uint8_t* pix = dst->pix;
 
     
     for(size_t y = 0; y < h; y++) {
@@ -582,12 +582,9 @@ Image* loadBMP_24b_1b(const void* rawFile) {
                 pix[y] = byte;
 
     }
-
-    return ret;
 }
 
 void bmp_free(Image* i) {
     free(i->pix);
-    free(i);
 }
 
