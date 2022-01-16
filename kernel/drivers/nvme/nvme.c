@@ -29,6 +29,8 @@
 #include "../../memory/vmap.h"
 #include "../../int/irq.h"
 
+#include "../../fs/gpt.h"
+
 // for apic_eoi()
 #include "../../int/apic.h"
 
@@ -69,7 +71,11 @@ struct data {
 
     // namespace ids array
     struct namespace  namespaces[HANDLED_NAMESPACES];
+
+    struct storage_interface si;
+    
 };
+
 
 static
 void perform_read_command(
@@ -718,21 +724,22 @@ int nvme_install(driver_t* this) {
 
     this->status = DRIVER_STATE_OK;
 
-    void* buff = malloc(0x2000);
+    if(data->nns >= 1) {
+        // if a usable namespace is detected,
+        // scan its partition table
+        // and mount its partitions
+        
+        // fill the storage interface structure
+        data->si = (struct storage_interface) {
+            .capacity = data->namespaces[0].capacity,
+            .driver   = this,
+            .lbashift = data->namespaces[0].block_size_shift,
+            .read     = nvme_sync_read,
+            .write    = nvme_sync_write,
+        };
 
-    nvme_sync_read(
-        this,
-        0x1fca00 >> 9,
-        buff,
-        16
-    );
-
-    dump(
-        buff,
-        8192,
-        32,
-        DUMP_HEX8
-    );
+        gpt_scan(&data->si);
+    }
 
 
 // installed
@@ -910,6 +917,7 @@ void perform_write_command(
     void*    _buf,
     size_t   count
 ) {
+    panic("too dangerous operation");
     // general assert protection
     assert(lba         < data->namespaces[0].capacity);
     assert(lba + count < data->namespaces[0].capacity);

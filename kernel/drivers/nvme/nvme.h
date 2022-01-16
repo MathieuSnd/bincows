@@ -3,7 +3,6 @@
 #include <stdint.h>
 #include <stddef.h>
 
-
 struct driver;
 
 int nvme_install(struct driver*);

@@ -1,0 +1,25 @@
+#pragma once
+
+
+#include <stdint.h>
+#include <stddef.h>
+
+struct driver;
+
+struct storage_interface {
+    struct driver* driver;
+
+    void (*read)(struct driver *,
+                 uint64_t lba,
+                 void*    buf,
+                 size_t   count);
+
+    void (*write)(struct driver *,
+                 uint64_t lba,
+                 void*    buf,
+                 size_t   count);
+    
+    unsigned capacity;
+    
+    unsigned lbashift;
+};
