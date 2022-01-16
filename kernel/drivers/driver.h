@@ -37,7 +37,7 @@ typedef struct driver {
     
     const struct driver* parent;
 
-    void* data;
+    void* __restrict__ data;
     size_t data_len;
 
 } driver_t;
@@ -49,4 +49,8 @@ void driver_register_and_install(
             struct dev* dev
 );
 
+/**
+ * drivers must be removed BEFORE
+ * devices
+ */
 void remove_all_drivers(void);
