@@ -16,6 +16,8 @@
 #include "drivers/pcie/pcie.h"
 #include "drivers/pcie/scan.h"
 
+#include "fs/gpt.h"
+
 #include "memory/gdt.h"
 #include "memory/physical_allocator.h"
 #include "memory/paging.h"
@@ -95,11 +97,11 @@ extern const char _binary_bootmessage_txt;
 
 
 static void read_modules(unsigned module_count, 
-                         struct stivale2_module* modules) {
+                        const struct stivale2_module* modules) {
     for(unsigned i = 0; i < module_count; i++) {
-        struct stivale2_module* module = &modules[i];
+        const struct stivale2_module* module = &modules[i];
         if(!strcmp(module->string, "kernel.symbols")) {
-            stacktrace_file(module->begin);
+            stacktrace_file((void*)module->begin);
         }
     }
 }
@@ -160,14 +162,14 @@ void _start(struct stivale2_struct *stivale2_struct) {
     const struct stivale2_struct_tag_framebuffer* framebuffer_tag;
     const struct stivale2_struct_tag_rsdp*        rsdp_tag_ptr;
     const struct stivale2_struct_tag_modules*     modules_tag;
-    //const struct stivale2_struct_tag_boot_volume* boot_volume_tag;
+    const struct stivale2_struct_tag_boot_volume* boot_volume_tag;
 
     term_str_tag    = stivale2_get_tag(stivale2_struct, STIVALE2_STRUCT_TAG_TERMINAL_ID);
     memmap_tag      = stivale2_get_tag(stivale2_struct, STIVALE2_STRUCT_TAG_MEMMAP_ID);
     framebuffer_tag = stivale2_get_tag(stivale2_struct, STIVALE2_STRUCT_TAG_FRAMEBUFFER_ID);
     rsdp_tag_ptr    = stivale2_get_tag(stivale2_struct, STIVALE2_STRUCT_TAG_RSDP_ID);
     modules_tag     = stivale2_get_tag(stivale2_struct, STIVALE2_STRUCT_TAG_MODULES_ID);
-    //boot_volume_tag = stivale2_get_tag(stivale2_struct, 0x9b4358364c19ee62);
+    boot_volume_tag = stivale2_get_tag(stivale2_struct, STIVALE2_STRUCT_TAG_BOOT_VOLUME_ID);
     
 
     // term_str_tag == NULL is not a blocking
@@ -184,7 +186,7 @@ void _start(struct stivale2_struct *stivale2_struct) {
     }
     else 
         log_warn("no stivale2 modules found");
-    // the default terminal handler does nothing        
+        
  // print all logging messages
     set_logging_level(LOG_LEVEL_DEBUG);
 
@@ -197,7 +199,6 @@ void _start(struct stivale2_struct *stivale2_struct) {
     set_backend_print_fun(empty_terminal_handler);
     append_paging_initialization();
 
-    
 
     //set_terminal_handler(empty_terminal_handler);
 
@@ -207,6 +208,7 @@ void _start(struct stivale2_struct *stivale2_struct) {
 // drivers
     atshutdown(remove_all_drivers);
     atshutdown(free_all_devices);
+    atshutdown(gpt_cleanup);
 
 
     video_init(framebuffer_tag);
@@ -214,10 +216,6 @@ void _start(struct stivale2_struct *stivale2_struct) {
 
     set_backend_print_fun(print_fun);
 
- // first initialize our terminal 
-
-// we cannot use stivale2 terminal
-// after loading our gdt
 // so we need to load our gdt after our
 // terminal is successfully installed 
     init_gdt_table();
@@ -232,19 +230,54 @@ void _start(struct stivale2_struct *stivale2_struct) {
     hpet_init();
     apic_setup_clock();
 
-    
     pcie_init();
+
 
     pic_init();
     ps2kb_init();
 
     ps2kb_set_event_callback(kbhandler);
 
+    disk_part_t* part;// = find_partition(*(GUID*)&boot_volume_tag->part_guid);
+    if(part) {
+
+    }
+    else {
+        log_warn(
+            "cannot find main partition! (boot volume GUID: {%8x-%4x-%4x-%2x%2x-%2x%2x%2x%2x%2x%2x})",
+            boot_volume_tag->part_guid.a,
+            boot_volume_tag->part_guid.b,
+            boot_volume_tag->part_guid.c,
+            boot_volume_tag->part_guid.d[0],
+            boot_volume_tag->part_guid.d[1],
+            boot_volume_tag->part_guid.d[2],
+            boot_volume_tag->part_guid.d[3],
+            boot_volume_tag->part_guid.d[4],
+            boot_volume_tag->part_guid.d[5],
+            boot_volume_tag->part_guid.d[6],
+            boot_volume_tag->part_guid.d[7]
+        );
+
+        part = search_partition("Bincows");
+        
+        if(part) {
+            log_warn(
+                "Bincows partition found on device %s (partition %u). "
+                "This partition will be mounted as the main partition.", 
+            
+                part->interface->driver->device->name,
+                part->id);
+        }
+        else {
+            panic("no Bincows partition found.\n");
+        }
+    }
+
 
 
 
     //printf("issou");
-
+    //log_info("%x allocated heap blocks", get_n_allocation());
 
     for(;;) {
         asm volatile("hlt");

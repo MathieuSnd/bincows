@@ -5,22 +5,22 @@
 
 typedef struct {
     uint64_t low, high;
-} GUID;
+} __attribute__((packed)) GUID;
 
-typedef struct partition {
+typedef struct disk_part {
     const struct storage_interface* interface;
     uint32_t type;
-    GUID partition_guid;
+    uint32_t id;
+    GUID guid;
 
     uint64_t begin;
     uint64_t end;
-
 
     uint64_t attributes;
     
     // null terminated
     char     name[36];
-} partition_t;
+} disk_part_t;
 
 #define PARTITION_UNKNOWNED 0
 
@@ -39,7 +39,8 @@ typedef struct partition {
 void gpt_scan(const struct storage_interface* sti);
 
 
-partition_t* find_partition(GUID guid);
+disk_part_t* find_partition(GUID guid);
+disk_part_t* search_partition(const char* name);
 
 // release partition information memory
 void gpt_cleanup(void);

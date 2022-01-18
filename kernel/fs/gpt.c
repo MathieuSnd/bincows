@@ -8,6 +8,13 @@
 
 #include "gpt.h"
 
+
+// return 0 if equals, non zero else
+ inline int guidcmp(GUID const a, GUID const b) {
+    return ((a.high ^ b.high) | (a.low ^ b.low));
+}
+
+
 struct gpt_partition_descriptor {
     GUID type_guid;
     GUID partition_guid;
@@ -17,17 +24,65 @@ struct gpt_partition_descriptor {
     uint16_t  name[];
 } __attribute__((packed));
 
+
 static partition_t* partitions = NULL;
 static unsigned n_partitions = 0;
 
-static void register_partition(partition_t p) {
+static void register_partition(partition_t* p) {
     unsigned last = n_partitions++;
 
     partitions = realloc(partitions, n_partitions * sizeof(partition_t));
     
 
-    partitions[last] = p;
+    partitions[last] = *p;
+
+        
+    log_info(
+        "GPT Partition %s\n"
+        "LBA begin:  %lx\n"
+        "LBA end:    %lx\n"
+        "attributes: %lx\n"
+        "type:       %x\n"
+        "guid:   %lx-%lx\n", 
+        
+        partitions[last].name,
+        partitions[last].begin,
+        partitions[last].end,
+        partitions[last].attributes,
+        partitions[last].type,
+        partitions[last].guid.low,
+        partitions[last].guid.high
+    );
+
 }
+
+
+partition_t* find_partition(GUID guid) {
+
+    for(unsigned i = 0; i < n_partitions; i++) {
+        if(!guidcmp(partitions[i].guid, guid))
+            return &partitions[i];
+    }
+    return NULL;
+}
+
+
+partition_t* search_partition(const char* name) {
+
+    for(unsigned i = 0; i < n_partitions; i++)
+        if(!strcmp(partitions[i].name, name))
+            return &partitions[i];
+    return NULL;
+}
+
+
+void gpt_cleanup(void) {
+    if(partitions != NULL)
+        free(partitions);
+    n_partitions = 0;
+}
+
+
 
 static GUID makeGUID(
             uint32_t a, uint16_t b, 
@@ -39,16 +94,6 @@ static GUID makeGUID(
     };
 }
 
-int issouguidcmp(GUID const a, GUID const b) {
-    return ((a.high ^ b.high) | (a.low ^ b.low));
-}
-
-
-// return 0 if equals, non zero else
- inline int guidcmp(GUID const a, GUID const b) {
-     log_info("issou %lx, %lx", a.high , b.high);
-    return ((a.high ^ b.high) | (a.low ^ b.low));
-}
 
  uint32_t get_type(GUID guid) {
                                                               
@@ -86,6 +131,7 @@ int issouguidcmp(GUID const a, GUID const b) {
 
 
 void gpt_scan(const struct storage_interface* sti) {
+
     void* buffer = malloc(1 << sti->lbashift);
     
     // LBA 1: Partition Table Header
@@ -105,15 +151,6 @@ void gpt_scan(const struct storage_interface* sti) {
     unsigned n_partitions = *(uint32_t*)(buffer+0x50);
 
     unsigned partition_entry_size = *(uint32_t*)(buffer+0x54);
-
-    log_warn(
-        "n_partitions=%lx, partition_entry_array_lba=%lx, "
-        "partition_entry_size=%x", 
-
-        n_partitions,
-        partition_entry_array_lba,
-        partition_entry_size
-    );
 
     unsigned size = (partition_entry_size * n_partitions);
 
@@ -137,42 +174,20 @@ void gpt_scan(const struct storage_interface* sti) {
            entry->type_guid.high == 0)
             continue;
         
-        log_warn(
-            "typeguid:   %lx-%lx\n", 
-
-            entry->type_guid.low,
-            entry->type_guid.high);
-
         partition_t p = (partition_t) {
             .begin      = entry->begin,
             .end        = entry->end,
             .attributes = entry->attributes,
             .type       = get_type(entry->type_guid),
+            .id         = i,
 
-            .partition_guid = entry->partition_guid,
+            .guid = entry->partition_guid,
             .interface = sti,
         };
 
         utf16le2ascii(p.name, entry->name, 35);
 
-        log_info(
-            "GPT Partition %s\n"
-            "LBA begin:  %lx\n"
-            "LBA end:    %lx\n"
-            "attributes: %lx\n"
-            "type:       %x\n"
-            "typeguid:   %lx-%lx\n", 
-            
-            p.name,
-            entry->begin,
-            entry->end,
-            entry->attributes,
-            p.type,
-            entry->type_guid.low,
-            entry->type_guid.high
-        );
-
-        register_partition(p);
+        register_partition(&p);
     }
     
     free(buffer);
