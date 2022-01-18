@@ -160,14 +160,14 @@ static void defragment(void) {
 // in the linked list
 // O(n) sequential research
 static seg_header* find_pred(seg_header* node) {
+
     for(seg_header* seg = current_segment; 
                     seg != NULL;
                     seg = seg->next) {
         if(seg->next == node)
             return node;
     }
-    assert(0);
-    __builtin_unreachable();
+    return NULL;
 }
 
 // try to merge the node with the next one
@@ -262,6 +262,8 @@ void heap_init(void) {
 
 
 void* __attribute__((noinline)) malloc(size_t size) {
+    //assert(current_segment->free == 1);
+
     // align the size to assure that 
     // the whole structure is alligned
     size = ((size + 7 ) / 8) * 8;
@@ -336,28 +338,6 @@ void* __attribute__((noinline)) malloc(size_t size) {
     return malloc(size);
 }
 
-static void realloc_shrink(seg_header* header, size_t size) {
-    // check if we can actually free some memory
-    if(header->size - size >= sizeof(seg_header) + MIN_SEGMENT_SIZE) {
-        split_segment(
-            find_pred(header), // we need to find the preceding
-                                // node in order to split it
-            header,
-            size
-        );
-    }
-    else {
-        // the difference is not big enough
-        // to actually free anything
-        // let's not even change the size
-        // in the structure
-        // so that if we do:
-        // realloc(ptr, size-X);
-        // realloc(ptr, size);
-        // no reallocation will be done
-    }
-}
-
 
 // O(n) in case of freeing (size < oldsize)
 void* realloc(void* ptr, size_t size) {
@@ -368,43 +348,31 @@ void* realloc(void* ptr, size_t size) {
         return NULL;
     }
 
-    
     seg_header* header = ptr - sizeof(seg_header);
-    if(size <= header->size) {// no need to move
-        realloc_shrink(header, size);
-        return ptr;
-    }
-    else {
-        // maybe need reallocation
-        
-        // mark the node free
-        header->free = 1;
-        unsigned old_size = header->size;
 
-        // hope for the node to merge with another
-        defragment();
+    uint32_t header_size = header->size;
 
-
-        // check the size again
-        if(header->size >= size) {
-            // we have enough space now!
-            header->free = 0;
-            realloc_shrink(header, size);
+    if(size < header_size) {
+        // its not worth reallocating
+        if(size > header_size / 2 
+          || header_size-size < MIN_SEGMENT_SIZE * 2)
             return ptr;
-        }
-        else {
-            // still not enough space
-            // we have to copy the whole thing
-            void* new_ptr = malloc(size);
-            memcpy(new_ptr, ptr, old_size);
-            
-            // malloc increments the number of allocations
-            // but we just reallocated
-            n_allocations--;
+        
+    } 
 
-            return new_ptr;
-        }
-    }
+    unsigned cpsize = header_size;
+    if(cpsize > size)
+        cpsize = size;
+
+    void* new_ptr = malloc(size);
+    memcpy(new_ptr, ptr, cpsize);
+    
+    free(ptr);
+    // malloc increments the number of allocations
+    // but we just reallocated
+    //  n_allocations--;
+
+    return new_ptr;
 }
 
 
@@ -438,18 +406,23 @@ void print_heap(void) {
 
 void malloc_test(void) {
 
-    void* arr[128];
+    void* arr[128] = {0};
 
     uint64_t size = 5;
 
-    for(int j = 0; j < 4000; j++) {
-        for(int i = 0; i < 128; i++) {
-            arr[i] = malloc(size % (1024*1024));
-            size = (16807 * size) % ((1lu << 31) - 1);
+    for(int k = 0; k < 10; k++) {
+        for(int j = 0; j < 10; j++) {
+            for(int i = 0; i < 128; i++) {
+                arr[i] = realloc(arr[i], size % (1024*1024));
+                size = (16807 * size) % ((1lu << 31) - 1);
+            }
+
         }
         
-        for(int i = 0; i < 128; i++)
+        for(int i = 0; i < 128; i++) {
             free(arr[i]);
+            arr[i] = 0;
+        }
     }
 }
 #endif
