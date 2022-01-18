@@ -98,16 +98,12 @@ void perform_write_command(
 
 static void rename_device(struct pcie_dev* dev) {
     string_free(&dev->dev.name);
-    char* buff = malloc(32);
+    char* buff = malloc(16);
 
-
-    struct regs* regs = dev->bars[0].base;
-    uint32_t version = regs->version;
+    static unsigned id = 0;
 
     sprintf(buff, 
-            "NVMe %u.%u controller", 
-            version >> 16,
-            (version >> 8) & 0xff);
+            "nvme%u", id++);
 
     dev->dev.name = (string_t){buff, 1};
 }
@@ -137,7 +133,7 @@ static void enable(struct regs* regs) {
 
     // wait for the controller to be ready
     while((regs->status & 1) == 0)
-        asm("pause");
+        sleep(1);
     log_debug("OK");
 
 }
@@ -663,19 +659,9 @@ int nvme_install(driver_t* this) {
     init_struct(this);
 
 
-    if(! NSSRS_SUPPORT(cap)) {
-        // no reset support ...
-        // I'm not sure what to do 
-        // here ...
-        // let's just unset the enable bit
-        // maybe the computer won't explode
-        bar0->config = 0x460000;
-    }
-    else // reset properly
-    {
-        reset(bar0);
-        bar0->config = 0x00;
-    }
+    // let's just unset the enable bit
+    // maybe the computer won't explode
+    bar0->config = 0x460000;
 
     bar0->aqattr = 
             ((ADMIN_QUEUE_SIZE-1) << 16) // admin queues
@@ -700,6 +686,7 @@ int nvme_install(driver_t* this) {
     identify_controller(data, bar0);
 
     createIOqueues(data, bar0);
+
 
     identify_active_namespaces(this, data, bar0);
 
