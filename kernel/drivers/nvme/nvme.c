@@ -663,6 +663,11 @@ int nvme_install(driver_t* this) {
     // maybe the computer won't explode
     bar0->config = 0x460000;
 
+
+    while(bar0->status & 1) {
+        sleep(1);
+    }
+
     bar0->aqattr = 
             ((ADMIN_QUEUE_SIZE-1) << 16) // admin queues
           | ((ADMIN_QUEUE_SIZE-1) << 0);
@@ -673,13 +678,13 @@ int nvme_install(driver_t* this) {
 
     // CAP.DSTRD
     data->doorbell_stride = 4 << ((cap>>32) & 0xf);
-    // start the controller
     
     // setup interrupts
 
     setup_admin_queues(this, bar0);
     setup_irqs(this, dev, bar0);    
 
+    // start the controller
     enable(bar0);
 
 // actually it holds no usefull information
