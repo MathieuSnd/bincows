@@ -439,14 +439,16 @@ fs_t* fat32_detect(disk_part_t* part) {
     dirent_t* file = &fs->root.children[2];
 
     int size = 0;
-    int i = 0;
-    
 
-    while((size = fat32_read_file_sector(fs, file, i, buf))) {
+    fat32_file_cursor_t cur;
+
+    fat32_open_file(file, &cur);
+
+
+    while((size = fat32_read_file_sector(fs, &cur, buf))) {
         ((uint8_t*)buf)[size] = 0;
         
-        printf("%u: %s\n", i, buf);
-        i++;
+        printf("%s", buf);
     }
 
     free(buf);
@@ -455,45 +457,93 @@ fs_t* fat32_detect(disk_part_t* part) {
 
 
 
+void fat32_open_file(
+        dirent_t* restrict file, 
+        fat32_file_cursor_t* restrict cur
+    ) {
+    cur->cur_cluster        = file->cluster;
+    cur->cur_cluster_offset = 0;
+    cur->file               = file;
+    cur->file_offset        = 0;
+    
+    cur->end = file->file_size == 0;
+}
+
+
+/**
+ * @brief advance by one sector the file 
+ * cursor structure
+ * 
+ * @param part the partition
+ * @param pr the fat32 privates
+ * @param cur the curstor structure to advance
+ */
+static 
+void advance_cursor(
+        disk_part_t*         restrict part, 
+        fat32_privates_t*    restrict pr, 
+        fat32_file_cursor_t* restrict cur
+    ) {
+
+    cur->file_offset += block_size(part);
+    
+    // cursor reached the end
+    if(cur->file_offset > cur->file->file_size) {
+        cur->end = 1;
+        return;
+    }
+    
+    // advance cluster offset
+
+    cur->cur_cluster_offset++;
+
+    if(cur->cur_cluster_offset == pr->clusters_size) {
+        // next sector!
+        cur->cur_cluster_offset = 0;
+
+        // unused
+        int last;
+
+        // advance cluster
+        cur->cur_cluster = readFAT(part, pr, cur->cur_cluster, &last);
+    }
+}
+
+
 int fat32_read_file_sector(
-    fs_t*     restrict fs, 
-    dirent_t* restrict file,
-    int offset, 
-    char* buf) {
+        fs_t*                restrict fs, 
+        fat32_file_cursor_t* restrict cur, 
+        void*                restrict buf
+) {
+    
     assert(fs->type == FS_TYPE_FAT);
 
 
     fat32_privates_t* pr = (fat32_privates_t*)(fs+1);
 
-    if(offset * block_size(fs->part) >= file->file_size)
+
+    if(cur->end)
         return 0;
     
-    unsigned n_cluster = offset / pr->clusters_size;
 
-    unsigned cluster_offset = offset % pr->clusters_size;
-
-
-    uint32_t cluster = file->cluster;
-
-    int last = 0;
+    uint64_t lba = cluster_begin(cur->cur_cluster, pr) 
+                               + cur->cur_cluster_offset;
 
 
-    for(unsigned i = 0;i < n_cluster; i++) {
-        assert(!last);
-        cluster  = readFAT(fs->part, pr, cluster, &last);
-    }
+    read(fs->part, lba, buf, 1);
 
+    // calculate the number of read bytes
 
-    read(fs->part, cluster_begin(cluster, pr) + cluster_offset, buf, 1);
+    int read_size;
 
-
-    // file offset of the beginning of the file
-    int byte_offset = offset * block_size(fs->part);
-
-
-    if(byte_offset + block_size(fs->part) > file->file_size) {
-        return file->file_size - byte_offset;
-    }
+    if(cur->file_offset + block_size(fs->part) 
+                                > cur->file->file_size)
+        read_size = cur->file->file_size - cur->file_offset;
     else
-        return block_size(fs->part);
+        read_size = block_size(fs->part);
+
+    
+    advance_cursor(fs->part, pr, cur);
+
+    return read_size;
 }
