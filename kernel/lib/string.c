@@ -276,7 +276,7 @@ void * memmove (void* _dest, const void* _src, size_t n) {
     }
 }
 
-char* _strtok_r(char* restrict str, const char* restrict delim, char** restrict saveptr) {
+char* strtok_r(char* restrict str, const char* restrict delim, char** restrict saveptr) {
     char* restrict ptr = str;
 
     if(!str)
@@ -326,9 +326,9 @@ char* _strtok_r(char* restrict str, const char* restrict delim, char** restrict 
 
 
 char* strtok(char* restrict str, const char* restrict delim) {
-    static char** saveptr;
+    static char* saveptr;
 
-    return strtok_r(str, delim, saveptr);
+    return strtok_r(str, delim, &saveptr);
 }
 
 
