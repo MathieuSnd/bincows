@@ -8,7 +8,7 @@ typedef struct {
 } __attribute__((packed)) GUID;
 
 typedef struct disk_part {
-    const struct storage_interface* interface;
+    const struct storage_interface* __restrict__ interface;
     uint32_t type;
     uint32_t id;
     GUID guid;

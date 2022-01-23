@@ -25,13 +25,13 @@ struct gpt_partition_descriptor {
 } __attribute__((packed));
 
 
-static partition_t* partitions = NULL;
+static disk_part_t* partitions = NULL;
 static unsigned n_partitions = 0;
 
-static void register_partition(partition_t* p) {
+static void register_partition(disk_part_t* p) {
     unsigned last = n_partitions++;
 
-    partitions = realloc(partitions, n_partitions * sizeof(partition_t));
+    partitions = realloc(partitions, n_partitions * sizeof(disk_part_t));
     
 
     partitions[last] = *p;
@@ -57,7 +57,7 @@ static void register_partition(partition_t* p) {
 }
 
 
-partition_t* find_partition(GUID guid) {
+disk_part_t* find_partition(GUID guid) {
 
     for(unsigned i = 0; i < n_partitions; i++) {
         if(!guidcmp(partitions[i].guid, guid))
@@ -67,7 +67,7 @@ partition_t* find_partition(GUID guid) {
 }
 
 
-partition_t* search_partition(const char* name) {
+disk_part_t* search_partition(const char* name) {
 
     for(unsigned i = 0; i < n_partitions; i++)
         if(!strcmp(partitions[i].name, name))
@@ -174,7 +174,7 @@ void gpt_scan(const struct storage_interface* sti) {
            entry->type_guid.high == 0)
             continue;
         
-        partition_t p = (partition_t) {
+        disk_part_t p = (disk_part_t) {
             .begin      = entry->begin,
             .end        = entry->end,
             .attributes = entry->attributes,
