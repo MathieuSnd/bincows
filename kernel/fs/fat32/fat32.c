@@ -5,6 +5,7 @@
 #include "../../lib/string.h"
 #include "../../lib/sprintf.h"
 #include "../../lib/utf16le.h"
+#include "../../lib/panic.h"
 #include "../../memory/heap.h"
 
 #include "fat32.h"
@@ -26,13 +27,10 @@ typedef struct block_cache {
 } block_cache_t;
 
 typedef struct {
-    uint32_t root_cluster;
     uint32_t clusters_size;
     uint32_t tables_count;
     uint32_t fat_begin;
     uint32_t data_begin;
-    uint32_t root_sector;
-    uint32_t data_clusters;
 
 
     block_cache_t fat_cache;
@@ -201,7 +199,7 @@ uint32_t fat_attr2fs_type(uint32_t attr) {
 
 
 
-static void handle_long_filename_entry(fat_long_filename_t* entry, char* name_buf) {
+static void handle_long_filename_entry(fat_dir_t* entry, char* name_buf) {
 
     fat_long_filename_t* e = (fat_long_filename_t*)entry;
     int order = (e->order & 0x0f) - 1;
@@ -226,7 +224,74 @@ static void handle_long_filename_entry(fat_long_filename_t* entry, char* name_bu
     utf16le2ascii(longname, wchars, 13);
     // long filename entry
     memcpy(name_buf + 13 * order, longname, 13);
+}
 
+// return non-0 iif end of directory
+static int parse_dir_entry(
+        fs_t* fs, 
+        fat_dir_t* dir, 
+        int* long_entry, 
+        dirent_t* entries, 
+        int* cur_entry_id
+) {
+
+    // last entry
+    if(dir->name[0] == 0)
+        return 1;
+    
+    // unused entry
+    if((uint8_t)dir->name[1] == 0xE5)
+        return 0;
+
+    dirent_t* cur_entry = &entries[*cur_entry_id];
+
+    // long filename entry
+    if(dir->attr == FAT32_LFN) {
+        handle_long_filename_entry(dir, cur_entry->name);
+        *long_entry = 1;
+        return 0;
+    }
+
+    // short entry
+    if(!*long_entry) {
+        strncpy(cur_entry->name, dir->name, 8);
+        char* ptr = cur_entry->name+7;
+        
+        while(*ptr == ' ')
+            ptr--;
+        
+        if(dir->name[8] != ' ') {
+            // extention
+            *(++ptr) = '.';
+
+            strncpy(++ptr, dir->name+8, 3);
+            
+            ptr += 3;
+            while(*ptr == ' ')
+                *(ptr--) = '\0';   
+        }
+        else // no extention
+            *(ptr+1) = '\0';
+    }
+    else
+        cur_entry->name[255] = 0;
+    // make sure it's null-terminated
+
+    cur_entry->type       = fat_attr2fs_type(dir->attr);
+    cur_entry->cluster    = dir->cluster_low | 
+                ((uint32_t)dir->cluster_high << 16);
+    
+    cur_entry->file_size  = dir->file_size;
+    cur_entry->children   = NULL;
+    cur_entry->n_children = 0;
+    cur_entry->fs         = fs;
+
+// prepare for next entry
+    (*cur_entry_id)++;
+
+    *long_entry = 0;
+
+    return 0;
 }
 
 /**
@@ -238,14 +303,14 @@ static void handle_long_filename_entry(fat_long_filename_t* entry, char* name_bu
  * @return dirent_t* malloc-ed memory block containing
  * the list of dir entries
  */
-static 
-dirent_t* read_dir(
-            disk_part_t* restrict part, 
-            fat32_privates_t* restrict pr, 
-            dirent_t* dir, 
-            int* n_entries
-) {
+dirent_t* fat32_read_dir(fs_t* fs, dirent_t* dir, int* n_entries) {
+
+    assert(fs->type == FS_TYPE_FAT);
     assert(dir->type == DT_DIR);
+
+    disk_part_t* restrict part = fs->part;
+    fat32_privates_t* restrict pr = (void*)(fs+1);
+
     
     unsigned bufsize = block_size(part) * pr->clusters_size;
     uint8_t* buf = malloc(bufsize);
@@ -273,59 +338,12 @@ dirent_t* read_dir(
         for(unsigned i = 0; i < bufsize / sizeof(fat_dir_t); i++) {
             fat_dir_t* dir = (fat_dir_t*)buf + i;
 
-            if(dir->name[0] == 0) {
+            if(parse_dir_entry(fs, dir, &long_entry, entries, &j)) {
                 end = 1;
                 break;
-            }
-            
-            if((uint8_t)dir->name[1] == 0xE5)
-                continue;
+            } 
 
-
-            if(dir->attr == FAT32_LFN) {
-                handle_long_filename_entry(dir, entries[j].name);
-                long_entry = 1;
-                continue;
-            }
-
-            // short entry
-            if(!long_entry) {
-                strncpy(entries[j].name, dir->name, 8);
-                char* ptr = entries[j].name+7;
-                
-                while(*ptr == ' ')
-                    ptr--;
-                
-                if(dir->name[8] != ' ') {
-                    // extention
-                    *(++ptr) = '.';
-
-                    strncpy(++ptr, dir->name+8, 3);
-                    
-                    ptr += 3;
-                    while(*ptr == ' ')
-                        *(ptr--) = '\0';   
-                }
-                else // no extention
-                    *(ptr+1) = '\0';
-            }
-            else
-            //    log_info("issec %u %s",j, entries[j].name);
-                entries[j].name[255] = 0;
-            // make sure it's null-terminated
-
-            entries[j].type    = fat_attr2fs_type(dir->attr);
-            entries[j].cluster = dir->cluster_low | 
-                      ((uint32_t)dir->cluster_high << 16);
-            
-            entries[j].file_size = dir->file_size;
-            entries[j].children = NULL;
-
-            j++;
-
-            long_entry = 0;
         }
-
         if(end)
             break;        
 
@@ -335,37 +353,15 @@ dirent_t* read_dir(
     // we took too much memory for sure
     entries = realloc(entries, sizeof(dirent_t) * j);
     dir->children = entries;
+    dir->n_children = j;
+    
     *n_entries = j;
     return entries;
 }
 
 
-void log_tree(disk_part_t* part, fat32_privates_t* pr, dirent_t* dir, int level) {
-    
-    for(int i = 0; i < level+1; i++)
-        puts("--");
-    
-    printf(" %u - %s\n", dir->type, dir->name);
 
-    if(dir->type != DT_DIR)
-        return;
-    if(!strcmp(dir->name, ".") || !strcmp(dir->name, ".."))
-        return;
-
-    int n = 0;
-
-    dirent_t* children = read_dir(part,pr,dir, &n);
-
-
-    for(int i = 0; i < n; i++)
-        log_tree(part, pr, &children[i], level+1);
-
-    //free(children);
-}
-
-
-
-fs_t* fat32_detect(disk_part_t* part) {
+fs_t* fat32_detect(disk_part_t* part, dirent_t* root) {
     void* buf = malloc(block_size(part)+1);
 
     // boot record 
@@ -396,9 +392,6 @@ fs_t* fat32_detect(disk_part_t* part) {
     uint16_t cluster_size = *(uint8_t *)(buf + 0x0d);
     uint16_t reserved     = *(uint16_t*)(buf + 0x0e);
 
-    // lba of beginning of partition
-    uint16_t lbabegin     = *(uint32_t*)(buf + 0x1c);
-
     // number of fats
     uint32_t tables_count = *(uint32_t*)(buf + 0x10);
 
@@ -414,42 +407,53 @@ fs_t* fat32_detect(disk_part_t* part) {
     
     fs->part = part;
     fs->type = FS_TYPE_FAT;
+    fs->file_granularity = cluster_size * block_size(part);
+
+    fs->open_file        = (void*)fat32_open_file;
+    fs->close_file       = (void*)fat32_close_file;
+    fs->read_file_sector = (void*)fat32_read_file_sector;
+    fs->write_file_sector= (void*)fat32_write_file_sector;
+    fs->seek             = (void*)fat32_seek;
+    fs->read_dir         = (void*)fat32_read_dir;
+    fs->root = root;
+
+    root->children = NULL;
+    root->cluster = root_dir_cluster;
+    root->file_size = 0;
+    root->n_children= 0;
+    root->children = NULL;
+    root->type = DT_DIR;
+    root->fs = fs;
 
 
     fat32_privates_t* pr = (void*)fs + sizeof(fs_t);
 
     pr->tables_count  = tables_count;
-    pr->root_cluster  = root_dir_cluster;
     pr->clusters_size = cluster_size;
     pr->fat_begin     = reserved;
     pr->data_begin    = reserved + tables_count * fatsize;
     
     pr->fat_cache.n_entries = 0;
 
+/*
 
-    fs->root = (dirent_t) {
-        .cluster   = pr->root_cluster,
-        .file_size = pr->clusters_size * block_size(part) * 8,
-        .name      = "root",
-        .type      = DT_DIR
-    };
+    log_tree(fs, fs->root, 0);
 
-    log_tree(part,pr, &fs->root, 0);
-
-    dirent_t* file = &fs->root.children[2];
+    dirent_t* file = &fs->root->children[2];
 
     int size = 0;
 
-    fat32_file_cursor_t cur;
-
-    fat32_open_file(file, &cur);
+    fat32_file_cursor_t* cur = fat32_open_file(file);
 
 
-    while((size = fat32_read_file_sector(fs, &cur, buf))) {
+    while((size = fat32_read_file_sector(fs, cur, buf))) {
         ((uint8_t*)buf)[size] = 0;
         
         printf("%s", buf);
     }
+
+    fat32_close_file(cur);
+*/
 
     free(buf);
     return fs;
@@ -457,16 +461,22 @@ fs_t* fat32_detect(disk_part_t* part) {
 
 
 
-void fat32_open_file(
-        dirent_t* restrict file, 
-        fat32_file_cursor_t* restrict cur
-    ) {
+fat32_file_cursor_t* fat32_open_file(dirent_t* restrict file) {
+    fat32_file_cursor_t* cur = malloc(sizeof(fat32_file_cursor_t));
+
     cur->cur_cluster        = file->cluster;
     cur->cur_cluster_offset = 0;
     cur->file               = file;
     cur->file_offset        = 0;
     
     cur->end = file->file_size == 0;
+
+    return cur;
+}
+
+
+void fat32_close_file(fat32_file_cursor_t* cur) {
+    free(cur);
 }
 
 
@@ -547,3 +557,32 @@ int fat32_read_file_sector(
 
     return read_size;
 }
+
+
+int fat32_write_file_sector(
+        fs_t* restrict fs, 
+        fat32_file_cursor_t* restrict cur, 
+        const void* restrict buf,
+        int size) {
+    (void) fs;
+    (void) cur;
+    (void) buf;
+    (void) size;
+    panic("fat32_write_file_sector: unimplemented method");
+    __builtin_unreachable();
+}
+
+int fat32_seek(
+        fs_t* restrict fs, 
+        fat32_file_cursor_t* restrict cur,
+        uint64_t offset,
+        int whence) {
+    (void) fs;
+    (void) cur;
+    (void) offset;
+    (void) whence;
+
+    panic("fat32_seek: unimplemented method");
+    __builtin_unreachable();
+}
+
