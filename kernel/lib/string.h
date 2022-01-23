@@ -35,6 +35,9 @@ char*  strncpy(char* __restrict__ dst, const char* __restrict__ src, size_t  n);
 char*  strcat(char * __restrict__ dest, const char * __restrict__ src);
 char*  strncat(char * __restrict__ dest, const char * __restrict__ src, size_t n);
 
+char* strtok(char* __restrict__ str, const char* __restrict__ delim);
+
+char* strtok_r(char* __restrict__ str, const char* __restrict__ delim, char** __restrict__ saveptr);
 
 
 

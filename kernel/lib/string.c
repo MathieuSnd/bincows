@@ -275,3 +275,61 @@ void * memmove (void* _dest, const void* _src, size_t n) {
         return memcpy(dest, src, n);
     }
 }
+
+char* _strtok_r(char* restrict str, const char* restrict delim, char** restrict saveptr) {
+    char* restrict ptr = str;
+
+    if(!str)
+        ptr = *saveptr;
+
+    if(!ptr)
+        return NULL;
+
+    int delim_size = strlen(delim);
+
+    while(1) {
+
+        char* next = NULL;
+        for(const char* dptr = delim; *dptr; dptr++) {
+            char* n = strchr(ptr, *dptr);
+            
+            if(!next)
+                next = n;
+            else if(n && next > n)
+                next = n;
+        }
+
+
+        if(!next) {
+            *saveptr = NULL;
+            return ptr;
+        }
+        else if(next == ptr) {
+            ptr++;
+            continue;
+        }
+        else {
+            if(*(next+1))
+                *saveptr = next+1;
+            else
+                *saveptr = NULL;
+            
+            *next = '\0';
+            return ptr;
+        }
+    }
+
+    *saveptr = ptr;
+
+    return NULL;
+}
+
+
+char* strtok(char* restrict str, const char* restrict delim) {
+    static char** saveptr;
+
+    return strtok_r(str, delim, saveptr);
+}
+
+
+
