@@ -27,7 +27,7 @@ typedef struct dirent {
     
     // NULL if this is not a directory
     // or if chirdren are not cached
-    struct dirent* children;
+    struct dirent* restrict children;
 
     // number of children
     // (directories only)
@@ -36,7 +36,7 @@ typedef struct dirent {
     // the associated filesystem 
     // NULL if this is a virtual 
     // file/dir
-    struct fs* fs;
+    struct fs* restrict fs;
     
     // file size in bytes
     // 0 if it is a directory
@@ -58,24 +58,37 @@ typedef struct fs {
     // ex: FS_TYPE_FAT.
     char type;
 
-    // size of clusters for fat like fs,
+    // size of sectors for disk like fs,
     // generally the access granularity
-    // of the file
-    unsigned file_granularity;
+    // of any file
+    // this field constraints the size of
+    // buffers to grant 1-granularity accesses
+    unsigned file_access_granularity;
 
+
+    /**
+     * @brief size of the cursor handler
+     * data structure used by open_file,
+     * close_file, read_file_sector,
+     * write_file_sector, seek
+     * 
+     */
+    unsigned file_cursor_size;
 
     /**
      * @brief create a cursor over a file
      * 
      * @param file the file to open
      * @param cur (output) the cursor specific handler
+     * must be at least file_cursor_size big
      */
-    void* (*open_file)(dirent_t* restrict file);
+    void (*open_file)(dirent_t* restrict file, void* cur);
 
     /**
      * @brief close a cursor
      * 
      * @param cur file specific cursor handler
+     * must be at least file_cursor_size big
      */
     void (*close_file)(void *);
 
@@ -87,6 +100,7 @@ typedef struct fs {
      * 
      * @param fs partition structure
      * @param cur file cursor specific handler
+     * must be at least file_cursor_size big
      * @param buf buffer that is big enough to hold one sector
      * @return int the number of read bytes.
      */
@@ -100,6 +114,7 @@ typedef struct fs {
      * 
      * @param fs partition structure
      * @param cur file cursor specific handler
+     * must be at least file_cursor_size big
      * @param buf buffer to write from
      * @param size must be 0 if this is't the last 
      * sector in the file. Else, it will be the size 
@@ -117,16 +132,15 @@ typedef struct fs {
 
     /**
      * @brief read a directory and return its
-     * children
+     * children. Complete the input dir data
+     * structure
      * 
      * @param fs filesystem structure
      * @param dir directory to read
-     * @param n_entries (output) the number of
-     * entries found in the directory
      * @return dirent_t* allocated on heap, 
      * must free later on!
      */
-    dirent_t* (*read_dir)(struct fs* fs, dirent_t* dir, int* n_entries);
+    dirent_t* (*read_dir)(struct fs* fs, dirent_t* dir);
 
     dirent_t* root;
 } fs_t;

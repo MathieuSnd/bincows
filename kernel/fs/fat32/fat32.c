@@ -63,11 +63,6 @@ void write(disk_part_t* part, uint64_t lba, void* buf, size_t count) {
 }
 
 
-static unsigned __attribute__((pure)) block_size(disk_part_t* part) {
-    return 1 << part->interface->lbashift;
-}
-
-
 static uint64_t cluster_begin(uint32_t cluster, fat32_privates_t* fp) {
     return ((cluster - 2) * fp->clusters_size) + fp->data_begin;
 }
@@ -303,7 +298,7 @@ static int parse_dir_entry(
  * @return dirent_t* malloc-ed memory block containing
  * the list of dir entries
  */
-dirent_t* fat32_read_dir(fs_t* fs, dirent_t* dir, int* n_entries) {
+dirent_t* fat32_read_dir(fs_t* fs, dirent_t* dir) {
 
     assert(fs->type == FS_TYPE_FAT);
     assert(dir->type == DT_DIR);
@@ -355,7 +350,6 @@ dirent_t* fat32_read_dir(fs_t* fs, dirent_t* dir, int* n_entries) {
     dir->children = entries;
     dir->n_children = j;
     
-    *n_entries = j;
     return entries;
 }
 
@@ -407,7 +401,7 @@ fs_t* fat32_detect(disk_part_t* part, dirent_t* root) {
     
     fs->part = part;
     fs->type = FS_TYPE_FAT;
-    fs->file_granularity = cluster_size * block_size(part);
+    fs->file_access_granularity = block_size(part);
 
     fs->open_file        = (void*)fat32_open_file;
     fs->close_file       = (void*)fat32_close_file;
@@ -415,6 +409,8 @@ fs_t* fat32_detect(disk_part_t* part, dirent_t* root) {
     fs->write_file_sector= (void*)fat32_write_file_sector;
     fs->seek             = (void*)fat32_seek;
     fs->read_dir         = (void*)fat32_read_dir;
+    fs->file_cursor_size = sizeof(fat32_file_cursor_t);
+
     fs->root = root;
 
     root->children = NULL;
@@ -461,8 +457,7 @@ fs_t* fat32_detect(disk_part_t* part, dirent_t* root) {
 
 
 
-fat32_file_cursor_t* fat32_open_file(dirent_t* restrict file) {
-    fat32_file_cursor_t* cur = malloc(sizeof(fat32_file_cursor_t));
+void fat32_open_file(dirent_t* restrict file, fat32_file_cursor_t* cur) {
 
     cur->cur_cluster        = file->cluster;
     cur->cur_cluster_offset = 0;
@@ -470,13 +465,13 @@ fat32_file_cursor_t* fat32_open_file(dirent_t* restrict file) {
     cur->file_offset        = 0;
     
     cur->end = file->file_size == 0;
-
-    return cur;
 }
 
 
 void fat32_close_file(fat32_file_cursor_t* cur) {
-    free(cur);
+    (void) cur;
+    // nothing to do,
+    // we didn't allocate anything
 }
 
 

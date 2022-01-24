@@ -31,7 +31,7 @@ typedef struct fat32_file_cursor {
  * @param file the file to open
  * @param cur (output) the cursor to that file
  */
-fat32_file_cursor_t* fat32_open_file(dirent_t* restrict file);
+void fat32_open_file(dirent_t* restrict file, fat32_file_cursor_t* cur);
 
 void fat32_close_file(fat32_file_cursor_t *);
 
@@ -92,5 +92,5 @@ int fat32_seek(
  * @return dirent_t* allocated on heap, 
  * must free later on!
  */
-dirent_t* fat32_read_dir(fs_t* fs, dirent_t* dir, int* n_entries);
+dirent_t* fat32_read_dir(fs_t* fs, dirent_t* dir);
 
