@@ -18,7 +18,7 @@ static int is_absolute(const char *path)
     return path[0] == '/';
 }
 
-void init_vfs(void)
+void vfs_init(void)
 {
     vfs_root.name[0] = 0;
     vfs_root.type = DT_DIR;
@@ -30,6 +30,7 @@ void init_vfs(void)
     vfs_root.fs = NULL;
 }
 
+static
 dirent_t *find_child(dirent_t *dir, const char *name)
 {
     if (dir->children == NULL && dir->fs)
@@ -75,6 +76,7 @@ static dirent_t *add_dir_entry(
     return &dir->children[id];
 }
 
+
 dirent_t *vfs_open_dir(const char *path, int create)
 {
     assert(is_absolute(path));
@@ -114,6 +116,7 @@ dirent_t *vfs_open_dir(const char *path, int create)
     return d;
 }
 
+static
 void log_tree(dirent_t *dir, int level)
 {
 
@@ -138,6 +141,7 @@ void log_tree(dirent_t *dir, int level)
     // free(children);
 }
 
+
 int mount(disk_part_t *part, const char *path)
 {
     dirent_t *dir = vfs_open_dir(path, 1);
@@ -152,6 +156,8 @@ int mount(disk_part_t *part, const char *path)
 
     return 1;
 }
+
+
 
 file_handler_t *vfs_open_file(const char *filename)
 {
@@ -188,6 +194,7 @@ file_handler_t *vfs_open_file(const char *filename)
     return handler;
 }
 
+
 void vfs_close_file(file_handler_t *handle)
 {
 
@@ -199,7 +206,7 @@ void vfs_close_file(file_handler_t *handle)
 }
 
 
-dirent_t *read_dir(dirent_t *dir)
+dirent_t* vfs_read_dir(dirent_t *dir)
 {
     assert(dir->type == DT_DIR);
     if (dir->children == NULL && dir->fs)
@@ -209,7 +216,7 @@ dirent_t *read_dir(dirent_t *dir)
 }
 
 
-void free_dir(dirent_t *entries)
+void vfs_free_dir(dirent_t *entries)
 {
     (void)entries;
     // nothing

@@ -285,13 +285,11 @@ char* strtok_r(char* restrict str, const char* restrict delim, char** restrict s
     if(!ptr)
         return NULL;
 
-    int delim_size = strlen(delim);
-
     while(1) {
 
         char* next = NULL;
         for(const char* dptr = delim; *dptr; dptr++) {
-            char* n = strchr(ptr, *dptr);
+            char* n = (char*)strchr(ptr, *dptr);
             
             if(!next)
                 next = n;

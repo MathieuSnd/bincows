@@ -17,6 +17,7 @@
 #include "drivers/pcie/scan.h"
 
 #include "fs/gpt.h"
+#include "fs/vfs.h"
 
 #include "memory/gdt.h"
 #include "memory/physical_allocator.h"
@@ -31,6 +32,7 @@
 #include "lib/registers.h"
 #include "lib/dump.h"
 #include "lib/stacktrace.h"
+#include "lib/panic.h"
 
 #include "early_video.h"
  
@@ -230,6 +232,7 @@ void _start(struct stivale2_struct *stivale2_struct) {
     hpet_init();
     apic_setup_clock();
 
+    vfs_init();
     pcie_init();
 
 
@@ -238,9 +241,11 @@ void _start(struct stivale2_struct *stivale2_struct) {
 
     ps2kb_set_event_callback(kbhandler);
 
-    disk_part_t* part;// = find_partition(*(GUID*)&boot_volume_tag->part_guid);
+    disk_part_t* part = find_partition(*(GUID*)&boot_volume_tag->part_guid);
     if(part) {
+        log_info("main partition found");
 
+        assert(mount(part, "/fs/"));
     }
     else {
         log_warn(

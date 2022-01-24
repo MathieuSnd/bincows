@@ -63,15 +63,15 @@ dirent_t* vfs_open_dir(const char* path, int create);
  * @param dir the directory to read
  * @return dirent_t* the new dir->children value
  */
-dirent_t* read_dir(dirent_t* dir);
+dirent_t* vfs_read_dir(dirent_t* dir);
 
 
 /**
  * @brief free directory entries returned by
- * read_dir()
+ * vfs_read_dir()
  * 
  */
-void free_dir(dirent_t*);
+void vfs_free_dir(dirent_t*);
 
 file_handler_t* vfs_open_file(const char* filename);
 void vfs_close_file(file_handler_t* handle);
