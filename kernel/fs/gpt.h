@@ -22,6 +22,12 @@ typedef struct disk_part {
     char     name[36];
 } disk_part_t;
 
+inline 
+static unsigned __attribute__((pure)) block_size(disk_part_t* part) {
+    return 1 << part->interface->lbashift;
+}
+
+
 #define PARTITION_UNKNOWNED 0
 
 // efi system partition
