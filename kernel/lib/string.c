@@ -156,7 +156,7 @@ const char *strstr(const char *haystack, const char *needle) {
 char* strcat(char *dest, const char *src) {
     while(*(dest++)) ;
 
-    return strcpy(dest, src);
+    return strcpy(dest-1, src);
 }
 
 char *strncat(char *dest, const char *src, size_t n) {
