@@ -573,7 +573,6 @@ static const struct memory_range* get_memory_range(const void* addr) {
 
         // A.base < addr < B.base
     while(addr > A->base + A->length * 0x1000) {
-        
         unsigned c = (a+b) >> 1;
 
     // start fetching for the next iteration
@@ -582,10 +581,14 @@ static const struct memory_range* get_memory_range(const void* addr) {
 
         const struct memory_range* restrict C = &memory_ranges_buffer[c];
 
-        if(addr < C->base)
+        if(addr < C->base) {
+            b = c;
             B = C;
-        else
+        }
+        else {
+            a = c;
             A = C;
+        }
     }
 
 // the address shouldn't be A->base (which is the header of the segment)
@@ -606,7 +609,6 @@ void physfree(uint64_t physical_page_addr) {
                        - (uint64_t)range->base) / 0x1000 - 1;
 
     free_page_bitmaps(get_header_base(range), position);
-
     memset(translate_address((void*)physical_page_addr), 0, 0x1000);
     
     total_available_pages++;
