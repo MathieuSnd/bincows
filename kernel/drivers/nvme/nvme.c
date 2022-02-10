@@ -129,12 +129,9 @@ static void enable(struct regs* regs) {
           | 1;    // busy wait for the ready bit
 
 
-    log_debug("wait for the controller to be ready");
-
     // wait for the controller to be ready
     while((regs->status & 1) == 0)
         sleep(1);
-    log_debug("OK");
 
 }
 
@@ -205,6 +202,7 @@ static void freePRP(uint64_t paddr) {
         PRESENT_ENTRY | PL_XD // cache enable
     );
     physfree(paddr);
+
 }
 
 
@@ -416,7 +414,6 @@ static void identify_controller(
     uint8_t* vdata = translate_address((void*)pdata);
     
     data->transfert_max_size = 1 << vdata[77];
-
     // no need to keep this.
     // very dumb to copy 4K to just keep 1 byte...
     freePRP(pdata);
@@ -642,6 +639,8 @@ void setup_irqs(
 
 int nvme_install(driver_t* this) {
 
+    log_info("installing nvme driver...");
+
     struct pcie_dev* dev = (struct pcie_dev*)this->device;
     struct regs* bar0 = (struct regs*)dev->bars[0].base;
 
@@ -686,6 +685,7 @@ int nvme_install(driver_t* this) {
 
     // start the controller
     enable(bar0);
+
 
 // actually it holds no usefull information
     identify_controller(data, bar0);
@@ -732,8 +732,6 @@ static void shutdown(struct driver* this) {
         while(data->admin_queues.cq.head 
            != data->admin_queues.sq.tail)
             sleep(1); 
-        log_debug("done");
-
     }
     if(data->io_queues.cq.base) {
         // if initialized...
