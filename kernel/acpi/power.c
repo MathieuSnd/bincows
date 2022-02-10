@@ -34,11 +34,11 @@ void reboot(void) {
     unsigned still_allocated = get_n_allocation();
 
     if(still_allocated) {
-        log_warn("%u FREE BLOCKS AT SHUTDOWN, %u", still_allocated);
+        log_warn("%d FREE BLOCKS AT SHUTDOWN", still_allocated);
         panic("oui");
     }
-    panic("non");
-    _cli();
+    //panic("non");
+    //_cli();
     
     ps2_trigger_CPU_reset();
 
