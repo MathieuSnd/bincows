@@ -27,6 +27,7 @@ INTERNALCFLAGS  :=  -mgeneral-regs-only    \
 					-I/opt/cross/include/  \
 					-I../lai/include       \
 					-fPIE                  \
+					-fno-inline
 #					-D BIGGER_FONT
 
 
