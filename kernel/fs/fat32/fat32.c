@@ -6,24 +6,34 @@
 #include "../../lib/sprintf.h"
 #include "../../lib/utf16le.h"
 #include "../../lib/panic.h"
+
 #include "../../memory/heap.h"
 
 #include "fat32.h"
 #include "specs.h"
 
-#define FAT_CACHE_MAX_ENTRIES 64
+/**
+ * this must be a
+ * power of 2
+ */
+#define FAT_CACHE_SIZE 2048
+
+
+// juste take the lower
+// lba bits
+uint16_t lba_hash(uint64_t lba) {
+    return lba & (FAT_CACHE_SIZE-1);
+}
 
 typedef struct block_cache_entry {
-    uint64_t lba;
-    char buf[];
+    uint64_t tag; // the whole lba
+    char* buf;
     // buf dimension is exactly one sector
 } block_cache_entry_t;
 
 
 typedef struct block_cache {
-    uint32_t n_entries;
-    uint32_t buffer_head;
-    block_cache_entry_t entries[FAT_CACHE_MAX_ENTRIES];
+    block_cache_entry_t entries[FAT_CACHE_SIZE];
 } block_cache_t;
 
 typedef struct {
@@ -46,6 +56,8 @@ void* read(disk_part_t* part, uint64_t lba, void* buf, size_t count) {
 
     assert(lba >= part->begin && lba <= part->end);
 
+    log_warn("FAT32 read buf = %lx", buf);
+    
     part->interface->read(part->interface->driver, lba, buf, count);
 
     return buf;
@@ -68,6 +80,23 @@ static uint64_t cluster_begin(uint32_t cluster, fat32_privates_t* fp) {
 }
 
 
+
+static
+void setup_cache(block_cache_t* cache, unsigned sector_size) {
+    void* buf = malloc(sector_size * FAT_CACHE_SIZE);
+
+    for(unsigned i = 0; i < FAT_CACHE_SIZE; i++)
+        cache->entries[i].buf = buf + FAT_CACHE_SIZE * i;
+}
+
+
+static 
+void cleanup_cache(block_cache_t* cache) {
+    void* buf_begin = cache->entries[0].buf;
+    
+    free(buf_begin);
+}
+
 /**
  * @brief access cache data
  * 
@@ -78,18 +107,13 @@ static uint64_t cluster_begin(uint32_t cluster, fat32_privates_t* fp) {
 static 
 void* cache_access(block_cache_t* restrict cache, uint64_t lba) {
     
-    // the cache is circular: FIFO
-    // we first search in most recent entries
-    unsigned id = cache->buffer_head;
-    unsigned n_entries = cache->n_entries;
+    // the cache is a hash set
 
-    for(unsigned i = 0; i < n_entries; i++) {
-        if(cache->entries[id].lba == lba) 
-            return cache->entries[id].buf;
+    uint16_t h = lba_hash(lba);
+    block_cache_entry_t* e = &cache->entries[h];
 
-        if(id == 0)
-            id = FAT_CACHE_MAX_ENTRIES;
-        id--;
+    if(e->tag == lba) {
+        return e->buf;
     }
 
     return NULL;
@@ -97,25 +121,20 @@ void* cache_access(block_cache_t* restrict cache, uint64_t lba) {
 
 
 /**
- * @brief add a fat cache entry
+ * @brief reserve a cache entry associated 
+ * with a given lba and return its buffer 
  * 
  * @param cache cache structure
  * @param lba entry lba
- * @return void* the buffer to fill
+ * @return void* the buffer
  */
 static
-void* add_fat_cache_entry(block_cache_t* cache, uint64_t lba) {
-    if(cache->n_entries < FAT_CACHE_MAX_ENTRIES)
-        cache->n_entries++;
+void* add_cache_entry(block_cache_t* cache, uint64_t lba) {
     
-    void* buf = cache->entries[cache->buffer_head].buf;
-    cache->entries[cache->buffer_head].lba = lba;
-    
-    cache->buffer_head++;
-    if(cache->buffer_head == FAT_CACHE_MAX_ENTRIES)
-        cache->buffer_head = 0;
 
-    return buf;
+    block_cache_entry_t* e = &cache->entries[lba_hash(lba)];
+    e->tag = lba;
+    return e->buf;
 }
 
 
@@ -133,14 +152,14 @@ void* add_fat_cache_entry(block_cache_t* cache, uint64_t lba) {
 static
 void* fetch_fat_sector(disk_part_t* part, block_cache_t* cache, uint32_t lba) {
     void* buf = cache_access(cache, lba);
-    
+
     // cache hit
     if(buf)
         return buf;
     
     // cache miss
 
-    buf = add_fat_cache_entry(cache, lba);
+    buf = add_cache_entry(cache, lba);
     
     read(part, lba, buf, 1);
 
@@ -221,9 +240,11 @@ static void handle_long_filename_entry(fat_dir_t* entry, char* name_buf) {
     memcpy(name_buf + 13 * order, longname, 13);
 }
 
-// return non-0 iif end of directory
+// return value:
+// 2: new entry
+// 1: end of directory
+// 0: no new entry,  not end of directory
 static int parse_dir_entry(
-        fs_t* fs, 
         fat_dir_t* dir, 
         int* long_entry, 
         dirent_t* entries, 
@@ -248,6 +269,7 @@ static int parse_dir_entry(
     }
 
     // short entry
+
     if(!*long_entry) {
         strncpy(cur_entry->name, dir->name, 8);
         char* ptr = cur_entry->name+7;
@@ -267,41 +289,37 @@ static int parse_dir_entry(
         }
         else // no extention
             *(ptr+1) = '\0';
+
+        if(!strcmp(cur_entry->name, ".") 
+        || !strcmp(cur_entry->name, "..")) {
+            // do not keep those.
+            // they will be created virtually
+            return 0;
+        }
+
     }
     else
         cur_entry->name[255] = 0;
     // make sure it's null-terminated
 
     cur_entry->type       = fat_attr2fs_type(dir->attr);
-    cur_entry->cluster    = dir->cluster_low | 
+    cur_entry->ino    = dir->cluster_low | 
                 ((uint32_t)dir->cluster_high << 16);
     
-    cur_entry->file_size  = dir->file_size;
-    cur_entry->children   = NULL;
-    cur_entry->n_children = 0;
-    cur_entry->fs         = fs;
+    cur_entry->reclen  = dir->file_size;
+
 
 // prepare for next entry
     (*cur_entry_id)++;
 
     *long_entry = 0;
 
-    return 0;
+    return 2;
 }
 
-/**
- * @brief 
- * 
- * @param part the partition
- * @param dir the directory entry of the parent dir
- * @param size (output) the number of elements
- * @return dirent_t* malloc-ed memory block containing
- * the list of dir entries
- */
-dirent_t* fat32_read_dir(fs_t* fs, dirent_t* dir) {
 
+dirent_t* fat32_read_dir(fs_t* fs, uint64_t cluster, size_t* n) {
     assert(fs->type == FS_TYPE_FAT);
-    assert(dir->type == DT_DIR);
 
     disk_part_t* restrict part = fs->part;
     fat32_privates_t* restrict pr = (void*)(fs+1);
@@ -311,7 +329,6 @@ dirent_t* fat32_read_dir(fs_t* fs, dirent_t* dir) {
     uint8_t* buf = malloc(bufsize);
 
     int end = 0;
-    uint32_t cluster = dir->cluster;
 
 
     dirent_t* entries = NULL;
@@ -319,25 +336,31 @@ dirent_t* fat32_read_dir(fs_t* fs, dirent_t* dir) {
     // current output entry id
     int j = 0;
 
+    unsigned entries_per_sector = bufsize / sizeof(fat_dir_t);
+
     while(!end) {
-        entries = realloc(entries, 
-                    sizeof(dirent_t) * (j + bufsize / sizeof(fat_dir_t)));
+
+        entries = realloc(entries,
+                    sizeof(dirent_t) * (j + entries_per_sector));
+
 
         read(part, cluster_begin(cluster, pr), buf, pr->clusters_size);
+
 
 
         // for long name entries
         int long_entry = 0;
 
 
-        for(unsigned i = 0; i < bufsize / sizeof(fat_dir_t); i++) {
+        for(unsigned i = 0; i < entries_per_sector; i++) {
             fat_dir_t* dir = (fat_dir_t*)buf + i;
+    
+            int v = parse_dir_entry(dir, &long_entry, entries, &j);
 
-            if(parse_dir_entry(fs, dir, &long_entry, entries, &j)) {
+            if(v == 1) {
                 end = 1;
                 break;
             } 
-
         }
         if(end)
             break;        
@@ -345,17 +368,26 @@ dirent_t* fat32_read_dir(fs_t* fs, dirent_t* dir) {
         cluster = readFAT(part, pr, cluster, &end);
     }
 
+    free(buf);
+
     // we took too much memory for sure
+
     entries = realloc(entries, sizeof(dirent_t) * j);
-    dir->children = entries;
-    dir->n_children = j;
-    
+
+    *n = j;
+
     return entries;
 }
 
 
+void fat32_free_dirents(dirent_t* dir) {
+    if(dir)
+        free(dir);
+}
 
-fs_t* fat32_detect(disk_part_t* part, dirent_t* root) {
+
+
+fs_t* fat32_mount(disk_part_t* part) {
     void* buf = malloc(block_size(part)+1);
 
     // boot record 
@@ -402,24 +434,20 @@ fs_t* fat32_detect(disk_part_t* part, dirent_t* root) {
     fs->part = part;
     fs->type = FS_TYPE_FAT;
     fs->file_access_granularity = block_size(part);
+    fs->n_open_files = 0;
 
-    fs->open_file        = (void*)fat32_open_file;
-    fs->close_file       = (void*)fat32_close_file;
-    fs->read_file_sector = (void*)fat32_read_file_sector;
-    fs->write_file_sector= (void*)fat32_write_file_sector;
-    fs->seek             = (void*)fat32_seek;
-    fs->read_dir         = (void*)fat32_read_dir;
+    fs->unmount              = (void*)fat32_unmount;
+    fs->open_file            = (void*)fat32_open_file;
+    fs->close_file           = (void*)fat32_close_file;
+    fs->read_file_sector     = (void*)fat32_read_file_sector;
+    fs->write_file_sector    = (void*)fat32_write_file_sector;
+    fs->seek                 = (void*)fat32_seek;
+    fs->read_dir             = (void*)fat32_read_dir;
+    fs->free_dirents         = (void*)fat32_free_dirents;
+
     fs->file_cursor_size = sizeof(fat32_file_cursor_t);
 
-    fs->root = root;
-
-    root->children = NULL;
-    root->cluster = root_dir_cluster;
-    root->file_size = 0;
-    root->n_children= 0;
-    root->children = NULL;
-    root->type = DT_DIR;
-    root->fs = fs;
+    fs->root_addr = root_dir_cluster;
 
 
     fat32_privates_t* pr = (void*)fs + sizeof(fs_t);
@@ -429,27 +457,9 @@ fs_t* fat32_detect(disk_part_t* part, dirent_t* root) {
     pr->fat_begin     = reserved;
     pr->data_begin    = reserved + tables_count * fatsize;
     
-    pr->fat_cache.n_entries = 0;
+    // setup fat cache
+    setup_cache(&pr->fat_cache, block_size(fs->part));
 
-/*
-
-    log_tree(fs, fs->root, 0);
-
-    dirent_t* file = &fs->root->children[2];
-
-    int size = 0;
-
-    fat32_file_cursor_t* cur = fat32_open_file(file);
-
-
-    while((size = fat32_read_file_sector(fs, cur, buf))) {
-        ((uint8_t*)buf)[size] = 0;
-        
-        printf("%s", buf);
-    }
-
-    fat32_close_file(cur);
-*/
 
     free(buf);
     return fs;
@@ -457,21 +467,31 @@ fs_t* fat32_detect(disk_part_t* part, dirent_t* root) {
 
 
 
-void fat32_open_file(dirent_t* restrict file, fat32_file_cursor_t* cur) {
+void fat32_unmount(fs_t* fs) {
+    fat32_privates_t* pr = (fat32_privates_t*)(fs+1);
+    assert(fs->n_open_files == 0);
+    cleanup_cache(&pr->fat_cache);
+    free(fs);
+}
 
-    cur->cur_cluster        = file->cluster;
+
+void fat32_open_file(file_t* restrict file, fat32_file_cursor_t* cur) {
+    assert(file->fs);
+    assert(file->fs->type == FS_TYPE_FAT);
+
+    cur->cur_cluster        = file->addr;
     cur->cur_cluster_offset = 0;
-    cur->file               = file;
+    cur->file_size          = file->file_size;
     cur->file_offset        = 0;
+    cur->fs                 = file->fs;
+    file->fs->n_open_files++;
     
     cur->end = file->file_size == 0;
 }
 
 
 void fat32_close_file(fat32_file_cursor_t* cur) {
-    (void) cur;
-    // nothing to do,
-    // we didn't allocate anything
+    cur->fs->n_open_files--;
 }
 
 
@@ -493,11 +513,10 @@ void advance_cursor(
     cur->file_offset += block_size(part);
     
     // cursor reached the end
-    if(cur->file_offset > cur->file->file_size) {
+    if(cur->file_offset > cur->file_size) {
         cur->end = 1;
         return;
     }
-    
     // advance cluster offset
 
     cur->cur_cluster_offset++;
@@ -542,8 +561,8 @@ int fat32_read_file_sector(
     int read_size;
 
     if(cur->file_offset + block_size(fs->part) 
-                                > cur->file->file_size)
-        read_size = cur->file->file_size - cur->file_offset;
+                                > cur->file_size)
+        read_size = cur->file_size - cur->file_offset;
     else
         read_size = block_size(fs->part);
 
@@ -580,4 +599,6 @@ int fat32_seek(
     panic("fat32_seek: unimplemented method");
     __builtin_unreachable();
 }
+
+
 

@@ -21,17 +21,15 @@
 #define DT_SOCK	7
 
 
-typedef struct dirent {
-    // implementation dependant
-    uint64_t cluster;
-    
-    // NULL if this is not a directory
-    // or if chirdren are not cached
-    struct dirent* restrict children;
 
-    // number of children
-    // (directories only)
-    unsigned n_children;
+/**
+ * file descriptor
+ * !! the actual size of this structure
+ * is actually sizeof(file_t) + strlen(file.path)+1
+ */
+typedef struct file {
+    // implementation dependant
+    uint64_t addr;
 
     // the associated filesystem 
     // NULL if this is a virtual 
@@ -41,11 +39,50 @@ typedef struct dirent {
     // file size in bytes
     // 0 if it is a directory
     uint32_t file_size;
+} file_t;
 
-    // Linux complient
-    unsigned char type;
-    char     name[256];
+
+
+#define MAX_FILENAME_LEN 255
+#define MAX_PATH 4095
+
+
+/**
+ * unix complient inode 
+ * type used by struct dirent and such
+ * 
+ */
+// value 0 is reserved for virtual
+// directories: they are not in the fs but rather
+// in the vfs
+typedef uint64_t ino_t;
+
+/**
+ * @brief almost linux complient dirent
+ * (missing d_off)
+ * structure used by vfs_read_dir
+ */
+typedef struct dirent {
+    ino_t          ino;       /* Inode number */
+    unsigned short reclen;    /* Length of this record */
+    unsigned char  type;      /* Type of file; not supported
+                                    by all filesystem types */
+    char           name[MAX_FILENAME_LEN+1]; /* Null-terminated filename */
 } dirent_t;
+
+
+/**
+ * same as above but without
+ * the name, for moments
+ * when it's not needed
+ * 
+ */
+typedef struct fast_dirent {
+    ino_t          ino;       /* Inode number */
+    unsigned short reclen;    /* Length of this record */
+    unsigned char  type;      /* Type of file; not supported
+                                    by all filesystem types */
+} fast_dirent_t;
 
 
 /**
@@ -75,6 +112,17 @@ typedef struct fs {
      */
     unsigned file_cursor_size;
 
+
+    /**
+     * @brief number of currently
+     * open file in the file system.
+     * to be unmounted, this field
+     * must be cleared.
+     * 
+     * This field is vfs private
+     */
+    unsigned n_open_files;
+
     /**
      * @brief create a cursor over a file
      * 
@@ -82,7 +130,7 @@ typedef struct fs {
      * @param cur (output) the cursor specific handler
      * must be at least file_cursor_size big
      */
-    void (*open_file)(dirent_t* restrict file, void* cur);
+    void (*open_file)(file_t* restrict file, void* cur);
 
     /**
      * @brief close a cursor
@@ -136,13 +184,42 @@ typedef struct fs {
      * structure
      * 
      * @param fs filesystem structure
-     * @param dir directory to read
-     * @return dirent_t* allocated on heap, 
-     * must free later on!
+     * @param dir_addr implementation specific address
+     * of the dir to read
+     * @param n the (output) number of entries read
+     * @return dirent* may be null if the dir is empty
+     * or represents an array of at least (*n) dirent 
+     * structure elementns
+     * 
      */
-    dirent_t* (*read_dir)(struct fs* fs, dirent_t* dir);
+    dirent_t* (*read_dir)(struct fs* fs, uint64_t dir_addr, size_t* n);
 
-    dirent_t* root;
+    /**
+     * @brief remove a list of dir entries
+     * returned by read_dir(...).
+     * This should only free the cached
+     * memory, and not affect the partition 
+     * state
+     * 
+     * @param dir the output of read_dir(...)
+     */
+    void (*free_dirents)(dirent_t* dir);
+
+
+    /**
+     * @brief destruct this structure,
+     * cleanup every allocated memory
+     * before being called, the 
+     * n_open_files must be cleared.
+     * 
+     */
+    void (*unmount)(struct fs* fs);
+
+    /**
+     * root cluster/inode/...
+     * implementation dependant
+     */
+    uint64_t root_addr;
 } fs_t;
 
 
@@ -151,7 +228,4 @@ typedef struct fs {
 #define SEEK_SET 0
 #define SEEK_CUR 1
 #define SEEK_END 2
-
-// return non 0 of if did mount
-int try_mount(disk_part_t* part);
 

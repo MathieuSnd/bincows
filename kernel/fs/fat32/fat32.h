@@ -2,11 +2,13 @@
 
 #include "../fs.h"
 
-fs_t* fat32_detect(disk_part_t* part, dirent_t* root);
+fs_t* fat32_mount(disk_part_t* part);
 
 
 typedef struct fat32_file_cursor {
-    dirent_t* restrict file;
+    // file's filesystem
+    // must be a fat32 one
+    fs_t* fs;
 
     // physical cluster id
     uint32_t cur_cluster;
@@ -17,6 +19,8 @@ typedef struct fat32_file_cursor {
 
     // byte offset in the file
     unsigned file_offset;
+
+    unsigned file_size;
 
     // non zero if the cursor reached the
     // end of the file
@@ -31,7 +35,7 @@ typedef struct fat32_file_cursor {
  * @param file the file to open
  * @param cur (output) the cursor to that file
  */
-void fat32_open_file(dirent_t* restrict file, fat32_file_cursor_t* cur);
+void fat32_open_file(file_t* restrict file, fat32_file_cursor_t* cur);
 
 void fat32_close_file(fat32_file_cursor_t *);
 
@@ -83,14 +87,33 @@ int fat32_seek(
 
 /**
  * @brief read a directory and return its
- * children
+ * children in a cache structure array
  * 
  * @param fs filesystem structure
  * @param dir directory to read
  * @param n_entries (output) the number of
  * entries found in the directory
- * @return dirent_t* allocated on heap, 
- * must free later on!
+ * @return dirent_t* allocated, 
+ * must free later on with fat32_free_dirents
  */
-dirent_t* fat32_read_dir(fs_t* fs, dirent_t* dir);
+dirent_t* fat32_read_dir(fs_t* fs, uint64_t dir_addr, size_t* n);
+
+
+/**
+ * @brief free the output list from fat32_read_dir
+ * 
+ */
+void fat32_free_dirents(dirent_t*);
+
+
+
+/**
+ * @brief destruct the fs structure,
+ * cleanup every allocated memory
+ * before being called, the 
+ * n_open_files must be cleared.
+ * 
+ */
+void fat32_unmount(fs_t* fs);
+
 
