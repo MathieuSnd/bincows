@@ -2,13 +2,54 @@
 
 #include "fs.h"
 
-int mount(disk_part_t* part, const char* path);
+/**
+ * @brief read the partition and
+ * add it to the vfs.
+ * 
+ * @param part the given partitio
+ * descriptor
+ * @param path the path of the 
+ * partition's root directory
+ * @return int 0 iif something
+ * went wroung and the partition
+ * couldn't be mounted
+ */
+int vfs_mount(disk_part_t* part, const char* path);
+
+
+/**
+ * @brief unmount a partition
+ * from the vfs
+ * 
+ * @param path the path of the 
+ * partition's root
+ * @return int 0 iif something
+ * went wroung and the partition
+ * couldn't be unmounted
+ */
+int vfs_unmount(const char* path);
 
 void vfs_init(void);
 
+// unmount every partition,
+// free every memory block
+void vfs_cleanup(void);
 
+
+/**
+ * @brief file handler used to read,
+ * write, seek. Uses polymorphic calls
+ * to underlying fs format.
+ * 
+ * fields will be redoundent
+ * with the information in 'cursor'
+ * ex: file_offset, file_size
+ * we should be very careful when
+ * modifying the structure: always
+ * make the underlying fs know
+ * what we are doing with this structure
+ */
 typedef struct file_handler {
-    dirent_t* file;
     fs_t* fs;
 
     // the filesystems have sector granularity
@@ -23,6 +64,9 @@ typedef struct file_handler {
     // current byte offset in the file
     uint64_t file_offset;
 
+    // total file size in bytes.
+    uint64_t file_size;
+
     // buffer of fs->file_access_granularity
     // bytes.
     // keep the current sector buffered
@@ -36,21 +80,65 @@ typedef struct file_handler {
     // uint64_t: make sure the structure
     // will be aligned
     uint64_t cursor[0];
-} file_handler_t;
+} file_handle_t;
+
+
+
+typedef struct dir_cache_ent {
+    // implementation dependant
+    uint64_t cluster;
+
+    // file size in bytes
+    // 0 if it is a directory
+    uint32_t file_size;
+
+
+    // Linux complient
+    unsigned char type;
+
+
+    // the associated filesystem 
+    // NULL if this is a virtual 
+    // file/dir
+    struct fs* restrict fs;
+    
+    // null-terminated path name pointer, 
+    // max path length = MAX_PATH
+    char* path;
+} dir_cache_ent_t;
+
+
+
+struct DIR {
+    unsigned cur;
+    unsigned len;
+    struct dirent children[0];
+};
+
+
+
+/////////////////////////////
+// dir  open / read / write
+/////////////////////////////
+
 
 
 /**
  * @brief open a directory entry
  * 
  * @param path the directory path
- * @param create 0: return NULL if the dir entry or an
- * entry in the path does not exist. non-0: recursively
- * create non existing directories in the path 
- * @return dirent_t* NULL if create = 0 and the directory
- * does not exist. Otherwise, the dirent structure 
+ * @return struct DIR* NULL if the directory does not exist.
+ * Otherwise, the dirent structure 
  * for the file
  */
-dirent_t* vfs_open_dir(const char* path, int create);
+struct DIR* vfs_opendir(const char* path);
+
+/**
+ * @brief close a dir opened
+ * by vfs_open_dir(...)
+ * 
+ */
+void vfs_closedir(struct DIR*);
 
 
 /**
@@ -63,27 +151,20 @@ dirent_t* vfs_open_dir(const char* path, int create);
  * @param dir the directory to read
  * @return dirent_t* the new dir->children value
  */
-dirent_t* vfs_read_dir(dirent_t* dir);
+struct dirent* vfs_readdir(struct DIR* dir);
 
 
-/**
- * @brief free directory entries returned by
- * vfs_read_dir()
- * 
- */
-void vfs_free_dir(dirent_t*);
 
-file_handler_t* vfs_open_file(const char* filename);
-void vfs_close_file(file_handler_t* handle);
+/////////////////////////////
+// file  open / read / write
+/////////////////////////////
+
+file_handle_t* vfs_open_file(const char* filename);
+void vfs_close_file(file_handle_t* handle);
 
 
 size_t vfs_read_file(void* ptr, size_t size, size_t nmemb, 
-            file_handler_t* stream);
+            file_handle_t* stream);
 
 size_t vfs_write_file(const void* ptr, size_t size, size_t nmemb,
-            file_handler_t* stream);
-
-
-
-#define MAX_PATH_LENGTH 1024
-
+            file_handle_t* stream);
