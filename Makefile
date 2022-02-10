@@ -1,5 +1,5 @@
 
-.PHONY: clean all run disk kernel force_look threaded_build
+.PHONY: clean all run disk kernel force_look threaded_build native_disk
 
 HDD_ROOT := disc_root 
 DISK_FILE := disk.bin
@@ -17,12 +17,14 @@ QEMU_COMMON_ARGS := -bios /usr/share/ovmf/OVMF.fd \
 			 -m 8192 \
 			 -M q35 \
 			 -vga virtio \
-			 -no-reboot \
+			 -no-reboot  -no-shutdown \
 			 -D qemu.log \
 			 -trace "pci_nvme_*" \
 			 -trace "apic_*" \
 			-device nvme,drive=NVME1,serial=deadbeef \
-			-drive format=raw,if=none,id=NVME1,file=
+			-drive format=raw,if=none,id=NVME1,file=disk.bin \
+
+
 			
 
 QEMU_ARGS := -monitor stdio $(QEMU_COMMON_ARGS)
@@ -34,7 +36,12 @@ QEMU_DEBUG_ARGS:= -no-shutdown -s -S -d int $(QEMU_COMMON_ARGS)
 
 run: all
 	./write_disk.sh
-	$(QEMU_PATH) $(QEMU_ARGS)$(DISK_FILE)
+	$(QEMU_PATH) $(QEMU_ARGS)
+
+native_disk:
+	$(QEMU_PATH) $(QEMU_ARGS) 			-device nvme,drive=NVME2,serial=dead \
+			-drive format=raw,if=none,id=NVME2,file=/dev/nvme0n1
+
 
 
 prun: kernel $(PARTITION)
@@ -64,9 +71,9 @@ $(PARTITION): kernel
 
 
 $(DISK_FILE): kernel/entry.c
-	dd if=/dev/zero bs=1M count=0 seek=64 of=$(DISK_FILE)
+	dd if=/dev/zero bs=1M count=0 seek=72 of=$(DISK_FILE)
 	sudo /sbin/parted -s $(DISK_FILE) mklabel gpt
-	sudo /sbin/parted -s $(DISK_FILE) mkpart ESP fat32 2048s 100%
+	sudo /sbin/parted -s $(DISK_FILE) mkpart Bincows fat32 2048s 100%
 	sudo /sbin/parted -s $(DISK_FILE) set 1 esp on
 #	$(LIMINE_INSTALL) $(DISK_FILE)
 
