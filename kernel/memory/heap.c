@@ -5,9 +5,19 @@
 #include "../lib/sprintf.h"
 #include "../memory/vmap.h"
 #include "../memory/paging.h"
-#include "../lib/logging.h"
 #include "../lib/assert.h"
 #include "../lib/string.h"
+
+
+//#define DEBUG_HEAP
+
+#ifdef DEBUG_HEAP
+#include "../lib/logging.h"
+#define log_heap(...) log_warn(__VA_ARGS__)
+#else
+#define log_heap(...)
+#endif
+
 
 
 #define MIN_EXPAND_SIZE 1024
@@ -108,7 +118,7 @@ static void expand_heap(size_t size) {
 
     heap_size += size;
 
-    //log_debug("kernel heap extended to %lu KB", heap_size / 1024);
+    log_heap("kernel heap extended to %lu KB", heap_size / 1024);
 }
 
 /**
@@ -254,7 +264,7 @@ static seg_header* split_segment(seg_header* pred, seg_header* tosplit, size_t s
 
 
 void heap_init(void) {
-    log_debug("init kernel heap...");
+    log_heap("init kernel heap...");
 
 
     expand_heap(MIN_EXPAND_SIZE);
@@ -262,6 +272,7 @@ void heap_init(void) {
 
 
 void* __attribute__((noinline)) malloc(size_t size) {
+    log_heap("malloc(%u)", size);
     //assert(current_segment->free == 1);
 
     // align the size to assure that 
@@ -276,10 +287,10 @@ void* __attribute__((noinline)) malloc(size_t size) {
 
 
     while(1) {
-        
         if(seg == NULL) {
             break;
         }
+        //log_heap("%lx -> %lx", seg, seg->next);
 
         assert(is_kernel_memory((uint64_t)seg));
 
@@ -326,6 +337,9 @@ void* __attribute__((noinline)) malloc(size_t size) {
         
         // one allocation
         n_allocations++;
+
+        log_heap(" --> %lx", (void*)seg+sizeof(seg_header));
+
         
         return (void *)seg + sizeof(seg_header);
     }
@@ -377,7 +391,9 @@ void* realloc(void* ptr, size_t size) {
 
 
 // O(1) free
-void __attribute__((noinline))  free(void *ptr) {
+void __attribute__((noinline)) free(void *ptr) {
+    log_heap("free(%lx)", ptr);
+
     seg_header* header = ptr - sizeof(seg_header);
     
     assert(header->free == 0);
@@ -395,14 +411,16 @@ void __attribute__((noinline))  free(void *ptr) {
 
 
 #ifndef NDEBUG
+#ifdef DEBUG_HEAP
 
 void print_heap(void) {
     for(seg_header* seg = current_segment; 
                     seg != NULL;
                     seg = seg->next) {
-        log_debug("%lx size=%x,free=%u", seg,seg->size, seg->free);
+        log_heap("%lx size=%x,free=%u", seg,seg->size, seg->free);
     }
 }
+
 
 void malloc_test(void) {
 
@@ -410,7 +428,7 @@ void malloc_test(void) {
 
     uint64_t size = 5;
 
-    for(int k = 0; k < 10; k++) {
+    for(int k = 0; k < 3; k++) {
         for(int j = 0; j < 10; j++) {
             for(int i = 0; i < 128; i++) {
                 arr[i] = realloc(arr[i], size % (1024*1024));
@@ -424,5 +442,10 @@ void malloc_test(void) {
             arr[i] = 0;
         }
     }
+
+    defragment();
+    print_heap();
 }
+
+#endif
 #endif
