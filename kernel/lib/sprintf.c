@@ -224,8 +224,9 @@ int printf(const char* format, ...) {
 }
 
 int vprintf(const char* format, va_list ap) {
-
-    char buf[1024];
+    // static buffer: don't waste 1K 
+    // in stack memory
+    static char buf[1024];
 
     int ret = vsprintf(buf, format, ap);
 
