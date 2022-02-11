@@ -7,12 +7,13 @@
 #include "../memory/paging.h"
 #include "../lib/assert.h"
 #include "../lib/string.h"
+#include "../lib/panic.h"
+#include "../lib/logging.h"
 
 
 //#define DEBUG_HEAP
 
 #ifdef DEBUG_HEAP
-#include "../lib/logging.h"
 #define log_heap(...) log_warn(__VA_ARGS__)
 #else
 #define log_heap(...)
@@ -84,7 +85,43 @@ static size_t n_allocations = 0;
 
 static seg_header* current_segment = NULL;
 
-size_t get_n_allocation(void) {
+
+#ifndef NDEBUG
+static void heap_assert_seg(const seg_header* const seg) {
+    assert(seg);
+    if((uint64_t)seg < KERNEL_HEAP_BEGIN || 
+        (uint64_t)seg >= KERNEL_HEAP_BEGIN+heap_size) {
+        log_warn("heap_assert_seg error: seg=%lx", seg);
+        panic("heap_assert_seg(...): arg is not in heap");
+    }
+
+    if((uint64_t)seg+seg->size > KERNEL_HEAP_BEGIN+heap_size) {
+        log_warn("heap_assert_seg error: seg=%lx = {.next=%lx, .size=%lx, .free=%lx", 
+                    seg, seg->next, seg->size, seg->free);
+
+        panic("heap_assert_seg(...): arg is not in heap");
+    }
+    if((seg->free & ~1u) != 0) {
+        log_warn("heap_assert_seg error: seg=%lx = {", 
+                    seg, seg->next, seg->size, seg->free);
+        panic("heap_assert_seg(...): bad header (invalid free value)");
+    }
+    /*
+    if(seg->next != NULL && ((uint64_t)seg->next < KERNEL_HEAP_BEGIN 
+                || (uint64_t)seg->next >= KERNEL_HEAP_BEGIN+heap_size)) {
+        log_warn("heap_assert_seg error: seg=%lx = {", 
+                    seg, seg->next, seg->size, seg->free);
+        panic("heap_assert_seg(...): bad header (invalid next value)");
+    }
+    */
+}
+
+#else
+#define heap_assert_seg(X)
+#endif
+
+
+size_t heap_get_n_allocation(void) {
     return n_allocations;
 }
 
@@ -121,6 +158,18 @@ static void expand_heap(size_t size) {
     log_heap("kernel heap extended to %lu KB", heap_size / 1024);
 }
 
+
+size_t heap_get_size(void) {
+    return heap_size;
+}
+
+
+size_t heap_get_brk(void) {
+    return heap_begin + heap_size;
+}
+
+
+
 /**
  * current_segment shouldn't be NULL
  * 
@@ -134,7 +183,7 @@ static void defragment(void) {
     for(seg_header* seg = current_segment->next; 
                         seg != NULL;
                         ) {
-            
+            heap_assert_seg(seg);
  /**
   *   ||   seg   ||   pred   | 
   *             ||
@@ -292,7 +341,7 @@ void* __attribute__((noinline)) malloc(size_t size) {
         }
         //log_heap("%lx -> %lx", seg, seg->next);
 
-        assert(is_kernel_memory((uint64_t)seg));
+        heap_assert_seg(seg);
 
         if(!seg->free || seg->size < size) {    
             // this segment is not right, check the next one
@@ -395,8 +444,11 @@ void __attribute__((noinline)) free(void *ptr) {
     log_heap("free(%lx)", ptr);
 
     seg_header* header = ptr - sizeof(seg_header);
-    
+
+    heap_assert_seg(header);
+
     assert(header->free == 0);
+
 
     header->free = 1;
 
@@ -411,7 +463,7 @@ void __attribute__((noinline)) free(void *ptr) {
 
 
 #ifndef NDEBUG
-#ifdef DEBUG_HEAP
+//#ifdef DEBUG_HEAP
 
 void print_heap(void) {
     for(seg_header* seg = current_segment; 
@@ -447,5 +499,5 @@ void malloc_test(void) {
     print_heap();
 }
 
-#endif
+//#endif
 #endif

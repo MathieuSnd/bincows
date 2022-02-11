@@ -31,7 +31,7 @@ void reboot(void) {
 
 
 
-    unsigned still_allocated = get_n_allocation();
+    unsigned still_allocated = heap_get_n_allocation();
 
     if(still_allocated) {
         log_warn("%d FREE BLOCKS AT SHUTDOWN", still_allocated);
