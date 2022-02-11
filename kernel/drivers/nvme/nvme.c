@@ -103,7 +103,9 @@ static void rename_device(struct pcie_dev* dev) {
     static unsigned id = 0;
 
     sprintf(buff, 
-            "nvme%u", id++);
+            "nvme%un1", id++);
+    // only namespace 1 is supported
+    // for now
 
     dev->dev.name = (string_t){buff, 1};
 }
