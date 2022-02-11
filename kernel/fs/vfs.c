@@ -288,8 +288,7 @@ void vfs_init(void)
         .fs = 0,
         .path = "/",
     };
-
-    atshutdown(vfs_cleanup);
+    //atshutdown(vfs_cleanup);
 }
 
 
@@ -732,7 +731,6 @@ void __attribute__((noinline)) log_tree(const char* path, int level)
 
 int vfs_mount(disk_part_t *part, const char *path)
 {
-
     fs_t *fs = fat32_mount(part);
 
     if (!fs)
@@ -772,8 +770,8 @@ int vfs_mount(disk_part_t *part, const char *path)
 
 //return;
 
+/*
     file_handle_t* f = vfs_open_file("/fs/boot/limine.cfg");
-
     char buf[26];
     int read = 0;
     int i = 0;
@@ -784,10 +782,12 @@ int vfs_mount(disk_part_t *part, const char *path)
         if(++i == 1)
             break;
     }
-
     vfs_close_file(f);
+*/
 
-
+    //log_warn("open");
+    //struct DIR* dir =  vfs_opendir("/fs/");
+    //vfs_closedir(dir);
     log_tree("/",0);
 
     return 1;
@@ -812,10 +812,11 @@ file_handle_t *vfs_open_file(const char *path)
 
     free(pathbuf);
 
-
+log_debug("FS");
     if(!fs) // dirent not found
         return NULL;
 
+log_debug("DIRENT;TYPE");
     // file does not exist or isn't a file
     if(dirent.type != DT_REG)
         return NULL;
@@ -831,7 +832,7 @@ file_handle_t *vfs_open_file(const char *path)
         + fs->file_access_granularity);
 
 
-        log_warn("file_access_granularity = %u", fs->file_access_granularity);
+    log_warn("file_access_granularity = %u", fs->file_access_granularity);
 
 
     handler->file_size = dirent.reclen;
@@ -962,7 +963,9 @@ struct dirent* vfs_readdir(struct DIR* dir) {
 size_t vfs_read_file(void *ptr, size_t size, size_t nmemb,
                      file_handle_t *restrict stream)
 {
-    
+    assert(stream);    
+    assert(ptr);    
+
     void * const buf = stream->sector_buff;
 
     log_warn("buf=%lx, stream=%lx",buf,stream);

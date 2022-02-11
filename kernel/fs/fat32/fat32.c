@@ -56,7 +56,6 @@ void* read(disk_part_t* part, uint64_t lba, void* buf, size_t count) {
 
     assert(lba >= part->begin && lba <= part->end);
 
-    log_warn("FAT32 read buf = %lx", buf);
     
     part->interface->read(part->interface->driver, lba, buf, count);
 
@@ -186,6 +185,7 @@ uint32_t readFAT(disk_part_t* part,
     
     void* sector = fetch_fat_sector(part, &pr->fat_cache, lba);
 
+    log_info("cluster = %lx, sector=%lx, offset=%lx", cluster, sector, sector_offset);
 
     uint32_t ent = *(uint32_t *)(sector + sector_offset);
 
@@ -261,15 +261,15 @@ static int parse_dir_entry(
 
     dirent_t* cur_entry = &entries[*cur_entry_id];
 
+
     // long filename entry
     if(dir->attr == FAT32_LFN) {
-        handle_long_filename_entry(dir, cur_entry->name);
-        *long_entry = 1;
+        //handle_long_filename_entry(dir, cur_entry->name);
+        //*long_entry = 1;
         return 0;
     }
 
     // short entry
-
     if(!*long_entry) {
         strncpy(cur_entry->name, dir->name, 8);
         char* ptr = cur_entry->name+7;
@@ -289,21 +289,20 @@ static int parse_dir_entry(
         }
         else // no extention
             *(ptr+1) = '\0';
-
-        if(!strcmp(cur_entry->name, ".") 
-        || !strcmp(cur_entry->name, "..")) {
-            // do not keep those.
-            // they will be created virtually
-            return 0;
-        }
-
     }
     else
         cur_entry->name[255] = 0;
     // make sure it's null-terminated
 
-    cur_entry->type       = fat_attr2fs_type(dir->attr);
-    cur_entry->ino    = dir->cluster_low | 
+    if(!strcmp(cur_entry->name, ".") 
+    || !strcmp(cur_entry->name, "..")) {
+        // do not keep those.
+        // they will be created virtually
+        return 0;
+    }
+
+    cur_entry->type = fat_attr2fs_type(dir->attr);
+    cur_entry->ino  = dir->cluster_low | 
                 ((uint32_t)dir->cluster_high << 16);
     
     cur_entry->reclen  = dir->file_size;
@@ -336,23 +335,27 @@ dirent_t* fat32_read_dir(fs_t* fs, uint64_t cluster, size_t* n) {
     // current output entry id
     int j = 0;
 
-    unsigned entries_per_sector = bufsize / sizeof(fat_dir_t);
+    unsigned entries_per_cluster = bufsize / sizeof(fat_dir_t);
 
+    log_warn("new record");
+
+    // for long name entries
+    int long_entry = 0;
+
+
+    int ci = 0;
     while(!end) {
 
         entries = realloc(entries,
-                    sizeof(dirent_t) * (j + entries_per_sector));
+                    sizeof(dirent_t) * (j + entries_per_cluster));
 
+        log_warn("new cluster %lx, %u %u", cluster, pr->clusters_size, entries_per_cluster);
 
         read(part, cluster_begin(cluster, pr), buf, pr->clusters_size);
 
 
 
-        // for long name entries
-        int long_entry = 0;
-
-
-        for(unsigned i = 0; i < entries_per_sector; i++) {
+        for(unsigned i = 0; i < entries_per_cluster; i++) {
             fat_dir_t* dir = (fat_dir_t*)buf + i;
     
             int v = parse_dir_entry(dir, &long_entry, entries, &j);
@@ -364,8 +367,11 @@ dirent_t* fat32_read_dir(fs_t* fs, uint64_t cluster, size_t* n) {
         }
         if(end)
             break;        
-
+        malloc_test();
         cluster = readFAT(part, pr, cluster, &end);
+
+        if(ci++ ==1)
+            break;
     }
 
     free(buf);
@@ -599,6 +605,3 @@ int fat32_seek(
     panic("fat32_seek: unimplemented method");
     __builtin_unreachable();
 }
-
-
-
