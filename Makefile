@@ -73,7 +73,7 @@ $(PARTITION): kernel
 $(DISK_FILE): kernel/entry.c
 	dd if=/dev/zero bs=1M count=0 seek=72 of=$(DISK_FILE)
 	sudo /sbin/parted -s $(DISK_FILE) mklabel gpt
-	sudo /sbin/parted -s $(DISK_FILE) mkpart Bincows fat32 2048s 100%
+	sudo /sbin/parted -s $(DISK_FILE) mkpart Bincows2 fat32 2048s 100%
 	sudo /sbin/parted -s $(DISK_FILE) set 1 esp on
 #	$(LIMINE_INSTALL) $(DISK_FILE)
 
