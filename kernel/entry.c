@@ -37,10 +37,13 @@
 #include "early_video.h"
  
 
+// 8K stack
 #define KERNEL_STACK_SIZE 8192
 
- // 8K stack
-static uint8_t stack_base[KERNEL_STACK_SIZE] __attribute__((section(".stack"))) __align(16);
+// accessible by other compilation units
+// like panic.c
+const size_t stack_size = KERNEL_STACK_SIZE;
+uint8_t stack_base[KERNEL_STACK_SIZE] __attribute__((section(".stack"))) __align(16);
 
 #define INITIAL_STACK_PTR ((uintptr_t)(stack_base + KERNEL_STACK_SIZE))
 
@@ -153,6 +156,51 @@ static void print_fun(const char* s, size_t len) {
 }
 
 
+/**
+ * @brief find main Bincows partition
+ * in detected GPT partitions
+ * 
+ * choose the partition with the given GUID.
+ * If not found, take any partition entitiled 
+ * "Bincows"
+ * 
+ * @return disk_part_t* NULL if not found
+ */
+static 
+disk_part_t* find_main_part(struct stivale2_guid* part_guid) {
+    disk_part_t* part = NULL;//search_partition("Bincows2");//find_partition(*(GUID*)part_guid);
+    if(part)
+        log_info("main partition found");
+    if(!part) {
+        log_warn(
+            
+            "cannot find main partition! (boot volume GUID: "
+            "{%8x-%4x-%4x-%2x%2x-%2x%2x%2x%2x%2x%2x})",
+            part_guid->a,    part_guid->b,    part_guid->c,
+            part_guid->d[0], part_guid->d[1],
+            part_guid->d[2], part_guid->d[3], part_guid->d[4], 
+            part_guid->d[5], part_guid->d[6], part_guid->d[7]
+        );
+
+        part = search_partition("Bincows");
+
+        if(part) {
+            log_warn(
+                "Bincows partition found on device %s (partition %s). "
+                "This partition will be mounted as the main partition.", 
+            
+                part->interface->driver->device->name.ptr,
+                part->name);
+        }
+        else {
+            panic("no Bincows partition found.\n");
+        }
+    }
+
+    return part;
+}
+
+
 // Registers %rbp, %rbx and %r12 through %r15 “belong” to the calling functio
 // The following will be our kernel's entry point.
 void _start(struct stivale2_struct *stivale2_struct) {
@@ -232,7 +280,8 @@ void _start(struct stivale2_struct *stivale2_struct) {
     hpet_init();
     apic_setup_clock();
 
-    vfs_init();
+
+//    vfs_init();
     pcie_init();
 
 
@@ -240,44 +289,19 @@ void _start(struct stivale2_struct *stivale2_struct) {
     ps2kb_init();
 
     ps2kb_set_event_callback(kbhandler);
+    
 
-    disk_part_t* part = find_partition(*(GUID*)&boot_volume_tag->part_guid);
-    if(part) {
-        log_info("main partition found");
+    disk_part_t* part = find_main_part((GUID*)&boot_volume_tag->part_guid);
+    
+    assert(part);
+    
+    for(int i = 0; i < 1; i++) {
+        vfs_init();
 
-        assert(mount(part, "/fs/"));
+        assert(vfs_mount(part, "/fs/"));
+
+        vfs_cleanup();
     }
-    else {
-        log_warn(
-            "cannot find main partition! (boot volume GUID: {%8x-%4x-%4x-%2x%2x-%2x%2x%2x%2x%2x%2x})",
-            boot_volume_tag->part_guid.a,
-            boot_volume_tag->part_guid.b,
-            boot_volume_tag->part_guid.c,
-            boot_volume_tag->part_guid.d[0],
-            boot_volume_tag->part_guid.d[1],
-            boot_volume_tag->part_guid.d[2],
-            boot_volume_tag->part_guid.d[3],
-            boot_volume_tag->part_guid.d[4],
-            boot_volume_tag->part_guid.d[5],
-            boot_volume_tag->part_guid.d[6],
-            boot_volume_tag->part_guid.d[7]
-        );
-
-        part = search_partition("Bincows");
-        
-        if(part) {
-            log_warn(
-                "Bincows partition found on device %s (partition %u). "
-                "This partition will be mounted as the main partition.", 
-            
-                part->interface->driver->device->name,
-                part->id);
-        }
-        else {
-            panic("no Bincows partition found.\n");
-        }
-    }
-
 
 
 
