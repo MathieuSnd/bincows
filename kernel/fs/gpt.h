@@ -20,6 +20,11 @@ typedef struct disk_part {
     
     // null terminated
     char     name[36];
+
+    // name in the system
+    // Linux-like (nvme0p0, nvme10p4, ...)
+    // part number begins with 1 begins with 
+    char* sysname;
 } disk_part_t;
 
 inline 
@@ -50,4 +55,5 @@ disk_part_t* search_partition(const char* name);
 
 // release partition information memory
 void gpt_cleanup(void);
+
 

@@ -10,7 +10,7 @@
 
 
 // return 0 if equals, non zero else
- inline int guidcmp(GUID const a, GUID const b) {
+static int guidcmp(GUID const a, GUID const b) {
     return ((a.high ^ b.high) | (a.low ^ b.low));
 }
 
@@ -127,8 +127,6 @@ static GUID makeGUID(
     return PARTITION_UNKNOWNED;
 }
 
-//partition_t* find_partition(GUID guid);
-
 
 void gpt_scan(const struct storage_interface* sti) {
 
@@ -185,7 +183,15 @@ void gpt_scan(const struct storage_interface* sti) {
             .interface = sti,
         };
 
+
+        p.sysname = malloc(strlen(sti->driver->device->name.ptr) + 2 + 4);
+
+        sprintf(p.sysname, "%sp%u", sti->driver->device->name.ptr, i+1);
+
         utf16le2ascii(p.name, entry->name, 35);
+
+
+        log_warn("gnezugneu '%s' - '%s'", p.name, p.sysname);
 
         register_partition(&p);
     }
