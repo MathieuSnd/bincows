@@ -280,6 +280,8 @@ void vfs_init(void)
 // cache size must be a power of two
     cache_size = 4096;
     cached_dir_list = malloc(sizeof(dir_cache_ent_t) * cache_size);
+
+    // zero it because it contains name pointers
     memset(cached_dir_list, 0, sizeof(dir_cache_ent_t) * cache_size);
 
     vfs_root = (vdir_t){
@@ -288,7 +290,7 @@ void vfs_init(void)
         .fs = 0,
         .path = "/",
     };
-    //atshutdown(vfs_cleanup);
+    atshutdown(vfs_cleanup);
 }
 
 
@@ -307,10 +309,9 @@ void vfs_cleanup(void) {
 */
 }
 
-
+// return 0 iif entry not present
 static int is_cache_entry_present(dir_cache_ent_t* cache_ent) {
-
-    return cache_ent->path == 0;
+    return cache_ent->path != NULL;
 }
 
 
@@ -344,7 +345,7 @@ dirent_t* read_dir(fs_t* fs, ino_t ino, const char* dir_path, size_t* n)
     for(unsigned i = 0; i < _n; i++) {
         dirent_t* dent = &ents[i];
 
-        int len = strlen(dent->name)+strlen(dir_path);
+        int len = strlen(dent->name)+strlen(dir_path)+1;
         assert(len < MAX_PATH);
         char* path = malloc(len+1);
         strcpy(path, dir_path);
@@ -356,9 +357,8 @@ dirent_t* read_dir(fs_t* fs, ino_t ino, const char* dir_path, size_t* n)
 
         dir_cache_ent_t* cache_ent = &cached_dir_list[hash];
 
-        if(!is_cache_entry_present(cache_ent)) {
+        if(is_cache_entry_present(cache_ent))
             free_cache_entry(cache_ent);
-        }
         
         cache_ent->cluster   = dent->ino;
         cache_ent->file_size = dent->reclen;
@@ -701,7 +701,9 @@ fs_t* open_dir(const char *path, fast_dirent_t* dir)
 static
 void __attribute__((noinline)) log_tree(const char* path, int level)
 {
+
     struct DIR* dir = vfs_opendir(path);
+
     struct dirent* dirent;
 
     assert(dir);
@@ -713,7 +715,7 @@ void __attribute__((noinline)) log_tree(const char* path, int level)
         printf(" %s (%u)\n", dirent->name, dirent->type);
         
         if(dirent->type == DT_DIR) {
-            char* pathb = malloc(strlen(path) + 2 + strlen(dirent->name));
+            char* pathb = malloc(1024);
             
             strcpy(pathb,path);
             strcat(pathb,"/");
@@ -812,11 +814,9 @@ file_handle_t *vfs_open_file(const char *path)
 
     free(pathbuf);
 
-log_debug("FS");
     if(!fs) // dirent not found
         return NULL;
 
-log_debug("DIRENT;TYPE");
     // file does not exist or isn't a file
     if(dirent.type != DT_REG)
         return NULL;
@@ -886,7 +886,6 @@ struct DIR* vfs_opendir(const char* path) {
     if(fs) {// dir does exist
         dirent_t* list = read_dir(fs, fdir.ino, pathbuff, &n);
 
-
         
         dir = malloc(sizeof(struct DIR) + sizeof(dirent_t) * n);
 
@@ -906,8 +905,9 @@ struct DIR* vfs_opendir(const char* path) {
 
 
     
-    if(vn != -1) {// the dir exists in the vfs
+    if(vn >= 0) {// the dir exists in the vfs
 
+        log_warn("VIRTUAL DIRECTORY ENTRY! vn=%u",vn);
 
         // allocate the extra results
         dir = realloc(dir, sizeof(struct DIR) + sizeof(dirent_t) * (n+vn));
