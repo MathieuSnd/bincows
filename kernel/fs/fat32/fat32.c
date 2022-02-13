@@ -185,8 +185,6 @@ uint32_t readFAT(disk_part_t* part,
     
     void* sector = fetch_fat_sector(part, &pr->fat_cache, lba);
 
-    log_info("cluster = %lx, sector=%lx, offset=%lx", cluster, sector, sector_offset);
-
     uint32_t ent = *(uint32_t *)(sector + sector_offset);
 
     assert(ent != 0);
@@ -264,8 +262,8 @@ static int parse_dir_entry(
 
     // long filename entry
     if(dir->attr == FAT32_LFN) {
-        //handle_long_filename_entry(dir, cur_entry->name);
-        //*long_entry = 1;
+        handle_long_filename_entry(dir, cur_entry->name);
+        *long_entry = 1;
         return 0;
     }
 
@@ -337,8 +335,6 @@ dirent_t* fat32_read_dir(fs_t* fs, uint64_t cluster, size_t* n) {
 
     unsigned entries_per_cluster = bufsize / sizeof(fat_dir_t);
 
-    log_warn("new record");
-
     // for long name entries
     int long_entry = 0;
 
@@ -349,10 +345,7 @@ dirent_t* fat32_read_dir(fs_t* fs, uint64_t cluster, size_t* n) {
         entries = realloc(entries,
                     sizeof(dirent_t) * (j + entries_per_cluster));
 
-        log_warn("new cluster %lx, %u %u", cluster, pr->clusters_size, entries_per_cluster);
-
         read(part, cluster_begin(cluster, pr), buf, pr->clusters_size);
-
 
 
         for(unsigned i = 0; i < entries_per_cluster; i++) {
@@ -367,11 +360,8 @@ dirent_t* fat32_read_dir(fs_t* fs, uint64_t cluster, size_t* n) {
         }
         if(end)
             break;        
-        malloc_test();
-        cluster = readFAT(part, pr, cluster, &end);
 
-        if(ci++ ==1)
-            break;
+        cluster = readFAT(part, pr, cluster, &end);
     }
 
     free(buf);
