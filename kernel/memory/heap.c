@@ -96,24 +96,23 @@ static void heap_assert_seg(const seg_header* const seg) {
     }
 
     if((uint64_t)seg+seg->size > KERNEL_HEAP_BEGIN+heap_size) {
-        log_warn("heap_assert_seg error: seg=%lx = {.next=%lx, .size=%lx, .free=%lx", 
+        log_warn("heap_assert_seg error: seg=%lx = {.next=%lx, .size=%lx, .free=%lx}", 
                     seg, seg->next, seg->size, seg->free);
 
         panic("heap_assert_seg(...): arg is not in heap");
     }
     if((seg->free & ~1u) != 0) {
-        log_warn("heap_assert_seg error: seg=%lx = {", 
+        log_warn("heap_assert_seg error: seg=%lx = {.next=%lx, .size=%lx, .free=%lx}", 
                     seg, seg->next, seg->size, seg->free);
         panic("heap_assert_seg(...): bad header (invalid free value)");
     }
-    /*
+    
     if(seg->next != NULL && ((uint64_t)seg->next < KERNEL_HEAP_BEGIN 
                 || (uint64_t)seg->next >= KERNEL_HEAP_BEGIN+heap_size)) {
-        log_warn("heap_assert_seg error: seg=%lx = {", 
+        log_warn("heap_assert_seg error: seg=%lx = {.next=%lx, .size=%lx, .free=%lx}", 
                     seg, seg->next, seg->size, seg->free);
         panic("heap_assert_seg(...): bad header (invalid next value)");
     }
-    */
 }
 
 #else
