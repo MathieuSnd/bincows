@@ -102,7 +102,14 @@ typedef struct fs {
     // buffers to grant 1-granularity accesses
     unsigned file_access_granularity;
 
-
+    union {
+        flags;
+        struct {
+            unsigned read_only: 1;
+            unsigned cacheable: 1;
+            unsigned seekable: 1;
+        };
+    };
     /**
      * @brief size of the cursor handler
      * data structure used by open_file,
@@ -123,6 +130,13 @@ typedef struct fs {
      */
     unsigned n_open_files;
 
+
+    /**
+     * root cluster/inode/...
+     * implementation dependant
+     */
+    uint64_t root_addr;
+
     /**
      * @brief create a cursor over a file
      * 
@@ -139,6 +153,18 @@ typedef struct fs {
      * must be at least file_cursor_size big
      */
     void (*close_file)(void *);
+
+
+
+    /**
+     * @brief advance by one sector the file 
+     * cursor structure by one grain
+     * 
+     * @param fs the filesystem structure
+     * @param cur the curstor structure to advance
+     */
+    void (*advance_file_cursor)(struct fs* fs, void* cur);
+
 
 
     /**
@@ -174,8 +200,10 @@ typedef struct fs {
 
 
     // UNIX fseek like 
+    // but offset is in fs blocks instead of 
+    // bytes
     int (*seek)(struct fs* restrict fs,void* restrict cur,
-            uint64_t offset,int whence);
+            uint64_t block_offset,int whence);
 
 
     /**
@@ -214,12 +242,6 @@ typedef struct fs {
      * 
      */
     void (*unmount)(struct fs* fs);
-
-    /**
-     * root cluster/inode/...
-     * implementation dependant
-     */
-    uint64_t root_addr;
 } fs_t;
 
 
