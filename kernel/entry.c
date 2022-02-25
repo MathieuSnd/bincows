@@ -281,7 +281,7 @@ void _start(struct stivale2_struct *stivale2_struct) {
     apic_setup_clock();
 
 
-//    vfs_init();
+    vfs_init();
     pcie_init();
 
 
@@ -294,14 +294,7 @@ void _start(struct stivale2_struct *stivale2_struct) {
     disk_part_t* part = find_main_part((GUID*)&boot_volume_tag->part_guid);
     
     assert(part);
-    
-    for(int i = 0; i < 1; i++) {
-        vfs_init();
-
-        assert(vfs_mount(part, "/fs/"));
-
-        vfs_cleanup();
-    }
+    assert(vfs_mount(part, "/fs/"));
 
 
 
