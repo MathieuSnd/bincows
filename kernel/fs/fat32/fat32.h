@@ -10,6 +10,10 @@ typedef struct fat32_file_cursor {
     // must be a fat32 one
     fs_t* fs;
 
+    // number of the cluster in the file:
+    // cursor position 
+    uint32_t cur_cluster_number;
+
     // physical cluster id
     uint32_t cur_cluster;
 
@@ -20,11 +24,12 @@ typedef struct fat32_file_cursor {
     // byte offset in the file
     unsigned file_offset;
 
+    // file size in bytes
     unsigned file_size;
 
     // non zero if the cursor reached the
     // end of the file
-    int end;
+    int eof;
 
 } fat32_file_cursor_t;
 
@@ -40,10 +45,21 @@ void fat32_open_file(file_t* restrict file, fat32_file_cursor_t* cur);
 void fat32_close_file(fat32_file_cursor_t *);
 
 
+
+/**
+ * @brief advance by one sector the file 
+ * cursor structure
+ * 
+ * @param fs the filesystem structure
+ * @param cur the curstor structure to advance
+ */
+void fat32_advance_file_cursor(fs_t* fs, fat32_file_cursor_t* cur);
+
 /**
  * @brief read one sector from file
  * the whole buffer will be overwritten even if
- * only one byte is read. Advance the cursor
+ * only one byte is read. See fat32_advance_file_cursor
+ * for advancing file cursor between reads / writes
  * 
  * @param fs fat32 partition structure
  * @param cur the file cursor structure
@@ -59,7 +75,8 @@ int fat32_read_file_sector(
 /**
  * @brief read one sector from file
  * the whole buffer will be overwritten even if
- * only one byte is read. Advance the cursor
+ * only one byte is read. See fat32_advance_file_cursor
+ * for advancing file cursor between reads / writes
  * 
  * @param fs fat32 partition structure
  * @param cur the file cursor structure
@@ -77,10 +94,12 @@ int fat32_write_file_sector(
 
 
 // UNIX fseek like 
+// but offset is in fs blocks instead of 
+// bytes
 int fat32_seek(
         fs_t* restrict fs, 
         fat32_file_cursor_t* restrict cur,
-        uint64_t offset,
+        uint64_t cluster_offset,
         int whence
 );
 
