@@ -1,6 +1,13 @@
 #include <stdarg.h>
 
+#ifndef TEST
 #include "../drivers/terminal/terminal.h"
+#else
+#define get_active_terminal() NULL
+#define terminal_set_fgcolor(A,B) 
+#endif
+
+
 #include "../lib/sprintf.h"
 #include "../lib/string.h"
 
