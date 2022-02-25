@@ -13,7 +13,7 @@ LIMINE_INSTALL := ./limine-bootloader/limine-install-linux-x86_64
 QEMU_PATH := qemu-system-x86_64
 
 
-QEMU_COMMON_ARGS := -bios /usr/share/ovmf/OVMF.fd \
+QEMU_COMMON_ARGS := -bios ./ovmf/OVMF.fd \
 			 -m 8192 \
 			 -M q35 \
 			 -vga virtio \
