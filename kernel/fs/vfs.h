@@ -35,7 +35,6 @@ void vfs_init(void);
 // free every memory block
 void vfs_cleanup(void);
 
-
 /**
  * @brief file handler used to read,
  * write, seek. Uses polymorphic calls
@@ -51,6 +50,11 @@ void vfs_cleanup(void);
  */
 typedef struct file_handler {
     fs_t* fs;
+
+    // if fs->cachable = 0: this field is 
+    // undefined. Else, writes/reads can
+    // rely on the granularity buffer
+    unsigned buffer_valid;
 
     // the filesystems have sector granularity
     // so we put those fields to buffer the accesses
@@ -168,3 +172,11 @@ size_t vfs_read_file(void* ptr, size_t size, size_t nmemb,
 
 size_t vfs_write_file(const void* ptr, size_t size, size_t nmemb,
             file_handle_t* stream);
+
+
+// SEEK_SET, SEEK_END, SEEK_CUR are defined in fs.h
+
+// return 0 if successful (see man fseek)
+int vfs_seek_file(file_handle_t* stream, uint64_t offset, int whence);
+long vfs_tell_file(file_handle_t* stream);
+
