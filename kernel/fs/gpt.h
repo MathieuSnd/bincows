@@ -24,7 +24,7 @@ typedef struct disk_part {
     // name in the system
     // Linux-like (nvme0p0, nvme10p4, ...)
     // part number begins with 1 begins with 
-    char* sysname;
+    char sysname[16];
 } disk_part_t;
 
 inline 

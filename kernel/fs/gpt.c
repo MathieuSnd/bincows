@@ -2,6 +2,8 @@
 #include "../lib/logging.h"
 #include "../lib/utf16le.h"
 #include "../lib/dump.h"
+#include "../lib/assert.h"
+#include "../lib/sprintf.h"
 
 #include "../drivers/driver.h"
 #include "../drivers/dev.h"
@@ -184,14 +186,11 @@ void gpt_scan(const struct storage_interface* sti) {
         };
 
 
-        p.sysname = malloc(strlen(sti->driver->device->name.ptr) + 2 + 4);
+        assert(strlen(sti->driver->device->name.ptr) + 2 + 4 <= sizeof(p.sysname));
 
         sprintf(p.sysname, "%sp%u", sti->driver->device->name.ptr, i+1);
 
         utf16le2ascii(p.name, entry->name, 35);
-
-
-        log_warn("gnezugneu '%s' - '%s'", p.name, p.sysname);
 
         register_partition(&p);
     }
