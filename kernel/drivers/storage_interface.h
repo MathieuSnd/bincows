@@ -15,9 +15,9 @@ struct storage_interface {
                  size_t   count);
 
     void (*write)(struct driver *,
-                 uint64_t lba,
-                 void*    buf,
-                 size_t   count);
+                 uint64_t    lba,
+                 const void* buf,
+                 size_t      count);
     
     unsigned capacity;
     
