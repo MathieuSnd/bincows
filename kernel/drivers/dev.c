@@ -4,7 +4,7 @@
 static struct dev** devices = NULL;
 static unsigned n_devices = 0;
 
-
+static
 void realloc_dev(void) {
     static unsigned buffsize = 0;
     
