@@ -67,10 +67,15 @@ struct MR_header {
 // padding
     uint8_t padding[1152 - 16];
 
-    uint8_t bitmap_level3[128];
-    uint8_t bitmap_level2[256];
-    uint8_t bitmap_level1[512];
-    uint8_t bitmap_level0[2048];
+    union {
+        struct {
+            uint8_t bitmap_level3[128];
+            uint8_t bitmap_level2[256];
+            uint8_t bitmap_level1[512];
+            uint8_t bitmap_level0[2048];
+        };
+        uint8_t bitmaps[128+256+512+2048];
+    };
 };
 
 
@@ -106,7 +111,7 @@ static void init_memory_range(struct memory_range* range, uint64_t addr, size_t 
 
 
     // zero all the bit maps
-    memset(header->bitmap_level3, 0, 128+256+512+2048);
+    memset(header->bitmaps, 0, 128+256+512+2048);
 
     // we use one page per region for the header
     header->available[0] = (length-1);
