@@ -93,7 +93,7 @@ void* read(disk_part_t* part, uint64_t lba, void* buf, size_t count) {
 
 
 static inline
-void write(disk_part_t* part, uint64_t lba, void* buf, size_t count) {
+void write(disk_part_t* part, uint64_t lba, const void* buf, size_t count) {
     lba += part->begin;
 
     assert(lba >= part->begin && lba <= part->end);
@@ -661,14 +661,53 @@ int fat32_read_file_sectors(
 
 int fat32_write_file_sectors(
         fs_t* restrict fs, 
-        file_t* restrict file, 
+        file_t* restrict fd, 
         const void* restrict buf,
         uint64_t begin,
         size_t n) {
-    (void) fs;
-    (void) file;
-    (void) buf;
-    (void) n;
-    panic("fat32_write_file_sectors: unimplemented method");
-    __builtin_unreachable();
+
+    assert(fs->type == FS_TYPE_FAT);
+
+
+    fat32_privates_t* restrict pr = (fat32_privates_t*)(fs+1);
+
+    assert((begin + n - 1) * pr->cluster_size < fd->file_size);
+
+    // compute the first cluster and offset
+
+    uint32_t cluster_offset = begin % pr->cluster_size;
+    uint32_t cluster = fetch_cluster(fs,pr,fd,begin / pr->cluster_size);
+
+    // for now, don't allow
+    // writing more than the file size
+    assert(cluster);
+
+    unsigned bsize = block_size(fs->part);
+    
+
+    while(n > 0) {
+        uint64_t lba = cluster_begin(cluster, pr) 
+                                + cluster_offset;
+
+        unsigned read_size = 1;
+        unsigned cluster_remaining = 
+                    pr->cluster_size - cluster_offset;
+
+        if(n >= cluster_remaining) {
+            read_size = cluster_remaining;
+
+            cluster_offset = 0;
+            cluster++;
+        }
+        // else, this is the last iteration
+
+
+        write(fs->part, lba, buf, read_size);
+
+        buf += bsize * read_size;
+
+        n -= read_size;
+    }
+
+    return n;
 }
