@@ -1,5 +1,5 @@
 
-.PHONY: clean all run disk kernel force_look threaded_build native_disk
+.PHONY: clean all run disk kernel force_look threaded_build native_disk test
 
 HDD_ROOT := disc_root 
 DISK_FILE := disk.bin
@@ -43,12 +43,15 @@ native_disk: all
 			-drive format=raw,if=none,id=NVME2,file=/dev/nvme0n1
 
 
+all: diskfile
+
 
 prun: kernel $(PARTITION)
 	sudo $(QEMU_PATH) $(QEMU_ARGS)$(PARTITION)
 
 
-
+test: force_look
+	$(MAKE) -C ./tests/
 
 
 debug: all
@@ -59,7 +62,6 @@ pdebug: $(PARTITION)
 	$(QEMU_PATH) $(QEMU_ARGS) 
 
 
-all: diskfile
 
 threaded_build:
 	make -j all
@@ -77,8 +79,8 @@ $(DISK_FILE): kernel/entry.c
 	sudo /sbin/parted -s $(DISK_FILE) set 1 esp on
 #	$(LIMINE_INSTALL) $(DISK_FILE)
 
-diskfile: kernel $(DISK_FILE)
 
+diskfile: kernel $(DISK_FILE)
 	sudo losetup -P $(USED_LOOPBACK) $(DISK_FILE)
 	
 	sudo mkfs.fat -F 32 $(USED_LOOPBACK)p1
