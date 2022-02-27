@@ -186,11 +186,11 @@ disk_part_t* find_main_part(struct stivale2_guid* part_guid) {
 
         if(part) {
             log_warn(
-                "Bincows partition found on device %s (partition %s). "
+                "Bincows partition found on device %s. "
                 "This partition will be mounted as the main partition.", 
             
-                part->interface->driver->device->name.ptr,
-                part->name);
+                part->sysname
+            );
         }
         else {
             panic("no Bincows partition found.\n");
