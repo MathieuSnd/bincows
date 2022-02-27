@@ -73,7 +73,7 @@ int   strcmp(const char* str1, const char* str2) {
 }
 
 int   strncmp(const char* str1, const char* str2, size_t n) {
-    int d;
+    int d = 0;
     
     while(n-- > 0) {
         char c1 = *(str1++);
