@@ -1015,13 +1015,59 @@ void nvme_sync_write(struct driver* this,
                      void*    buf,
                      size_t   count
 ) {
-    panic("nvme_sync_write: unimplented");
-    (void) this;
-    (void) lba;
-    (void) buf;
-    (void) count;
+    assert(this->status == DRIVER_STATE_OK);
+    struct data* data = this->data;
+    assert(data->nns);
+
+
+
+    unsigned shift = data->namespaces[0].block_size_shift;
+
+    unsigned max_count = 0x1000 >> shift;
+
+    // we only use one prp.
+    // this is slow.    
+    uint64_t prp_paddr = createPRP();
+
+
+    while(queue_full(&data->io_queues.sq))
+        sleep(1);
+
+    while(count != 0) {
+        // busy wait for a submission entry to be 
+        // available
+
+        unsigned c;
+
+        if(count < max_count)
+            c = count;
+        else
+            c = max_count;
+        
+        // copy one block
+        memcpy(
+            translate_address((void*)prp_paddr), 
+            buf, 
+            c << shift
+        );
+
+        perform_write_command(
+            data,
+            data->registers,
+            lba,
+            translate_address((void*)prp_paddr),
+            c
+        );
+
+        while(!queue_empty(&data->io_queues.sq))
+            sleep(1);
+        
+        buf += c << shift;
+
+        lba   += c;
+        count -= c;
+    }
+
+
+    freePRP(prp_paddr);
 }
-
-
-
-
