@@ -97,17 +97,18 @@ void perform_write_command(
 
 
 static void rename_device(struct pcie_dev* dev) {
-    string_free(&dev->dev.name);
-    char* buff = malloc(16);
-
     static unsigned id = 0;
 
-    sprintf(buff, 
+    string_free(&dev->dev.name);
+
+    dev->dev.name = (string_t){malloc(16), 1};
+
+
+    sprintf(dev->dev.name.ptr, 
             "nvme%un1", id++);
     // only namespace 1 is supported
     // for now
 
-    dev->dev.name = (string_t){buff, 1};
 }
 
 

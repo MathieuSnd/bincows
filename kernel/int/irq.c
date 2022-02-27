@@ -74,7 +74,7 @@ void irq_common_handler(uint8_t irq_n) {
 
     if(!handler) {
         char buff[64];
-        sprintf(buff, "IRQ%u fired, but no handler is specified");
+        sprintf(buff, "IRQ%u fired, but no handler is specified", irq_n);
         panic  (buff);
     }
 

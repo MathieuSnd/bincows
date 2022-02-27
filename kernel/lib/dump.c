@@ -78,9 +78,13 @@ void dump(const void* addr, size_t size, size_t line_size, uint8_t mode) {
     // iterator ptr
     const uint8_t* ptr = addr;
 
-// create mask : create the complementary with 0xff...ff << n
-// then complement it
-    const uint64_t mask = ~(~0llu << 8*pitch);
+    // create mask : create the complementary with 0xff...ff << n
+    // then complement it
+    // apparently, shifting by 64 a 64 bit value produces
+    // undefined behavior. Then, we split the operation
+    uint64_t mask = ~0llu << 4*pitch;
+    mask = ~(mask << 4*pitch);
+
 
     for(size_t i = 0; i < lines; i++) {
         // the last line might not be full
