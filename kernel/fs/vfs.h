@@ -17,6 +17,24 @@
 int vfs_mount(disk_part_t* part, const char* path);
 
 
+
+
+/**
+ * @brief open a directory entry
+ * 
+ * this function shouldn't be used outside the
+ * vfs routines: prefer vfs_open_file / vfs_opendir
+ * 
+ *
+ * @param path the directory path
+ * @param dir (output) directory entry descriptor
+ * @return fs_t NULL if the directory does
+ * not exist. the file system associated with the dir
+ * otherwise
+ */
+fs_t *vfs_open(const char *path, fast_dirent_t *dir);
+
+
 /**
  * @brief unmount a partition
  * from the vfs
@@ -49,6 +67,8 @@ void vfs_cleanup(void);
  * what we are doing with this structure
  */
 typedef struct file_handler {
+
+    // file associated fs
     fs_t* fs;
 
     // if fs->cachable = 0: this field is 
@@ -65,6 +85,11 @@ typedef struct file_handler {
     // buffer is empty
     unsigned sector_offset;
 
+    // cursor's sector number
+    // should be equal to:
+    // (file_offset % fs->file_access_granularity)
+    size_t sector_count;
+
     // current byte offset in the file
     uint64_t file_offset;
 
@@ -79,11 +104,11 @@ typedef struct file_handler {
 
 
     // this fild's size will depend
-    // be fs->file_cursor_size
+    // be fs->fd_size
     //
     // uint64_t: make sure the structure
     // will be aligned
-    uint64_t cursor[0];
+    file_t* file;
 } file_handle_t;
 
 
@@ -139,7 +164,7 @@ struct DIR* vfs_opendir(const char* path);
 
 /**
  * @brief close a dir opened
- * by vfs_open_dir(...)
+ * by vfs_opendir(...)
  * 
  */
 void vfs_closedir(struct DIR*);

@@ -63,11 +63,11 @@ typedef uint64_t ino_t;
  * structure used by vfs_read_dir
  */
 typedef struct dirent {
-    ino_t          ino;       /* Inode number */
-    unsigned short reclen;    /* Length of this record */
-    unsigned char  type;      /* Type of file; not supported
+    ino_t         ino;       /* Inode number */
+    size_t        file_size;    /* Length of this record */
+    unsigned char type;      /* Type of file; not supported
                                     by all filesystem types */
-    char           name[MAX_FILENAME_LEN+1]; /* Null-terminated filename */
+    char          name[MAX_FILENAME_LEN+1]; /* Null-terminated filename */
 } dirent_t;
 
 
@@ -78,9 +78,9 @@ typedef struct dirent {
  * 
  */
 typedef struct fast_dirent {
-    ino_t          ino;       /* Inode number */
-    unsigned short reclen;    /* Length of this record */
-    unsigned char  type;      /* Type of file; not supported
+    ino_t         ino;       /* Inode number */
+    size_t        file_size;    /* Length of this record */
+    unsigned char type;      /* Type of file; not supported
                                     by all filesystem types */
 } fast_dirent_t;
 
@@ -102,22 +102,25 @@ typedef struct fs {
     // buffers to grant 1-granularity accesses
     unsigned file_access_granularity;
 
+    // fs level file properties
     union {
-        flags;
+        uint8_t flags;
         struct {
             unsigned read_only: 1;
             unsigned cacheable: 1;
             unsigned seekable: 1;
         };
     };
+
+
     /**
-     * @brief size of the cursor handler
+     * @brief size of the file descriptor
      * data structure used by open_file,
      * close_file, read_file_sector,
      * write_file_sector, seek
      * 
      */
-    unsigned file_cursor_size;
+    //unsigned fd_size;
 
 
     /**
@@ -141,69 +144,63 @@ typedef struct fs {
      * @brief create a cursor over a file
      * 
      * @param file the file to open
-     * @param cur (output) the cursor specific handler
-     * must be at least file_cursor_size big
+     * @param cur (output) the file descriptor
+     * must be at least fd_size big
      */
-    void (*open_file)(file_t* restrict file, void* cur);
+    //void (*open_file)(file_t* restrict file, void* cur);
 
     /**
      * @brief close a cursor
      * 
-     * @param cur file specific cursor handler
-     * must be at least file_cursor_size big
+     * @param cur file specific file descriptor
+     * must be at least fd_size big
      */
-    void (*close_file)(void *);
+    //void (*close_file)(void *);
+
 
 
 
     /**
-     * @brief advance by one sector the file 
-     * cursor structure by one grain
+     * @brief read sectors at position begin -> begin + n - 1 
+     * from file
      * 
-     * @param fs the filesystem structure
-     * @param cur the curstor structure to advance
-     */
-    void (*advance_file_cursor)(struct fs* fs, void* cur);
-
-
-
-    /**
-     * @brief read one sector from file
-     * the whole buffer will be overwritten even if
-     * only one byte is read. Advance the cursor
+     * no size checking is done: unfinded behavior if
+     * (begin + n - 1) * file_access_granularity > fd->file_size
+     * 
+     * All the checking should be done by the VFS
      * 
      * @param fs partition structure
-     * @param cur file cursor specific handler
-     * must be at least file_cursor_size big
+     * @param fd file descriptor
+     * must be at least fd_size big
      * @param buf buffer that is big enough to hold one sector
+     * @param begin the position (in blocks) of the
+     * first sector to read
      * @return int the number of read bytes.
      */
-    int (*read_file_sector)(struct fs* restrict fs,void* cur,void* restrict buf);
+    int (*read_file_sectors)(struct fs* restrict fs,file_t* fd,
+            void* restrict buf, uint64_t begin, size_t n);
 
 
     /**
-     * @brief read one sector from file
-     * the whole buffer will be overwritten even if
-     * only one byte is read. Advance the cursor
+     * @brief write sectors at position begin -> begin + n - 1 
+     * from file
+     * 
+     * no size checking is done: unfinded behavior if
+     * (begin + n - 1) * file_access_granularity > fd->file_size
+     * 
+     * All the checking should be done by the VFS
      * 
      * @param fs partition structure
-     * @param cur file cursor specific handler
-     * must be at least file_cursor_size big
+     * @param fd file descriptor
+     * must be at least fd_size big
      * @param buf buffer to write from
-     * @param size must be 0 if this is't the last 
-     * sector in the file. Else, it will be the size 
-     * offset of the last sector.
+     * @param begin the position (in blocks) of the
+     * first sector to write
+     * @param n amount of sectors to be written
      * @return int the number of read bytes.
      */
-    int (*write_file_sector)(struct fs* restrict fs,void* cur, 
-            const void* restrict buf,int size);
-
-
-    // UNIX fseek like 
-    // but offset is in fs blocks instead of 
-    // bytes
-    int (*seek)(struct fs* restrict fs,void* restrict cur,
-            uint64_t block_offset,int whence);
+    int (*write_file_sectors)(struct fs* restrict fs, file_t* fd, 
+            const void* restrict buf, uint64_t begin, size_t n);
 
 
     /**
@@ -240,13 +237,19 @@ typedef struct fs {
      * before being called, the 
      * n_open_files must be cleared.
      * 
+     * The checking n_open_files checking 
+     * should be done by the VFS though
+     * 
      */
     void (*unmount)(struct fs* fs);
 } fs_t;
 
 
+
+// fs::type field values
 #define FS_TYPE_FAT 1
 
+// seek whence field values
 #define SEEK_SET 0
 #define SEEK_CUR 1
 #define SEEK_END 2

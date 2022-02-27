@@ -350,7 +350,7 @@ static dirent_t *read_dir(fs_t *fs, ino_t ino, const char *dir_path, size_t *n)
             free_cache_entry(cache_ent);
 
         cache_ent->cluster = dent->ino;
-        cache_ent->file_size = dent->reclen;
+        cache_ent->file_size = dent->file_size;
         cache_ent->type = dent->type;
         cache_ent->fs = fs;
         cache_ent->path = path;
@@ -581,7 +581,7 @@ static int find_fs_child(
         {
 
             child->ino = ents[i].ino;
-            child->reclen = ents[i].reclen;
+            child->file_size = ents[i].file_size;
             child->type = ents[i].type;
 
             found = 1;
@@ -614,32 +614,26 @@ static dir_cache_ent_t *get_cache_entry(const char *path)
     return NULL;
 }
 
-/**
- * @brief open a directory entry
- *
- * @param path the directory path in cannonical
- * form
- * @param dir (output) directory entry descriptor
- * @return fs_t NULL if the directory does
- * not exist. the file system associated with the dir
- * otherwise
- */
-static fs_t *open_dir(const char *path, fast_dirent_t *dir)
+
+fs_t *vfs_open(const char *path, fast_dirent_t *dir)
 {
-    assert(is_absolute(path));
+    char* pathbuf = malloc(strlen(path)+1);
+
+    simplify_path(pathbuf, path);
+    assert(is_absolute(pathbuf));
 
     // check cache
-    dir_cache_ent_t *ent = get_cache_entry(path);
+    dir_cache_ent_t *ent = get_cache_entry(pathbuf);
     if (ent)
     { // present entry
         dir->ino = ent->cluster;
-        dir->reclen = ent->file_size;
+        dir->file_size = ent->file_size;
         dir->type = ent->type;
 
         return ent->fs;
     }
 
-    vdir_t *vdir = get_fs_vdir(path);
+    vdir_t *vdir = get_fs_vdir(pathbuf);
 
     if (!vdir)
     {
@@ -650,17 +644,18 @@ static fs_t *open_dir(const char *path, fast_dirent_t *dir)
 
     fs_t *fs = vdir->fs;
 
-    char *buf = malloc(strlen(path) + 1);
 
-    strcpy(buf, path + strlen(vdir->path));
     // only keep the FS part
     // of the path
+    char *buf = pathbuf + strlen(vdir->path);
+
+
 
     char *sub = strtok(buf, "/");
 
     fast_dirent_t cur = {
         .ino = fs->root_addr,
-        .reclen = 0,
+        .file_size = 0,
         .type = DT_DIR,
     };
 
@@ -671,22 +666,22 @@ static fs_t *open_dir(const char *path, fast_dirent_t *dir)
         if (!find_fs_child(fs, &cur, &child, sub))
         {
             // the child does not exist
-            free(buf);
+            free(pathbuf);
 
             return NULL;
         }
 
         cur.ino = child.ino;
-        cur.reclen = child.reclen;
+        cur.file_size = child.file_size;
         cur.type = child.type;
 
         sub = strtok(NULL, "/");
     }
 
-    free(buf);
+    free(pathbuf);
 
     dir->ino = cur.ino;
-    dir->reclen = cur.reclen;
+    dir->file_size = cur.file_size;
     dir->type = cur.type;
 
     return fs;
@@ -706,11 +701,11 @@ static void log_tree(const char *path, int level)
         for (int i = 0; i < level + 1; i++)
             puts("-");
 
-        printf(" %s (%u)\n", dirent->name, dirent->type);
+        printf(" %d - %s (size %u) \n", dirent->type, dirent->name, dirent->file_size);
 
         if (dirent->type == DT_DIR)
         {
-            char *pathb = malloc(1024);
+            char *pathb = malloc(strlen(path) + strlen(dirent->name) + 2);
 
             strcpy(pathb, path);
             strcat(pathb, "/");
@@ -724,6 +719,68 @@ static void log_tree(const char *path, int level)
 
     vfs_closedir(dir);
 }
+
+static inline
+void test_file(void) {
+file_handle_t* f = vfs_open_file("/fs/file.dat");
+    assert(f);
+
+    //assert(!vfs_seek_file(f, 512, SEEK_SET));
+    //log_warn("FILE SIZE = %u", vfs_tell_file(f));
+    
+#define SIZE 512
+
+    vfs_seek_file(f, 0, SEEK_END);
+    size_t fsz = vfs_tell_file(f);
+    log_warn("vfs_tell_file(f) = %lu", vfs_tell_file(f));
+    
+    vfs_seek_file(f, 0, SEEK_SET);
+
+
+
+    char* buf = malloc(SIZE+1); 
+    int read = 0;
+
+
+    int x = 531;
+
+    for(int i = 0; i < 200; i++)
+    {
+        size_t seek = 0;
+        int rd = SIZE;
+
+        if(fsz > i * SIZE) 
+            seek = fsz - i * SIZE;
+        else
+            rd = i * SIZE - fsz;
+
+        x = (x * 411 + 1431) % (1024 * 1024 / 4 - SIZE);
+
+        size_t y = x*4;
+
+        log_info("test %u", y);
+
+        vfs_seek_file(f, y, SEEK_SET);
+
+        read = vfs_read_file(buf, 1, SIZE, f);
+        assert(read);
+
+        buf[read] = 0;
+
+        uint32_t* chunk = buf;
+        for(unsigned j = 0; j < SIZE / 4; j++) {
+            if(chunk[j] != j + x) {
+                log_warn("chunk[j]=%x, j + x=%x", chunk[j], j+x);
+                panic("no :(");
+            }
+            assert(chunk[j] == j + x);
+        }
+
+        //dump(buf, SIZE, 8, DUMP_DEC32);
+    }
+    vfs_close_file(f);
+}
+
 
 int vfs_mount(disk_part_t *part, const char *path)
 {
@@ -763,28 +820,12 @@ int vfs_mount(disk_part_t *part, const char *path)
 
     new->fs = fs;
 
-    file_handle_t* f = vfs_open_file("/fs/boot/limine.cfg");
-    assert(f);
-
-    assert(!vfs_seek_file(f, 512, SEEK_SET));
-    log_warn("FILE SIZE = %u", vfs_tell_file(f));
-    //vfs_seek_file(f, 0, SEEK_SET);
-
-    char buf[26];
-    int read = 0;
-    int i = 0;
-    while ((read = vfs_read_file(buf, 1, 25, f)))
-    {
-        buf[read] = 0;
-        puts(buf);
-        i++;
-        // log_debug("%u read %u", i++, read);
-    }
-    vfs_close_file(f);
-    log_debug("fg");
-
+    
+    
     return 1;
 }
+
+
 
 int vfs_unmount(const char *path)
 {
@@ -800,60 +841,7 @@ int vfs_unmount(const char *path)
     return unmount(vdir);
 }
 
-file_handle_t *vfs_open_file(const char *path)
-{
-    char *pathbuf = malloc(strlen(path) + 1);
-    simplify_path(pathbuf, path);
 
-    fast_dirent_t dirent;
-    fs_t *restrict fs = open_dir(pathbuf, &dirent);
-
-    free(pathbuf);
-
-    if (!fs) // dirent not found
-        return NULL;
-
-    // file does not exist or isn't a file
-    if (dirent.type != DT_REG)
-        return NULL;
-
-    // big allocation to allocate the
-    // sector buffer too
-    file_handle_t *handler = malloc(
-        sizeof(file_handle_t) + fs->file_cursor_size
-        // size of one sector
-        + fs->file_access_granularity);
-
-    log_warn("file_access_granularity = %u", fs->file_access_granularity);
-
-    handler->file_size = dirent.reclen;
-    handler->fs = fs;
-    handler->file_offset = 0;
-    // empty buffer
-    handler->sector_offset = 0;
-    handler->buffer_valid = 0;
-
-    handler->sector_buff = (void *)handler +
-                           sizeof(file_handle_t) + fs->file_cursor_size;
-
-    file_t file = {
-        .addr = dirent.ino,
-        .fs = fs,
-        .file_size = dirent.reclen,
-    };
-
-    fs->open_file(&file, handler->cursor);
-    return handler;
-}
-
-void vfs_close_file(file_handle_t *handle)
-{
-    fs_t *fs = handle->fs;
-
-    fs->close_file(handle);
-
-    free(handle);
-}
 
 struct DIR *vfs_opendir(const char *path)
 {
@@ -869,7 +857,7 @@ struct DIR *vfs_opendir(const char *path)
     size_t n = 0;
 
     fast_dirent_t fdir;
-    fs_t *fs = open_dir(pathbuff, &fdir);
+    fs_t *fs = vfs_open(pathbuff, &fdir);
 
     struct DIR *dir = NULL;
 
@@ -903,7 +891,7 @@ struct DIR *vfs_opendir(const char *path)
         {
             list[i] = (dirent_t){
                 .ino = 0,
-                .reclen = 0,
+                .file_size = 0,
                 .type = DT_DIR,
             };
 
@@ -942,328 +930,4 @@ struct dirent *vfs_readdir(struct DIR *dir)
         return NULL; // reached end of dir
     else
         return &dir->children[dir->cur++];
-}
-
-
-size_t vfs_read_file(void *ptr, size_t size, size_t nmemb,
-                     file_handle_t *restrict stream)
-{
-
-    assert(stream);
-    assert(ptr);
-
-    void *const buf = stream->sector_buff;
-
-    fs_t *fs = stream->fs;
-    uint64_t file_size = stream->file_size;
-
-    unsigned granularity = fs->file_access_granularity;
-
-    unsigned cachable = fs->cacheable;
-
-    unsigned max_read = file_size - stream->file_offset;
-
-    unsigned bsize = size * nmemb;
-
-    // check nmemb bounds
-
-    if (max_read < bsize)
-    {
-        nmemb = max_read / size;
-        bsize = size * nmemb;
-    }
-
-    if(bsize == 0)
-        return 0;
-
-    // we are to read some bytes.
-    // if the fs is cachable, and the 
-    // granularity cache is invalid,
-    // we have to fill it beforehand
-    if(cachable && !stream->buffer_valid) {
-        fs->read_file_sector(
-            stream->fs,
-            stream->cursor,
-            buf
-        );
-
-        stream->buffer_valid = 1;
-    }
-        
-
-    while (bsize)
-    {
-        unsigned remaining = file_size - stream->file_offset;
-
-        unsigned n_ready = granularity - stream->sector_offset;
-
-        if(n_ready > remaining)
-            n_ready = remaining;
-
-        if(!cachable) {
-            // for sure, bsize != 0.
-            // we have to fetch again
-            // the sector
-            // without advancing the cursor
-            fs->read_file_sector(
-                stream->fs,
-                stream->cursor,
-                buf);
-        }
-
-
-        if (n_ready >= bsize) {
-            memcpy(
-                ptr,
-                buf + stream->sector_offset,
-                bsize
-            );
-
-            ptr += bsize;
-            stream->sector_offset += bsize;
-            stream->file_offset += bsize;
-            bsize = 0;
-
-            // here,
-            // n_ready = granularity - sector_offset >= bsize
-            // <=> sector_offset + bsize <= g
-            // when n_ready = bsize,
-            // we set stream->sector_offset to granularity.
-            //
-            // for consistancy with writes,
-            // sector_offset has to be strictly inferior to
-            // granularity, when at least one read has been
-            // done.
-            // We therefore advance the cursor
-            if (!cachable && stream->sector_offset == granularity) {
-                stream->sector_offset = 0;
-                fs->advance_file_cursor(fs, stream->cursor);
-            }
-        }
-        else {
-            if (n_ready) {
-                memcpy(
-                    ptr,
-                    buf + stream->sector_offset,
-                    n_ready
-                );
-
-                bsize -= n_ready;
-                ptr += n_ready;
-                stream->file_offset += n_ready;
-            }
-
-            if (n_ready) // the cache was valid
-                fs->advance_file_cursor(fs, stream->cursor);
-
-            if (cachable) {
-                // iif the fs is cachable,
-                // we can fetch the next file sector
-                // for the next iteration
-
-                // for coherency with writes,
-                // the file cursor must always point
-                // on the current read sector: we therefore
-                // cannot advance the file cursor afterwards
-                // like read(cur++)
-                //
-                // Instead, we have to increment beforehand.
-                // we cannot advance the cursor like read(++cur)
-                // as the first sector would be forgotten
-
-                fs->read_file_sector(
-                    stream->fs,
-                    stream->cursor,
-                    buf
-                );
-            }
-            stream->sector_offset = 0;
-        }
-    }
-
-    return nmemb;
-}
-
-
-
-size_t vfs_write_file(const void *ptr, size_t size, size_t nmemb,
-                      file_handle_t *stream)
-{
-
-    assert(stream);
-    assert(ptr);
-    assert(0);
-    /*
-    void * const buf = stream->sector_buff;
-
-    const fs_t *fs = stream->fs;
-    uint64_t file_size = stream->file_size;
-
-    unsigned granularity = fs->file_access_granularity;
-
-    unsigned cachable = fs->cacheable;
-
-    // no checking: we hope that the drive won't
-    // ever be overflowed
-    size_t bsize = size * nmemb;
-
-
-    while(bsize) {
-
-         // don't need no buffering
-        if((stream->sector_offset == 0
-         || stream->sector_offset == granularity)
-            && bsize >= granularity) {
-            int wr = fs->write_file_sector(
-                    fs,
-                    stream->cursor,
-                    ptr,
-                    granularity
-            );
-
-            assert(wr == (int)granularity);
-            ptr += granularity;
-            stream->file_offset += granularity;
-            bsize -= granularity;
-        }
-        else {
-            unsigned offset = stream->sector_offset;
-            unsigned write_size = MIN(bsize, granularity - offset);
-
-            memcpy(buf + offset, ptr, write_size);
-
-            if(stream->file_offset == stream->file_size
-                    && offset == 0) {
-                // no need to read before writing
-            }
-            else if(!fs->cacheable || offset == granularity) {
-                // need to
-
-            }
-
-            int wr = fs->write_file_sector(
-                    fs,
-                    stream->cursor,
-                    ptr,
-                    granularity
-            );
-
-            assert(wr == write_size);
-
-            ptr += bsize;
-            stream->file_offset += bsize;
-            bsize = 0;
-        }
-
-        stream->file_size = MAX(stream->file_offset,
-                                stream->file_size);
-        unsigned remaining = file_size - stream->file_offset;
-
-
-        unsigned n_ready = granularity - stream->sector_offset;
-
-        if(n_ready > remaining)
-            n_ready = remaining;
-
-        if(!cachable)
-            n_ready = 0;
-
-
-        if(n_ready >= bsize)
-        {
-            memcpy(
-                ptr,
-                buf + stream->sector_offset,
-                bsize
-            );
-
-            ptr += bsize;
-            stream->sector_offset += bsize;
-            stream->file_offset   += bsize;
-
-            bsize = 0;
-        }
-        else
-        {
-            if(n_ready) {
-                memcpy(
-                    ptr,
-                    buf + stream->sector_offset,
-                    n_ready
-                );
-
-                bsize -= n_ready;
-                ptr += n_ready;
-                stream->file_offset += n_ready;
-            }
-
-            stream->sector_offset = 0;
-
-            fs->read_file_sector(
-                stream->fs,
-                stream->cursor,
-                buf);
-        }
-    }
-*/
-    return nmemb;
-}
-
-int vfs_seek_file(file_handle_t *restrict stream, uint64_t offset, int whence)
-{
-
-    // real file offset: to be
-    // calculated with the whence field
-    uint64_t absolute_offset = offset;
-
-    switch (whence)
-    {
-    case SEEK_CUR:
-        absolute_offset += stream->file_offset;
-        break;
-    case SEEK_END:
-        absolute_offset += stream->file_size;
-        break;
-    case SEEK_SET:
-        break;
-    default:
-        // bad whence parameter value
-        return -1;
-    }
-
-    size_t block_size = stream->fs->file_access_granularity;
-
-    uint64_t new_sector_id = absolute_offset / block_size;
-    uint64_t old_sector_id = stream->file_offset / block_size;
-
-    if (new_sector_id != old_sector_id)
-    {
-        log_warn("CHANGED SECTOR %u --> %u", old_sector_id, new_sector_id);
-        // the seeked value is in another block.
-        // We therefore need to locate the new one
-        fs_t *fs = stream->fs;
-        fs->seek(fs, stream->cursor,  new_sector_id, SEEK_SET);
-
-        stream->buffer_valid = 0;
-
-        // need to flush the cache content
-        if(stream->fs->cacheable)
-            
-            fs->read_file_sector(fs, stream->cursor, stream->sector_buff);
-    }
-    // else, only the sector offset changed.
-    // no need to access the fs
-
-    stream->sector_offset = absolute_offset % block_size;
-    stream->file_offset = absolute_offset;
-
-    log_warn("NEW OFFSET %u", stream->sector_offset);
-
-    // everything is fine: return 0
-    return 0;
-}
-
-long vfs_tell_file(file_handle_t *restrict stream)
-{
-    return stream->file_offset;
 }
