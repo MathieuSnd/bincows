@@ -228,7 +228,8 @@ size_t vfs_read_file(void *ptr, size_t size, size_t nmemb,
     
 
     // offset of the end of the read buffer
-    unsigned end_offset = bsize % granularity;
+    unsigned end_offset = must_read % granularity;
+
 
     unsigned read_buf_size = read_blocks * granularity;
 
@@ -284,20 +285,137 @@ size_t vfs_read_file(void *ptr, size_t size, size_t nmemb,
 size_t vfs_write_file(const void *ptr, size_t size, size_t nmemb,
                       file_handle_t *stream)
 {
-    (void)size;
+
     assert(stream);
     assert(ptr);
-    assert(0);
 
+    void *const buf = stream->sector_buff;
+
+    fs_t *fs = stream->fs;
+    uint64_t file_size = stream->file_size;
+
+    unsigned granularity = fs->file_access_granularity;
+    unsigned cachable = fs->cacheable;
+    unsigned bsize = size * nmemb;
+
+
+    if(bsize == 0)
+        return 0;
+    
+    
+
+    unsigned must_write = stream->sector_offset + bsize;
+
+    size_t write_blocks = CEIL_DIV(must_write, granularity);
+
+    void* write_buf;
+
+    int unaligned = 0;
+    
+
+    // offset of the end of the read buffer
+    unsigned end_offset = must_write % granularity;
+
+    unsigned write_buf_size = write_blocks * granularity;
+
+    // if the selected read is perfectly aligned,
+    // the we don't need another buffer
+    if(stream->sector_offset == 0 && end_offset == 0) {
+        write_buf = ptr;
+    }
+    /*     
+        sc = stream->sector_count
+
+          storage blocks (for n = 5):
+        |---------|---------|---------|---------|---------|
+        |    sc   |   sc+1  |   sc+2  |   sc+3  |   sc+4  |
+        |---------|---------|---------|---------|---------|
+
+        we want to write:
+               
+        |------===|=========|=========|=========|==-------|
+        |   sc |  |   sc+1  |   sc+2  |   sc+3  | | sc+4  |
+        |------===|=========|=========|=========|==-------|
+        <----->                                 <->
+        stream->sector_offset                   end_offset
+
+
+        to do so, we have to first read sc and 
+        sc + n - 1 blocks.
+        
+        if fs->cachable = 1 and stream->buffer_valid,
+        then we don't need to read sc block
+
+        we still have to read sc+4 though.
+
+        We can then put sc+4 in the cache buffer
+
+
+
+        we set write_buf:
+
+        |=========|=========|=========|=========|=========|
+        |    sc   |   sc+1  |   sc+2  |   sc+3  |   sc+4  |
+        |=========|=========|=========|=========|=========|
+    */
+    else {
+        unaligned = 1;
+        write_buf = malloc(write_buf_size);
+
+        // unaligned beginning
+        if(stream->sector_offset != 0) {
+            if(!stream->buffer_valid || !cachable) {
+                // must read before writing
+                fs->read_file_sectors(
+                        fs,
+                        stream->file,
+                        write_buf,
+                        stream->sector_count,
+                        1
+                );
+            }
+            else // buf contains cached data of sc block
+                memcpy(write_buf, buf, stream->sector_offset);
+        }
+
+        // unaligned end
+        if(end_offset != 0) {
+            fs->read_file_sectors(
+                    fs,
+                    stream->file,
+                    write_buf + write_buf_size - granularity,
+                    stream->sector_count,
+                    1
+            );
+        }
+
+        memcpy(write_buf + stream->sector_offset, ptr, bsize);
+    }
+    
+
+    fs->write_file_sectors(
+        fs,
+        stream->file,
+        write_buf,
+        stream->sector_count,
+        write_blocks
+    );
+
+
+    if(unaligned)
+        free(write_buf);
+
+    // advance the cursor
+    stream->sector_offset = end_offset;
+    stream->file_offset += bsize;
+    stream->sector_count = stream->file_offset / granularity;
+    
     return nmemb;
 }
 
 
 int vfs_seek_file(file_handle_t *restrict stream, uint64_t offset, int whence)
 {
-    (void)stream;
-    (void)offset;
-    (void)whence;
     
     // real file offset: to be
     // calculated with the whence field
@@ -332,5 +450,5 @@ int vfs_seek_file(file_handle_t *restrict stream, uint64_t offset, int whence)
 
 long vfs_tell_file(file_handle_t *restrict stream)
 {
-    return stream->file_size;
+    return stream->file_offset;
 }

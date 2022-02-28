@@ -27,10 +27,7 @@ void dread(struct driver* this,
     fseek(data->f, lba * size, SEEK_SET);
     assert(fread(buf, size, count, data->f) == count);
 
-    printf("DREAD %lu %lu\n", size, size*count);
-    //dump(buf, size*count, 32, DUMP_HEX8);
-    //printf(buf);
-    //fwrite(, size, count, stdout);
+    printf("DREAD");
 }
 
 static

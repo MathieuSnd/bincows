@@ -462,7 +462,7 @@ fs_t* fat32_mount(disk_part_t* part) {
     fs->file_access_granularity = block_size(part);
     fs->n_open_files = 0;
 
-    fs->cacheable = 1;
+    fs->cacheable = 0;
     fs->read_only = 0;
     fs->seekable  = 1;
 
@@ -473,8 +473,6 @@ fs_t* fat32_mount(disk_part_t* part) {
      * functions take file_t instead
      * of void*
      */
-    //fs->open_file          = (void*)fat32_open_file;
-    //fs->close_file         = (void*)fat32_close_file;
     fs->read_file_sectors  = fat32_read_file_sectors;
     fs->write_file_sectors = fat32_write_file_sectors;
     fs->read_dir           = fat32_read_dir;

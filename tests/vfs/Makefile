@@ -3,6 +3,7 @@
 .PHONY = run all clean 
 
 EXE = ./vfs
+DISKFILE := ./disk.bin
 
 CC  		:= gcc
 LD          := gcc
@@ -13,7 +14,9 @@ PY          := python3
 KERNEL=../../kernel/
 
  
-CFLAGS = -Wall -Wextra -O0 -pipe -I$(KERNEL) -DTEST -fno-inline -g
+DEFINES := -DDISKFILE=\"$(DISKFILE)\" -DTEST
+
+CFLAGS = -Wall -Wextra -O0 -pipe -I$(KERNEL) $(DEFINES) -fno-inline -g
 
 
 CFILES := $(shell find ./ -type f -name '*.c')
@@ -44,6 +47,7 @@ run: all
 
 
 all: $(EXE)
+	cp ../../disk.bin $(DISKFILE)
 
 
 $(EXE): $(OBJ)

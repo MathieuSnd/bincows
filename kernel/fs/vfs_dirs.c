@@ -553,6 +553,7 @@ static vdir_t **get_vchildren(const char *path, int *n)
     }
 }
 
+
 /**
  * find a child with a given name
  *
@@ -593,6 +594,7 @@ static int find_fs_child(
 
     return found;
 }
+
 
 // path in cannonical form
 // return NULL if empty / conflict
@@ -720,19 +722,23 @@ static void log_tree(const char *path, int level)
     vfs_closedir(dir);
 }
 
+// read & seek test function
 static inline
-void test_file(void) {
+void test_file_read_seek(void) {
 file_handle_t* f = vfs_open_file("/fs/file.dat");
     assert(f);
 
     //assert(!vfs_seek_file(f, 512, SEEK_SET));
     //log_warn("FILE SIZE = %u", vfs_tell_file(f));
-    
+
+    vfs_seek_file(f, 50, SEEK_CUR);
+    vfs_write_file("Une balle pourtant, mieux ajustée ou plus traître que les autres, finit par atteindre l'enfant feu follet. On vit Gavroche chanceler, puis il s'affaissa. Toute la barricade poussa un cri ; mais il y avait de l'Antée dans ce pygmée ; pour le gamin toucher le pavé, c'est comme pour le géant toucher la terre ; Gavroche n'était tombé que pour se redresser ; il resta assis sur son séant, un long filet de sang rayait son visage, il éleva ses deux bras en l'air, regarda du côté d'où était venu le coup, et se mit à",
+    512, 1, f);
+    vfs_close_file(f);
+    return;
 #define SIZE 512
 
     vfs_seek_file(f, 0, SEEK_END);
-    size_t fsz = vfs_tell_file(f);
-    log_warn("vfs_tell_file(f) = %lu", vfs_tell_file(f));
     
     vfs_seek_file(f, 0, SEEK_SET);
 
@@ -746,13 +752,6 @@ file_handle_t* f = vfs_open_file("/fs/file.dat");
 
     for(int i = 0; i < 200; i++)
     {
-        size_t seek = 0;
-        int rd = SIZE;
-
-        if(fsz > i * SIZE) 
-            seek = fsz - i * SIZE;
-        else
-            rd = i * SIZE - fsz;
 
         x = (x * 411 + 1431) % (1024 * 1024 / 4 - SIZE);
 
@@ -767,7 +766,7 @@ file_handle_t* f = vfs_open_file("/fs/file.dat");
 
         buf[read] = 0;
 
-        uint32_t* chunk = buf;
+        uint32_t* chunk = (uint32_t*)buf;
         for(unsigned j = 0; j < SIZE / 4; j++) {
             if(chunk[j] != j + x) {
                 log_warn("chunk[j]=%x, j + x=%x", chunk[j], j+x);
@@ -820,6 +819,7 @@ int vfs_mount(disk_part_t *part, const char *path)
 
     new->fs = fs;
 
+    //test_file_read_seek();
     
     
     return 1;
@@ -837,7 +837,7 @@ int vfs_unmount(const char *path)
 
     if (!vdir)
         return 0;
-
+    log_info("unmounting %s", path);
     return unmount(vdir);
 }
 

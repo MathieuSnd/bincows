@@ -80,7 +80,7 @@ typedef struct dirent {
 typedef struct fast_dirent {
     ino_t         ino;       /* Inode number */
     size_t        file_size;    /* Length of this record */
-    unsigned char type;      /* Type of file; not supported
+    unsigned char   type;      /* Type of file; not supported
                                     by all filesystem types */
 } fast_dirent_t;
 
@@ -230,6 +230,12 @@ typedef struct fs {
      */
     void (*free_dirents)(dirent_t* dir);
 
+
+/*
+    int create_dirent(uint64_t parent_dir_addr, unsigned type);
+    int move_dirent(uint64_t addr, uint64_t src_parent_addr, uint64_t dst_parent_addr);
+    int remove_dirent(uint64_t addr, uint64_t src_parent_addr);
+*/
 
     /**
      * @brief destruct this structure,
