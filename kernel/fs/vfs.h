@@ -93,8 +93,6 @@ typedef struct file_handler {
     // current byte offset in the file
     uint64_t file_offset;
 
-    // total file size in bytes.
-    uint64_t file_size;
 
     // buffer of fs->file_access_granularity
     // bytes.
@@ -102,13 +100,11 @@ typedef struct file_handler {
     void* sector_buff;
 
 
-
-    // this fild's size will depend
-    // be fs->fd_size
-    //
-    // uint64_t: make sure the structure
-    // will be aligned
-    file_t* file;
+    // VFS private open file structure
+    // contains the file handler
+    // along with informations about
+    // handlers pointing on it
+    struct file_ent* open_vfile;
 } file_handle_t;
 
 
@@ -182,6 +178,19 @@ void vfs_closedir(struct DIR*);
  */
 struct dirent* vfs_readdir(struct DIR* dir);
 
+/**
+ * @brief update an element's metadata
+ * for now, it only consists of the file
+ * size
+ * 
+ * this should only be called from vfs_files.c
+ * 
+ * 
+ * @param path path of the file
+ * @param size new file size
+ * @return int 0 if success
+ */
+int vfs_update_metadata(const char* path, uint64_t cluster, size_t file_size);
 
 
 /////////////////////////////

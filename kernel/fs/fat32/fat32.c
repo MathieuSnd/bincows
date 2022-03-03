@@ -71,6 +71,20 @@ typedef struct {
     cluster_t fat_begin;
     cluster_t data_begin;
 
+    // size of the fat
+    // in sectors
+    uint32_t fat_size;
+
+    /**
+     * we use a circular allocation
+     * algorithm. This field contains
+     * the cursor of the FAT (the sector
+     * index) and is incremented each time
+     * the curent fat sector is full
+     * 
+     */
+    uint32_t alloc_start;
+
 
     block_cache_t fat_cache;
 } fat32_privates_t;
@@ -83,7 +97,8 @@ void* read(disk_part_t* part, uint64_t lba, void* buf, size_t count) {
     lba += part->begin;
 
 
-    assert(lba >= part->begin && lba <= part->end);
+    assert(lba >= part->begin);
+    assert(lba < part->end);
 
     
     part->interface->read(part->interface->driver, lba, buf, count);
@@ -95,7 +110,7 @@ void* read(disk_part_t* part, uint64_t lba, void* buf, size_t count) {
 static inline
 void write(disk_part_t* part, uint64_t lba, const void* buf, size_t count) {
     lba += part->begin;
-
+    //log_warn("lba=%lx", lba);
     assert(lba >= part->begin && lba <= part->end);
 
     part->interface->write(part->interface->driver, lba, buf, count);
@@ -116,7 +131,7 @@ void setup_cache(block_cache_t* cache, unsigned sector_size) {
     void* buf = malloc(sector_size * FAT_CACHE_SIZE);
 
     for(unsigned i = 0; i < FAT_CACHE_SIZE; i++)
-        cache->entries[i].buf = buf + FAT_CACHE_SIZE * i;
+        cache->entries[i].buf = buf + sector_size * i;
 }
 
 
@@ -142,9 +157,12 @@ void* cache_access(block_cache_t* restrict cache, uint64_t lba) {
     uint16_t h = lba_hash(lba);
     block_cache_entry_t* e = &cache->entries[h];
 
+
     if(e->tag == lba) {
+        //log_debug("fat32: fat cache hit lba %lu", lba);
         return e->buf;
     }
+    //log_debug("fat32: fat cache miss lba %lu", lba);
 
     return NULL;
 }
@@ -180,12 +198,24 @@ void* add_cache_entry(block_cache_t* cache, uint64_t lba) {
  * the sector content.
  */
 static
-void* fetch_fat_sector(disk_part_t* part, block_cache_t* cache, uint64_t lba) {
+void* fetch_fat_sector(
+        fat32_privates_t* pr, 
+        disk_part_t* part, 
+        block_cache_t* cache, 
+        uint64_t lba
+) {
+    static int i = 0;
+
+    //log_debug("fetch fat sector %lu", lba);
+    // assert that it is a fat sector
+    assert(lba >= pr->fat_begin);
+    assert(lba < pr->fat_begin + pr->fat_size);
     void* buf = cache_access(cache, lba);
 
     // cache hit
-    if(buf)
+    if(buf) {
         return buf;
+    }
     
     // cache miss
 
@@ -197,34 +227,116 @@ void* fetch_fat_sector(disk_part_t* part, block_cache_t* cache, uint64_t lba) {
     return buf;
 }
 
+
 /**
  * @brief read a FAT entry
  * 
  * @param cluster the entry cluster
- * @param last output: non null if this is the last entry of a file
- * @return cluster_t a 28bit block offset for the entry
+ * @return cluster_t a 28bit block offset for the 
+ * entry or 0 if the cluster is the end of the chain
  */
 static 
 cluster_t readFAT(disk_part_t* part, 
                  fat32_privates_t* pr, 
-                 uint64_t cluster, 
-                 int* last
+                 uint32_t cluster
     ) {
+
     uint32_t offset = cluster * 4;
     uint64_t lba = pr->fat_begin + offset / block_size(part);
     uint32_t sector_offset = offset % block_size(part);
     
-    void* sector = fetch_fat_sector(part, &pr->fat_cache, lba);
+    void* sector = fetch_fat_sector(pr, part, &pr->fat_cache, lba);
 
-    cluster_t ent = *(cluster_t *)(sector + sector_offset);
+    cluster_t ent = *(cluster_t *)(sector + sector_offset) & 0x0FFFFFFF;
 
     assert(ent != 0);
     assert(ent != 1);
 
     if(ent >= 0x0FFFFFF8) // last entry of the file
-        *last = 1;
+        return 0;
 
-    return ent & 0x0FFFFFFF;
+    return ent;
+}
+
+
+/**
+ * @brief allocate a cluster in the FAT
+ * table: find a cluster 
+ * 
+ * @param part 
+ * @param pr 
+ * @param cluster 
+ * @return int 
+ */
+static
+cluster_t allocFAT(disk_part_t* restrict part, 
+                   fat32_privates_t* restrict pr
+) {
+
+    assert(pr->alloc_start >= pr->fat_begin);
+    assert(pr->alloc_start < pr->fat_begin + pr->fat_size);
+
+    uint32_t last = pr->fat_begin + pr->fat_size - 1;
+
+    unsigned last_sector; 
+    if(pr->alloc_start == pr->fat_begin) 
+        last_sector = pr->fat_begin + pr->fat_size - 1;
+    else
+        last_sector = pr->alloc_start - 1;
+
+    unsigned entries_per_sector = block_size(part) / 4;
+
+    for(uint64_t lba  = pr->alloc_start; 
+                 lba != last_sector;
+                 lba = (lba == last) ? pr->fat_begin : lba + 1
+                 
+    ) {
+        cluster_t* sector = fetch_fat_sector(pr, part, &pr->fat_cache, lba);
+
+        unsigned begin = 0;
+
+        if(lba == pr->fat_begin) 
+            begin = 2; // 0th and 1st entries are reserved
+
+
+        for(unsigned i = begin; i < entries_per_sector; i++) {
+            if(sector[i] == 0) {
+                // we found an unallocated cluster!
+                pr->alloc_start = lba;
+                //log_warn("allocfat %u", (lba - pr->fat_begin) * entries_per_sector + i);
+                return (lba - pr->fat_begin) * entries_per_sector + i;
+            }
+        }
+    }
+
+    // the drive is full!
+    return 0;
+}
+
+
+
+static 
+void linkFAT(disk_part_t*     restrict part, 
+            fat32_privates_t* restrict pr, 
+            cluster_t from, cluster_t to
+) {
+    //log_warn("linkfat %u -> %u", from, to);
+    uint32_t offset = from * 4;
+    uint64_t lba = pr->fat_begin + offset / block_size(part);
+    uint32_t sector_offset = offset % block_size(part);
+    
+    void* sector = fetch_fat_sector(pr, part, &pr->fat_cache, lba);
+
+    cluster_t* ent = (cluster_t *)(sector + sector_offset);
+
+//    assert((*ent & 0x0FFFFFFF) >= 0x0FFFFFF8); // last entry of the file
+    assert((to & 0xf0000000) == 0);
+
+    // don't modify reserved bits
+    *ent = to | (*ent & 0xf0000000);
+
+
+    //save_fat_
 }
 
 
@@ -242,8 +354,11 @@ uint32_t fat_attr2fs_type(uint32_t attr) {
 
 
 
-static void handle_long_filename_entry(fat_dir_t* entry, char* name_buf) {
-
+static void handle_long_filename_entry(
+                const fat_dir_t* entry, 
+                char* name_buf
+) {
+    const
     fat_long_filename_t* e = (fat_long_filename_t*)entry;
     int order = (e->order & 0x0f) - 1;
 
@@ -266,6 +381,7 @@ static void handle_long_filename_entry(fat_dir_t* entry, char* name_buf) {
     
     utf16le2ascii(longname, wchars, 13);
     // long filename entry
+
     memcpy(name_buf + 13 * order, longname, 13);
 }
 
@@ -274,7 +390,7 @@ static void handle_long_filename_entry(fat_dir_t* entry, char* name_buf) {
 // 1: end of directory
 // 0: no new entry,  not end of directory
 static int parse_dir_entry(
-        fat_dir_t* dir, 
+        const fat_dir_t* dir, 
         int* long_entry, 
         dirent_t* entries, 
         int* cur_entry_id
@@ -370,7 +486,7 @@ dirent_t* fat32_read_dir(fs_t* fs, uint64_t cluster, size_t* n) {
     int long_entry = 0;
 
 
-    while(!end) {
+    while(1) {
 
         entries = realloc(entries,
                     sizeof(dirent_t) * (j + entries_per_cluster));
@@ -388,10 +504,13 @@ dirent_t* fat32_read_dir(fs_t* fs, uint64_t cluster, size_t* n) {
                 break;
             } 
         }
-        if(end)
-            break;        
 
-        cluster = readFAT(part, pr, cluster, &end);
+        if(end)
+            break;
+
+        cluster = readFAT(part, pr, cluster);
+        if(!cluster)
+            break;
     }
 
     free(buf);
@@ -403,6 +522,82 @@ dirent_t* fat32_read_dir(fs_t* fs, uint64_t cluster, size_t* n) {
     *n = j;
 
     return entries;
+}
+
+
+int fat32_update_dirent(fs_t* fs, uint64_t dir_cluster, const char* file_name, 
+                    uint64_t file_cluster, uint64_t file_size) {
+    
+    assert(fs->type == FS_TYPE_FAT);
+
+    disk_part_t* restrict part = fs->part;
+    fat32_privates_t* restrict pr = (void*)(fs+1);
+
+    
+    unsigned bufsize = block_size(part) * pr->cluster_size;
+    uint8_t* buf = malloc(bufsize);
+
+
+    unsigned entries_per_cluster = bufsize / sizeof(fat_dir_t);
+
+    // for long name entries
+    int long_entry = 0;
+
+
+    // if we were to include the filename in the modifiable
+    // metadata, we would need to be able to modify multiple clusters:
+    // an entry can cross multiple sectors 
+
+    while(1) {
+        uint64_t lba = cluster_begin(dir_cluster, pr);
+
+        read(part, lba, buf, pr->cluster_size);
+
+
+        dirent_t entry;
+        for(unsigned i = 0; i < entries_per_cluster; i++) {
+            fat_dir_t* dir = (fat_dir_t*)buf + i;
+            int j = 0;
+            int v = parse_dir_entry(dir, &long_entry, &entry, &j);
+            assert(v != 1); // the entry should be present
+
+            if(v == 2) {
+                // new entry: we can check the file name
+                if(!strcmp(file_name, entry.name)) {
+                    // we found what we wanted
+                    // let's modify the buffer then rewrite it
+                    // to the drive
+
+
+                    // for now, metadata only concern
+                    // files
+                    assert(entry.type == DT_REG);
+
+                    dir->file_size = file_size;
+                    dir->cluster_high = file_cluster >> 16;
+                    dir->cluster_low  = file_cluster & 0xffff;
+                    
+                    write(part, lba, buf, pr->cluster_size);
+                    
+
+                    free(buf);
+                    
+                    return 0; // success
+                }
+            }
+        }
+
+        dir_cluster = readFAT(part, pr, dir_cluster);
+
+        if(!dir_cluster)
+            assert(0); 
+        // the entry is not present
+    }
+
+    free(buf);
+    
+    // unsuccessful
+    return 1;
 }
 
 
@@ -450,7 +645,7 @@ fs_t* fat32_mount(disk_part_t* part) {
 ///// extended boot record
 
     // number of sector per fat
-    uint16_t fatsize      = *(uint32_t*)(buf + 0x24);
+    uint32_t fatsize      = *(uint32_t*)(buf + 0x24);
 
     // cluster id of root dir
     cluster_t root_dir_cluster = *(uint32_t*)(buf + 0x2c);
@@ -462,7 +657,7 @@ fs_t* fat32_mount(disk_part_t* part) {
     fs->file_access_granularity = block_size(part);
     fs->n_open_files = 0;
 
-    fs->cacheable = 0;
+    fs->cacheable = 1;
     fs->read_only = 0;
     fs->seekable  = 1;
 
@@ -476,6 +671,7 @@ fs_t* fat32_mount(disk_part_t* part) {
     fs->read_file_sectors  = fat32_read_file_sectors;
     fs->write_file_sectors = fat32_write_file_sectors;
     fs->read_dir           = fat32_read_dir;
+    fs->update_dirent      = fat32_update_dirent;
     fs->free_dirents       = fat32_free_dirents;
     fs->unmount            = fat32_unmount;
 
@@ -483,15 +679,19 @@ fs_t* fat32_mount(disk_part_t* part) {
     fat32_privates_t* pr = (void*)fs + sizeof(fs_t);
 
     pr->tables_count  = tables_count;
-    pr->cluster_size = cluster_size;
+    pr->cluster_size  = cluster_size;
+    pr->fat_size      = fatsize;
     pr->fat_begin     = reserved;
     pr->data_begin    = reserved + tables_count * fatsize;
+    pr->alloc_start   = 540;
+    //pr->fat_begin;
     
     // setup fat cache
     setup_cache(&pr->fat_cache, block_size(fs->part));
 
 
     free(buf);
+
     return fs;
 }
 
@@ -505,65 +705,6 @@ void fat32_unmount(fs_t* fs) {
     // open files checking should be done by the vfs
 }
 
-/*
-void fat32_open_file(file_t* restrict file, file_t* file) {
-    assert(file->fs);
-    assert(file->fs->type == FS_TYPE_FAT);
-    file->cur_cluster_number = 0;
-    file->cur_cluster        = file->addr;
-    file->cur_cluster_offset = 0;
-    file->file_size          = file->file_size;
-    file->file_offset        = 0;
-    file->fs                 = file->fs;
-    file->fs->n_open_files++;
-    
-    file->eof = file->file_size == 0;
-}
-
-
-void fat32_close_file(file_t* file) {
-    file->fs->n_open_files--;
-}
-*/
-
-/*
-void fat32_advance_file_cursor(
-        fs_t*                restrict fs,
-        file_t* restrict file
-    ) {
-
-
-    fat32_privates_t* pr = (fat32_privates_t*)(fs+1);
-    disk_part_t* part = fs->part;
-
-    file->file_offset += block_size(part);
-    
-    // cursor reached the end
-    if(file->file_offset > file->file_size) {
-        // this should be handled by the vfs
-        assert(0);
-        file->eof = 1;
-        return;
-    }
-    // advance cluster offset
-
-    file->cur_cluster_offset++;
-    
-
-    if(file->cur_cluster_offset == pr->cluster_size) {
-        // next sector!
-        file->cur_cluster_offset = 0;
-
-        // unused
-        int last;
-
-        // advance cluster
-        file->cur_cluster = readFAT(part, pr, file->cur_cluster, &last);
-        file->cur_cluster_number++;
-    }
-}
-*/
-
 
 /**
  * @brief fetch file cluster disk offset
@@ -574,30 +715,39 @@ void fat32_advance_file_cursor(
  * @param pr fs private (=fs+sizeof(fs_t))
  * @param fd file descriptor
  * @param off cluster offset in the file
+ * @param end (output) if the returned 
+ * cluster is the requested one, this field
+ * is set to ~0llu. Else, it is set to the index
+ * of the cluster chain's last element
  * @return cluster_t cluster disk offset
- * or 0 if the cluster offset is beyond
- * the cluster chain end
+ * or the last cluster of the file chain if the 
+ * cluster offset is beyond the cluster chain end.
+ * In this case, output end is set to the file 
+ * cluster offset of the returned cluster
  */
 static 
 cluster_t fetch_cluster(
         fs_t* restrict fs,
         fat32_privates_t* restrict pr,
         file_t* fd, 
-        size_t off
+        size_t off,
+        uint64_t* end
 ) {
 
     cluster_t cluster = fd->addr;
 
-
-    int last = 0;
     // find first cluster to read
     for(unsigned i = 0; i < off; i++) {
-        if(last)
-            return 0;
-
-        cluster = readFAT(fs->part, pr, cluster, &last);
+        cluster_t next = readFAT(fs->part, pr, cluster);
+        if(next)
+            cluster = next;
+        else {
+            *end = i;
+            return cluster;
+        }
     }
 
+    *end = ~0llu;
     return cluster;
 }
 
@@ -621,10 +771,12 @@ int fat32_read_file_sectors(
     // compute the first cluster and offset
 
     uint32_t cluster_offset = begin % pr->cluster_size;
-    uint32_t cluster = fetch_cluster(fs,pr,fd,begin / pr->cluster_size);
+
+    uint64_t clusterend = 0;
+    uint32_t cluster = fetch_cluster(fs, pr, fd, begin / pr->cluster_size, &clusterend);
 
     // if this fails, the fs is f***ed up
-    assert(cluster);
+    assert(clusterend == ~0llu);
 
     unsigned bsize = block_size(fs->part);
     
@@ -641,16 +793,17 @@ int fat32_read_file_sectors(
             read_size = cluster_remaining;
 
             cluster_offset = 0;
-            cluster++;
+
+            cluster = readFAT(fs->part, pr, cluster);
+    
+            n -= read_size;
+            assert(cluster || !n);
         }
         // else, this is the last iteration
-
 
         read(fs->part, lba, buf, read_size);
 
         buf += bsize * read_size;
-
-        n -= read_size;
     }
 
     return n;
@@ -662,50 +815,109 @@ int fat32_write_file_sectors(
         file_t* restrict fd, 
         const void* restrict buf,
         uint64_t begin,
-        size_t n) {
-
+        size_t n
+) {
     assert(fs->type == FS_TYPE_FAT);
 
 
     fat32_privates_t* restrict pr = (fat32_privates_t*)(fs+1);
 
-    assert((begin + n - 1) * pr->cluster_size < fd->file_size);
 
     // compute the first cluster and offset
 
     uint32_t cluster_offset = begin % pr->cluster_size;
-    uint32_t cluster = fetch_cluster(fs,pr,fd,begin / pr->cluster_size);
 
-    // for now, don't allow
-    // writing more than the file size
-    assert(cluster);
+    uint64_t clusterend = 0;
+    cluster_t cluster = fetch_cluster(fs, pr, fd, 
+                            begin / pr->cluster_size, 
+                            &clusterend);
+
+
+    // the write operation is beyond file end.
+    // allocate enough sectors and zero them
+    if(clusterend != ~0llu) { // cluster = 0 <=> 
+        // if this expression is false,
+        // then the FS is broken
+        assert((begin + n - 1) * pr->cluster_size * 
+                        block_size(fs->part) >= fd->file_size);
+        assert(clusterend < begin);
+        for(unsigned i = clusterend; i <= begin; i++) {
+            cluster_t cl = allocFAT(fs->part, pr);
+
+            if(!cl) // the drive is full
+                return 0;
+
+            /**
+             * @todo we might need to 
+             * zero these freshly allocated 
+             * sectors, along with the part of the
+             * preceding sector that wasn't part of the file
+             */
+            
+            // mark this sector as the end of the chain
+            // to mark it alocated
+            linkFAT(fs->part, pr, cl, 0xfffffff);
+
+            // link cluster -> cl
+            linkFAT(fs->part, pr, cluster, cl);
+            // advance in the chain
+            cluster = cl;
+        }
+    }
 
     unsigned bsize = block_size(fs->part);
     
+
+    unsigned written = 0;
 
     while(n > 0) {
         uint64_t lba = cluster_begin(cluster, pr) 
                                 + cluster_offset;
 
-        unsigned read_size = 1;
+        unsigned write_size = 1;
         unsigned cluster_remaining = 
                     pr->cluster_size - cluster_offset;
 
         if(n >= cluster_remaining) {
-            read_size = cluster_remaining;
+            write_size = cluster_remaining;
 
             cluster_offset = 0;
-            cluster++;
         }
         // else, this is the last iteration
 
 
-        write(fs->part, lba, buf, read_size);
+        write(fs->part, lba, buf, write_size);
 
-        buf += bsize * read_size;
+        buf += bsize * write_size;
 
-        n -= read_size;
+        n -= write_size;
+        written++;
+
+
+        if(n) {
+            cluster_t next = readFAT(fs->part, pr, cluster);
+
+            if(!next) {
+                // we are at the file end
+                // let's allocate another cluster
+                next = allocFAT(fs->part, pr);
+
+                if(!next) {
+                    panic("ptn de merde");
+                    // the drive is full
+                    return n;
+                }
+                
+                // mark the new cluster as the end of
+                // the file chain
+                linkFAT(fs->part, pr, next, 0xfffffff);
+
+                // link the cluster in the file chain
+                linkFAT(fs->part, pr, cluster, next);
+            }
+            cluster = next;
+        }
     }
 
-    return n;
+    return written;
 }

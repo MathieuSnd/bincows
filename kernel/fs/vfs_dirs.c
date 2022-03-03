@@ -91,6 +91,7 @@ static void simplify_path(char *dst, const char *src)
             strcat(dst, sub);
         }
 
+
         sub = strtok(NULL, "/");
     }
 
@@ -108,11 +109,11 @@ static void simplify_path(char *dst, const char *src)
  */
 uint16_t path_hash(const char *path)
 {
-    unsigned len = strlen(path);
+    unsigned len = strlen(path) / 2;
     uint16_t res = 0;
     const uint8_t *dwp = (const uint8_t *)path;
 
-    for (unsigned i = 0; i < len; i += 1)
+    for (unsigned i = 0; i < len; i++)
     {
         uint32_t entropy_bits = dwp[2 * i] ^ (dwp[2 * i + 1] << 4);
 
@@ -312,8 +313,43 @@ static void free_cache_entry(dir_cache_ent_t *cache_ent)
     // nothing else to unallocate
 }
 
+
 /**
- * @brief do not forget to call
+ * @brief add a cache entry
+ * with given path fs and dirent data
+ * @warning the path argument will belong
+ * to the cache entry. It will be freed
+ * when the cache entry will get removed.
+ * It shouldn't be freed beforehand
+ * 
+ * @param path path of the cache entry, in
+ * canonical form
+ * @param fs the dirent fs
+ * @param dent dirent data
+ */
+static 
+void add_cache_entry(char* path, fs_t* fs, dirent_t* dent) {
+    uint16_t hash = path_hash(path) & (cache_size - 1);
+
+    dir_cache_ent_t *cache_ent = &cached_dir_list[hash];
+
+    if (is_cache_entry_present(cache_ent))
+        free_cache_entry(cache_ent);
+
+    cache_ent->cluster   = dent->ino;
+    cache_ent->file_size = dent->file_size;
+    cache_ent->type      = dent->type;
+    cache_ent->fs        = fs;
+    cache_ent->path      = path;
+}
+
+
+/**
+ * @brief wrapper around fs->read_dir
+ * function. It adds the entries in the 
+ * vfs cache
+ * 
+ * do not forget to call
  * fs->free_dirents(entries)
  * afterwards
  *
@@ -326,6 +362,8 @@ static void free_cache_entry(dir_cache_ent_t *cache_ent)
 static dirent_t *read_dir(fs_t *fs, ino_t ino, const char *dir_path, size_t *n)
 {
     assert(cache_size);
+
+
 
     dirent_t *ents = fs->read_dir(fs, ino, n);
     unsigned _n = *n;
@@ -342,18 +380,7 @@ static dirent_t *read_dir(fs_t *fs, ino_t ino, const char *dir_path, size_t *n)
         strcat(path, "/");
         strcat(path, dent->name);
 
-        uint16_t hash = path_hash(path) & (cache_size - 1);
-
-        dir_cache_ent_t *cache_ent = &cached_dir_list[hash];
-
-        if (is_cache_entry_present(cache_ent))
-            free_cache_entry(cache_ent);
-
-        cache_ent->cluster = dent->ino;
-        cache_ent->file_size = dent->file_size;
-        cache_ent->type = dent->type;
-        cache_ent->fs = fs;
-        cache_ent->path = path;
+        add_cache_entry(path, fs, dent);
     }
 
     return ents;
@@ -555,26 +582,44 @@ static vdir_t **get_vchildren(const char *path, int *n)
 
 
 /**
- * find a child with a given name
- *
- * @param parent
- * @param child
- * @param name
- * @return int 0 if no child have this
- * name
+ * find a child of a given directory in the fs 
+ * with a given name 
+ * 
+ * the cache strategy we use here is a predictive one:
+ * when opening a file, we suppose that its siblings
+ * are likely to be opened soon afterwards
+ * we then put them all in the cache.
+ * 
+ * @param fs the fs
+ * @param parent the parent dirent
+ * @param child (output) the 
+ * @param name requested name
+ * @return int non 0 value if the
+ * requested son exists according 
+ * to the fs
  */
 static int find_fs_child(
-    fs_t *restrict fs,
-    fast_dirent_t *parent,
-    fast_dirent_t *child,
-    const char *name)
-{
+        fs_t *restrict          fs,
+        fast_dirent_t* restrict parent,
+        fast_dirent_t* restrict child,
+        const char*             name,
+        const char*             parent_path
+) {
+    assert(parent->type == DT_DIR);
+    
     size_t n;
 
     int found = 0;
 
-    // no cache
-    dirent_t *ents = fs->read_dir(fs, parent->ino, &n);
+    dirent_t *ents = read_dir(fs, parent->ino, parent_path, &n);
+
+    // should be something like this
+    // to avoid putting too much files 
+    // in cache (we would only put the files we open
+    // instead of each of its siblings):
+    //
+    //dirent_t *ents = fs->read_dir(fs, parent->ino, &n);
+
 
     for (unsigned i = 0; i < n; i++)
     {
@@ -605,13 +650,20 @@ static dir_cache_ent_t *get_cache_entry(const char *path)
     assert(cache_size);
 
     uint16_t hash = path_hash(path) & (cache_size - 1);
+
     // check cache
     dir_cache_ent_t *ent = &cached_dir_list[hash];
-    if (ent->path == NULL) // not present entry
+    if (ent->path == NULL) {// not present entry
+        log_debug("VFS cache miss for %s (hash %u): not present", path, hash);
         return NULL;
+    }
 
-    if (!strcmp(ent->path, path)) // right entry (no collision)
+    if (!strcmp(ent->path, path)) {// right entry (no collision)
+        log_debug("VFS cache hit for %s (hash %u)", path, hash);
         return ent;
+    }
+
+    log_debug("VFS cache miss for %s (hash %u): conflit", path, hash);
 
     return NULL;
 }
@@ -619,18 +671,25 @@ static dir_cache_ent_t *get_cache_entry(const char *path)
 
 fs_t *vfs_open(const char *path, fast_dirent_t *dir)
 {
+    // this buffer belongs to the cache entry 
+    // in case of miss. Otherwise, it is
+    // released before returning.
     char* pathbuf = malloc(strlen(path)+1);
 
     simplify_path(pathbuf, path);
     assert(is_absolute(pathbuf));
 
+
+    log_warn("VFS OPEN: %s -> %s", path, pathbuf);
+
     // check cache
     dir_cache_ent_t *ent = get_cache_entry(pathbuf);
-    if (ent)
-    { // present entry
+    if (ent) { // present entry
         dir->ino = ent->cluster;
         dir->file_size = ent->file_size;
         dir->type = ent->type;
+
+        free(pathbuf);
 
         return ent->fs;
     }
@@ -649,11 +708,9 @@ fs_t *vfs_open(const char *path, fast_dirent_t *dir)
 
     // only keep the FS part
     // of the path
-    char *buf = pathbuf + strlen(vdir->path);
+    char* parent_path = pathbuf + strlen(vdir->path);
 
 
-
-    char *sub = strtok(buf, "/");
 
     fast_dirent_t cur = {
         .ino = fs->root_addr,
@@ -661,11 +718,50 @@ fs_t *vfs_open(const char *path, fast_dirent_t *dir)
         .type = DT_DIR,
     };
 
-    while (sub != NULL && *sub)
-    {
+    char* name_end = parent_path; 
+
+    while(1) {        
+        // 'parent_path' is the
+        // entire path
+        if(! name_end) break; 
+
+        // this should point to the 
+        // '/' separator between the
+        // end of the parent path and
+        // the beginning of the son
+        // file name
+        char* name_sep = name_end;
+
+        name_end = strchr(name_sep + 1, '/');
+
+
+        if(name_end)
+            *name_end = '\0';
+
+
         fast_dirent_t child;
 
-        if (!find_fs_child(fs, &cur, &child, sub))
+        // first check the cache
+        dir_cache_ent_t* ent = get_cache_entry(pathbuf);
+
+        if(ent) {
+            // hit!!
+            assert(ent->fs == fs);
+
+            cur.ino       = ent->cluster;
+            cur.file_size = ent->file_size;
+            cur.type      = ent->type;
+
+            // restore the path buffer
+            if(name_end)
+                *name_end = '/';
+
+            continue;
+        }
+
+        *name_sep = '\0';
+
+        if (!find_fs_child(fs, &cur, &child, name_sep + 1, pathbuf))
         {
             // the child does not exist
             free(pathbuf);
@@ -673,18 +769,26 @@ fs_t *vfs_open(const char *path, fast_dirent_t *dir)
             return NULL;
         }
 
-        cur.ino = child.ino;
-        cur.file_size = child.file_size;
-        cur.type = child.type;
+        // restore the path buffer
+        *name_sep = '/';
 
-        sub = strtok(NULL, "/");
+        if(name_end)
+            *name_end = '/';
+
+
+        cur.ino       = child.ino;
+        cur.file_size = child.file_size;
+        cur.type      = child.type;
     }
 
-    free(pathbuf);
 
     dir->ino = cur.ino;
     dir->file_size = cur.file_size;
     dir->type = cur.type;
+
+    // we missed, so 
+    // add a cache entry
+    add_cache_entry(pathbuf, fs, dir);
 
     return fs;
 }
@@ -701,7 +805,7 @@ static void log_tree(const char *path, int level)
     while ((dirent = vfs_readdir(dir)))
     {
         for (int i = 0; i < level + 1; i++)
-            puts("-");
+            printf("-");
 
         printf(" %d - %s (size %u) \n", dirent->type, dirent->name, dirent->file_size);
 
@@ -720,64 +824,6 @@ static void log_tree(const char *path, int level)
     }
 
     vfs_closedir(dir);
-}
-
-// read & seek test function
-static inline
-void test_file_read_seek(void) {
-file_handle_t* f = vfs_open_file("/fs/file.dat");
-    assert(f);
-
-    //assert(!vfs_seek_file(f, 512, SEEK_SET));
-    //log_warn("FILE SIZE = %u", vfs_tell_file(f));
-
-    vfs_seek_file(f, 50, SEEK_CUR);
-    vfs_write_file("Une balle pourtant, mieux ajustée ou plus traître que les autres, finit par atteindre l'enfant feu follet. On vit Gavroche chanceler, puis il s'affaissa. Toute la barricade poussa un cri ; mais il y avait de l'Antée dans ce pygmée ; pour le gamin toucher le pavé, c'est comme pour le géant toucher la terre ; Gavroche n'était tombé que pour se redresser ; il resta assis sur son séant, un long filet de sang rayait son visage, il éleva ses deux bras en l'air, regarda du côté d'où était venu le coup, et se mit à",
-    512, 1, f);
-    vfs_close_file(f);
-    return;
-#define SIZE 512
-
-    vfs_seek_file(f, 0, SEEK_END);
-    
-    vfs_seek_file(f, 0, SEEK_SET);
-
-
-
-    char* buf = malloc(SIZE+1); 
-    int read = 0;
-
-
-    int x = 531;
-
-    for(int i = 0; i < 200; i++)
-    {
-
-        x = (x * 411 + 1431) % (1024 * 1024 / 4 - SIZE);
-
-        size_t y = x*4;
-
-        log_info("test %u", y);
-
-        vfs_seek_file(f, y, SEEK_SET);
-
-        read = vfs_read_file(buf, 1, SIZE, f);
-        assert(read);
-
-        buf[read] = 0;
-
-        uint32_t* chunk = (uint32_t*)buf;
-        for(unsigned j = 0; j < SIZE / 4; j++) {
-            if(chunk[j] != j + x) {
-                log_warn("chunk[j]=%x, j + x=%x", chunk[j], j+x);
-                panic("no :(");
-            }
-            assert(chunk[j] == j + x);
-        }
-
-        //dump(buf, SIZE, 8, DUMP_DEC32);
-    }
-    vfs_close_file(f);
 }
 
 
@@ -819,7 +865,7 @@ int vfs_mount(disk_part_t *part, const char *path)
 
     new->fs = fs;
 
-    //test_file_read_seek();
+    //test_file_read_seek();    
     
     
     return 1;
@@ -930,4 +976,49 @@ struct dirent *vfs_readdir(struct DIR *dir)
         return NULL; // reached end of dir
     else
         return &dir->children[dir->cur++];
+}
+
+
+int vfs_update_metadata(
+        const char* path, 
+        uint64_t addr, 
+        size_t file_size
+) {
+    char* pathbuf = malloc(strlen(path)+1);
+
+    simplify_path(pathbuf, path);
+    assert(is_absolute(pathbuf));
+
+    // update cache if hit
+    dir_cache_ent_t *ent = get_cache_entry(pathbuf);
+    
+    if (ent) {// hit
+        // it should be a file
+        assert(ent->type == DT_REG);
+
+        ent->cluster   = addr;
+        ent->file_size = file_size;
+    }
+
+    // now update disk
+
+    // first open the parent
+
+    char* file_name = strrchr(pathbuf, '/');
+    assert(file_name);
+    *file_name = 0;
+    file_name++;
+
+    // here, pathbuf = '/a/b/parent'
+    // and file_name = 'name'
+
+    fast_dirent_t parent_dirent;
+    fs_t* fs = vfs_open(pathbuf, &parent_dirent);
+
+    assert(fs); // assert that the parent exists
+
+    assert(parent_dirent.type == DT_DIR);
+    assert(parent_dirent.file_size == 0);
+
+    return fs->update_dirent(fs, parent_dirent.ino, file_name, addr, file_size);
 }

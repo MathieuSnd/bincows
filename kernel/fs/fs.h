@@ -231,6 +231,21 @@ typedef struct fs {
     void (*free_dirents)(dirent_t* dir);
 
 
+    /**
+     * @brief update the dirent with given 
+     * name of a directory which implementation 
+     * specific address is given
+     * 
+     * 
+     * @param diraddr implementation specific address
+     * 
+     * 
+     * @return int  0 on success
+     */
+    int (*update_dirent)(struct fs* fs, uint64_t dir_addr, 
+                const char* file_name, uint64_t file_addr, uint64_t file_size);
+
+
 /*
     int create_dirent(uint64_t parent_dir_addr, unsigned type);
     int move_dirent(uint64_t addr, uint64_t src_parent_addr, uint64_t dst_parent_addr);
