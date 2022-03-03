@@ -40,9 +40,9 @@ void nvme_sync_read(struct driver* this,
  * @param count the number of blocks to read
  */
 void nvme_sync_write(struct driver* this,
-                     uint64_t lba,
-                     void*    buf,
-                     size_t   count);
+                     uint64_t       lba,
+                     const void*    buf,
+                     size_t         count);
 
  
 #define NVME_INVALID_IO_QUEUE (~0u)

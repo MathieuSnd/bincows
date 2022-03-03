@@ -91,7 +91,7 @@ void perform_write_command(
     struct data* data,
     struct regs* regs,
     uint64_t lba,
-    void*    _buf,
+    const void* _buf,
     size_t   count
 );
 
@@ -101,11 +101,11 @@ static void rename_device(struct pcie_dev* dev) {
 
     string_free(&dev->dev.name);
 
-    dev->dev.name = (string_t){malloc(16), 1};
-
-
-    sprintf(dev->dev.name.ptr, 
-            "nvme%un1", id++);
+    char* buf = malloc(16);
+    
+    sprintf(buf, "nvme%un1", id++);
+    
+    dev->dev.name = (string_t){buf, 1};
     // only namespace 1 is supported
     // for now
 
@@ -891,10 +891,9 @@ void perform_write_command(
     struct data* data,
     struct regs* regs,
     uint64_t lba,
-    void*    _buf,
+    const void* _buf,
     size_t   count
 ) {
-    panic("too dangerous operation");
     // general assert protection
     assert(lba         < data->namespaces[0].capacity);
     assert(lba + count < data->namespaces[0].capacity);
@@ -1013,7 +1012,7 @@ void nvme_sync_read(struct driver* this,
 
 void nvme_sync_write(struct driver* this,
                      uint64_t lba,
-                     void*    buf,
+                     const void* buf,
                      size_t   count
 ) {
     assert(this->status == DRIVER_STATE_OK);
