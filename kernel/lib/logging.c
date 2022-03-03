@@ -4,10 +4,11 @@
 #include "../drivers/terminal/terminal.h"
 #else
 #define get_active_terminal() NULL
-#define terminal_set_fgcolor(A,B) 
+#define terminal_set_fgcolor(A,B) {}
 #endif
 
 
+#include "../drivers/driver.h"
 #include "../lib/sprintf.h"
 #include "../lib/string.h"
 
@@ -65,13 +66,13 @@ void log(unsigned level, const char* string) {
 
 // print on the screen
 // with fancy colors
-    puts(level_name);
+    printf(level_name);
 
     if(terminal)
         terminal_set_fgcolor(terminal, TEXT_COLOR);
     
-    puts(string);
-    puts("\n");
+    printf(string);
+    printf("\n");
 
 // append to the buffer
     append_string(level_name);
