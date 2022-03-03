@@ -23,11 +23,11 @@ void dread(struct driver* this,
     struct data* data = this->data;
     size_t size = 1 << data->si.lbashift;
 
-
+    char* sbuf = malloc(size*count);
     fseek(data->f, lba * size, SEEK_SET);
-    assert(fread(buf, size, count, data->f) == count);
-
-    printf("DREAD");
+    assert(fread(sbuf, size, count, data->f) == count);
+    memcpy(buf, sbuf, size*count);
+    free(sbuf);
 }
 
 static
@@ -42,7 +42,7 @@ void dwrite(struct driver* this,
     fseek(data->f, lba * size, SEEK_SET);
     assert(fwrite(buf, size, count, data->f) == count);
     
-    printf("DWRITE\n");
+//    printf("DWRITE\n");
 }
 
 

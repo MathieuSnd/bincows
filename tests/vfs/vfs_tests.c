@@ -1,9 +1,11 @@
 #include <stdio.h>
 #include <fs/vfs.h>
 #include <lib/assert.h>
+#include <lib/string.h>
 #include <lib/panic.h>
 #include <lib/logging.h>
 #include <lib/dump.h>
+#include <acpi/power.h>
 #include <stdlib.h>
 #include "../tests.h"
 
@@ -42,6 +44,20 @@ static void log_tree(const char *path, int level)
     vfs_closedir(dir);
 }
 
+static inline
+void test_print_file(int size) {
+    file_handle_t* f = vfs_open_file("/fs/boot/limine.cfg");
+    assert(f);
+    char buf[size+1];
+    int read = 0;
+
+    while((read = vfs_read_file(buf, 1, size, f)) != 0) {
+        buf[read] = 0;
+        printf("%s", buf);
+    }
+
+    vfs_close_file(f);
+}
 
 // read & seek test function
 static inline
@@ -52,23 +68,18 @@ void test_write(void) {
     assert(!vfs_seek_file(f, 0, SEEK_END));
     log_warn("FILE SIZE = %u", vfs_tell_file(f));
 
-    vfs_seek_file(f, 234567, SEEK_SET);
+    size_t seek = 234567;
+
+    vfs_seek_file(f, seek, SEEK_SET);
 
 
     uint8_t buf[512] = {0xff};
     for(int i = 0; i < 512; i++)
         buf[i] = 0xff;
-    /*
-        "Une balle pourtant, mieux ajustée ou plus traître que les autres, finit par atteindre "
-        "l'enfant feu follet. On vit Gavroche chanceler, puis il s'affaissa. Toute la barricade "
-        "poussa un cri ; mais il y avait de l'Antée dans ce pygmée ; pour le gamin toucher le "
-        "pavé, c'est comme pour le géant toucher la terre ; Gavroche n'était tombé que pour se "
-        "redresser ; il resta assis sur son séant, un long filet de sang rayait son visage,"
-        "il éleva ses deux bras en l'air, regarda du côté d'où était venu le coup";
-*/
-    vfs_write_file(buf, 512, 1, f);
 
-    vfs_seek_file(f, 234567, SEEK_SET);
+    log_warn("WRITE = %u", vfs_write_file(buf, 512, 1, f));
+
+    vfs_seek_file(f, seek, SEEK_SET);
 
     char rd[1025];
     assert(vfs_read_file(rd, 1024, 1, f) == 1);
@@ -80,7 +91,7 @@ void test_write(void) {
 }
 
 
-int read_seek_big_file(size_t SIZE) {
+void read_seek_big_file(size_t SIZE) {
     assert(SIZE < 1024 * 1024);
 
     file_handle_t* f = vfs_open_file("/fs/file.dat");
@@ -132,8 +143,67 @@ int read_seek_big_file(size_t SIZE) {
 }
 
 
+
+static inline
+void test_file_write_extend(void) {
+    file_handle_t* writer = vfs_open_file("/////fs/boot/limine.cfg//");
+    file_handle_t* reader = vfs_open_file("/fs//./boot//..//boot/limine.cfg");
+//    exit(0);
+
+    assert(writer);
+
+    size_t dsize = 3001;
+    uint8_t* buf = malloc(dsize);
+
+    for(int i = 0; i < dsize; i++)
+        buf[i] = 0xff;
+    
+    //vfs_seek_file(writer, 0, SEEK_END);
+    vfs_write_file(buf, 1, dsize, writer);
+    assert(reader);
+
+    char rdbuf[52];
+    int read;
+    int i;
+
+    vfs_seek_file(writer, 0, SEEK_SET);
+
+
+    memset(buf, 0, dsize);
+
+    vfs_read_file(buf, 1, dsize, writer);
+
+    dump(buf, dsize, 32, DUMP_HEX8);
+    
+    printf("SIZE = %u", vfs_tell_file(reader));
+
+    vfs_close_file(reader);
+    vfs_close_file(writer);
+}
+
+
+static inline
+void test_disk_overflow(void) {
+    file_handle_t* f = vfs_open_file("/////fs/boot/limine.cfg//");
+
+    const int bsize = 32 * 1024;
+
+    const size_t size = 1024*1024*64;
+
+    char* buf = malloc(bsize);
+    for(int i = 0; i < bsize; i++)
+        buf[i] = i;
+
+    for(int i = 0; i < size / bsize; i++)
+        assert(vfs_write_file(buf, bsize, 1, f) == 1); 
+
+    vfs_close_file(f);
+}
+
+
+
 #ifndef DISKFILE
-#error DISKFILE should be defined.
+#define DISKFILE "disk.bin"
 #endif
 
 
@@ -145,7 +215,7 @@ int main() {
 
     vfs_mount(part, "/fs");
 
-
+    //TEST(test_print_file(441));
 
     //TEST(read_seek_big_file(1));
     //TEST(read_seek_big_file(234));
@@ -153,7 +223,10 @@ int main() {
     //TEST(read_seek_big_file(513));
     //TEST(read_seek_big_file(456523));
     //TEST(read_seek_big_file(145652));
-    test_write();
+    //TEST(test_write());
+    //TEST(test_file_write_extend());
+
+    TEST(test_disk_overflow());
 
     shutdown();
 }
