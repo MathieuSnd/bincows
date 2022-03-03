@@ -300,7 +300,11 @@ char* strtok_r(char* restrict str, const char* restrict delim, char** restrict s
 
         if(!next) {
             *saveptr = NULL;
-            return ptr;
+
+            if(! *ptr) // reached the end
+                return NULL;
+            else
+                return ptr;
         }
         else if(next == ptr) {
             ptr++;
