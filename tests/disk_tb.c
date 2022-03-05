@@ -41,8 +41,6 @@ void dwrite(struct driver* this,
 
     fseek(data->f, lba * size, SEEK_SET);
     assert(fwrite(buf, size, count, data->f) == count);
-    
-//    printf("DWRITE\n");
 }
 
 

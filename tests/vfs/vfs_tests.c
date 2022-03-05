@@ -1,4 +1,6 @@
 #include <stdio.h>
+#include <stdlib.h>
+
 #include <fs/vfs.h>
 #include <lib/assert.h>
 #include <lib/string.h>
@@ -6,7 +8,7 @@
 #include <lib/logging.h>
 #include <lib/dump.h>
 #include <acpi/power.h>
-#include <stdlib.h>
+
 #include "../tests.h"
 
 void disk_tb_install(const char* path);
@@ -182,24 +184,50 @@ void test_file_write_extend(void) {
 }
 
 
+
+
 static inline
 void test_disk_overflow(void) {
     file_handle_t* f = vfs_open_file("/////fs/boot/limine.cfg//");
 
-    const int bsize = 32 * 1024;
+    const int bsize = 1024 * 1024;
 
-    const size_t size = 1024*1024*64;
+    const size_t size = 1024*1024*28;
 
-    char* buf = malloc(bsize);
+    uint8_t* buf = malloc(bsize);
     for(int i = 0; i < bsize; i++)
         buf[i] = i;
 
-    for(int i = 0; i < size / bsize; i++)
+    uint64_t time = clock();
+
+    for(int i = 0; i < size / bsize; i++) {
+        log_debug("write %u (%u)", i * bsize, clock() - time);
+        time = clock();
+        
         assert(vfs_write_file(buf, bsize, 1, f) == 1); 
+    }
 
+// check
+    //read
     vfs_close_file(f);
-}
+    
+    f = vfs_open_file("/////fs/boot/limine.cfg//");
 
+    time = clock();
+    int rsize = 1024 * 1024;
+    int i = 0;
+    while(vfs_read_file(buf, rsize, 1, f) == 1) {
+        int begin = i++ * rsize;
+        log_debug("read %u (%u)", begin, clock() - time);
+        time = clock();
+
+        for(int j = begin; j < begin + rsize; j++)
+            assert(buf[j - begin] == (j & 0xff));
+            
+    }
+    vfs_close_file(f);
+    free(buf);
+}
 
 
 #ifndef DISKFILE
@@ -209,12 +237,16 @@ void test_disk_overflow(void) {
 
 int main() {
     vfs_init();
+
+    atshutdown(gpt_cleanup);
+    printf("DISKFILE: %s\n", DISKFILE);
     disk_tb_install(DISKFILE);
-    disk_part_t* part = search_partition("Bincows");
+    disk_part_t* part = search_partition("Bincows2");
     assert(part);
 
     vfs_mount(part, "/fs");
 
+    TEST(test_disk_overflow());
     //TEST(test_print_file(441));
 
     //TEST(read_seek_big_file(1));
@@ -226,7 +258,6 @@ int main() {
     //TEST(test_write());
     //TEST(test_file_write_extend());
 
-    TEST(test_disk_overflow());
 
     shutdown();
 }

@@ -40,7 +40,7 @@ OBJ    := $(CFILES:.c=.o) $(KCFILES:.c=.test.o)
 
 
 run: all
-	$(EXE)
+	sudo $(EXE)
 
 
 debug: all
