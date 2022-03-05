@@ -73,7 +73,8 @@ struct data {
     struct namespace  namespaces[HANDLED_NAMESPACES];
 
     struct storage_interface si;
-    
+
+    uint64_t prps[IO_QUEUE_SIZE];
 };
 
 
@@ -612,6 +613,12 @@ static void init_struct(driver_t* this) {
     // zero it
     memset(this->data, 0, sizeof(struct data));
 
+    struct data* data = this->data;
+
+    for(unsigned i = 0; i < IO_QUEUE_SIZE; i++) {
+        data->prps[i] = createPRP();
+    }
+
     this->data_len = sizeof(struct data);
     rename_device((struct pcie_dev*)this->device);
 }
@@ -770,6 +777,10 @@ static void remove(driver_t* this) {
         free_queue(&data->io_queues.cq);
     }
 
+
+    for(unsigned i = 0; i < IO_QUEUE_SIZE; i++) {
+        freePRP(data->prps[i]);
+    }
     // finally free the data structure
     free(this->data);
 }
@@ -980,7 +991,14 @@ void nvme_sync_read(struct driver* this,
             c = count;
         else
             c = max_count;
-        
+
+
+        while(queue_full(&data->io_queues.sq))
+            sleep(25);
+            
+
+        uint64_t prp_paddr = data->prps[data->io_queues.sq.tail];
+
 
         perform_read_command(
             data, 
@@ -991,7 +1009,7 @@ void nvme_sync_read(struct driver* this,
         );
 
         while(!queue_empty(&data->io_queues.sq))
-            sleep(1);
+            ;// sleep(0);
         
         memcpy(
             buf, 
@@ -1010,6 +1028,8 @@ void nvme_sync_read(struct driver* this,
 }
 
 
+
+
 void nvme_sync_write(struct driver* this,
                      uint64_t lba,
                      const void* buf,
@@ -1025,13 +1045,8 @@ void nvme_sync_write(struct driver* this,
 
     unsigned max_count = 0x1000 >> shift;
 
-    // we only use one prp.
-    // this is slow.    
-    uint64_t prp_paddr = createPRP();
+    // we only use 64 prps.
 
-
-    while(queue_full(&data->io_queues.sq))
-        sleep(1);
 
     while(count != 0) {
         // busy wait for a submission entry to be 
@@ -1044,12 +1059,20 @@ void nvme_sync_write(struct driver* this,
         else
             c = max_count;
         
+
+        while(queue_full(&data->io_queues.sq))
+            sleep(25);
+            
+
+        uint64_t prp_paddr = data->prps[data->io_queues.sq.tail];
+
         // copy one block
         memcpy(
             translate_address((void*)prp_paddr), 
             buf, 
             c << shift
         );
+
 
         perform_write_command(
             data,
@@ -1059,15 +1082,13 @@ void nvme_sync_write(struct driver* this,
             c
         );
 
-        while(!queue_empty(&data->io_queues.sq))
-            sleep(1);
+
+//        while(!queue_empty(&data->io_queues.sq))
+//            ;
         
         buf += c << shift;
 
         lba   += c;
         count -= c;
     }
-
-
-    freePRP(prp_paddr);
 }
