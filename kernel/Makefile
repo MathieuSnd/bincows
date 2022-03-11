@@ -4,6 +4,8 @@ LD          := x86_64-elf-ld
 ASM			:= nasm
 ASM_FLAGS 	:= -felf64
 PY          := python3
+
+BUILDDIR := ./build
  
 CFLAGS = -Wall -Wextra -O3 -pipe
 
@@ -27,7 +29,7 @@ INTERNALCFLAGS  :=  -mgeneral-regs-only    \
 					-I/opt/cross/include/  \
 					-I../lai/include       \
 					-fPIE                  \
-					-fno-inline
+					-fno-inline -g
 #					-D BIGGER_FONT
 
 
@@ -36,14 +38,18 @@ LAI_FILE := ../lai/lai.elf
 
 CFILES := $(shell find ./ -type f -name '*.c')
 SFILES := $(shell find ./ -type f -name '*.s')
-OBJ    :=  $(SFILES:.s=.s.o) $(CFILES:.c=.c.o)
+OBJ    :=  $(SFILES:.s=.s.o) \
+		   $(CFILES:.c=.c.o)
+
+OBJ    := $(patsubst ./%, $(BUILDDIR)/%, $(OBJ))
+
+
 
 LDSCRIPT := linker.ld 
 
 .PHONY: all clean
  
 all: $(KERNEL)
-
 
  
 $(KERNEL): $(OBJ) $(LDSCRIPT) parse_symbols.py
@@ -55,10 +61,12 @@ $(KERNEL): $(OBJ) $(LDSCRIPT) parse_symbols.py
 	$(PY) ./parse_symbols.py
 	mv symbols.dat ../disk_root/boot/kernel.symbols
 
-%.c.o: %.c
+$(BUILDDIR)/%.c.o: %.c
+	mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $(INTERNALCFLAGS) -c $< -o $@
 
-%.s.o: %.s
+$(BUILDDIR)/%.s.o: %.s
+	mkdir -p $(dir $@)
 	$(ASM) $(ASM_FLAGS) $< -o $@
  
 clean:
