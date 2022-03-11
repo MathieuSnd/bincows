@@ -36,7 +36,7 @@ fs_t *vfs_open(const char *path, fast_dirent_t *dir);
 
 
 /**
- * @brief unmount a partition
+ * @brief unmount a fs
  * from the vfs
  * 
  * @param path the path of the 

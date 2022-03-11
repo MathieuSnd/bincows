@@ -199,6 +199,9 @@ file_handle_t* create_handler(
                         file_ent->n_insts * sizeof(file_handle_t *));
 
     file_ent->fhs[file_ent->n_insts - 1] = handler;
+
+
+    fs->n_open_files++;
     
     return handler;
 }
@@ -239,7 +242,7 @@ file_handle_t *vfs_open_file(const char *path) {
         return NULL;
     }
 
-
+    
     return create_handler(fs, &dirent, path);
 }
 
@@ -269,8 +272,6 @@ void vfs_close_file(file_handle_t *handle)
                 = handle->open_vfile;
 
 
-
-
     open_file->n_insts--;
 
     flush(open_file);
@@ -279,7 +280,6 @@ void vfs_close_file(file_handle_t *handle)
         // free the vfile
         free(open_file->path);
         free(open_file->fhs);
-        free(open_file);
 
         // remove open_file from 
         // the table
@@ -301,7 +301,8 @@ void vfs_close_file(file_handle_t *handle)
                 break;
             }
         }
-        
+    
+        open_files = realloc(open_files, n_open_files * sizeof(struct file_ent));
         assert(found);
 
     }
@@ -333,7 +334,6 @@ void vfs_close_file(file_handle_t *handle)
         // the handle is in the file list
         assert(found);
     }
-
 
 
     free(handle);
@@ -636,7 +636,6 @@ size_t vfs_write_file(const void *ptr, size_t size, size_t nmemb,
     
     // update file size
     stream->open_vfile->file_size = MAX(stream->open_vfile->file_size, stream->file_offset);
-    
     invalidate_handlers_buffer(stream->open_vfile, stream);
 
     return nmemb;

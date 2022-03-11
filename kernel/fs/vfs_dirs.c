@@ -188,7 +188,8 @@ static int remove_vdir(vdir_t *vdir)
                 memmove(
                     vd->children + i,
                     vd->children + i + 1,
-                    vd->n_children - i - 1);
+                    (vd->n_children - i - 1) * sizeof(vdir_t)
+                );
 
                 vd->n_children--;
 
@@ -220,7 +221,6 @@ static int remove_vdir(vdir_t *vdir)
 static int unmount(vdir_t *vdir)
 {
     fs_t *fs = vdir->fs;
-
     assert(vdir);
 
     if (vdir->n_children)
@@ -234,15 +234,18 @@ static int unmount(vdir_t *vdir)
     {
         log_warn(
             "cannot unmount partition %s: %u open files",
-            fs->n_open_files, fs->part->name);
+            fs->part->name, fs->n_open_files);
 
         return 0;
     }
 
+    free(fs->part->mount_point);
+    fs->part->mount_point = NULL;
+
     if (vdir == &vfs_root)
         vfs_root.fs = NULL;
     else
-        assert(remove_vdir(vdir));
+        free_vtree(vdir);
 
     // remove cache entries related with this thing
     for (unsigned i = 0; i < cache_size; i++)
@@ -254,10 +257,9 @@ static int unmount(vdir_t *vdir)
         }
     }
 
-    fs->unmount(fs);
-
     return 1;
 }
+
 
 static void free_cache(void)
 {
@@ -698,6 +700,7 @@ fs_t *vfs_open(const char *path, fast_dirent_t *dir)
 
     if (!vdir)
     {
+        free(pathbuf);
         // there is no wat the dir could
         // exist
         return NULL;
@@ -864,6 +867,8 @@ int vfs_mount(disk_part_t *part, const char *path)
     }
 
     new->fs = fs;
+    part->mount_point = malloc(strlen(tmp.path) + 1);
+    strcpy(part->mount_point, tmp.path);
 
     //test_file_read_seek();    
     
@@ -875,18 +880,20 @@ int vfs_mount(disk_part_t *part, const char *path)
 
 int vfs_unmount(const char *path)
 {
+    log_warn("vfs_unmount(%s)", path);
     // do stuf!
     char *pbuf = malloc(strlen(path) + 1);
     simplify_path(pbuf, path);
 
     vdir_t *vdir = get_fs_vdir(pbuf);
 
+    free(pbuf);
+
     if (!vdir)
         return 0;
     log_info("unmounting %s", path);
     return unmount(vdir);
 }
-
 
 
 struct DIR *vfs_opendir(const char *path)
@@ -1014,11 +1021,14 @@ int vfs_update_metadata(
 
     fast_dirent_t parent_dirent;
     fs_t* fs = vfs_open(pathbuf, &parent_dirent);
+    
 
     assert(fs); // assert that the parent exists
 
     assert(parent_dirent.type == DT_DIR);
     assert(parent_dirent.file_size == 0);
 
-    return fs->update_dirent(fs, parent_dirent.ino, file_name, addr, file_size);
+    int ret = fs->update_dirent(fs, parent_dirent.ino, file_name, addr, file_size);
+    free(pathbuf);
+    return ret;
 }
