@@ -11,7 +11,9 @@ ASM			:= nasm
 ASM_FLAGS 	:= -felf64
 PY          := python3
 
-KERNEL=../../kernel/
+KERNEL    := ../../kernel/
+KBUILDDIR := $(KERNEL)/build
+
 
  
 DEFINES := -DDISKFILE=\"$(DISKFILE)\" -DTEST
@@ -35,7 +37,7 @@ KCFILES += $(KERNEL)/lib/utf16le.c
 KCFILES += $(KERNEL)/lib/string.c
 KCFILES += $(KERNEL)/acpi/power.c
 
-OBJ    := $(CFILES:.c=.o) $(KCFILES:.c=.test.o) 
+OBJ    := $(CFILES:.c=.o) $(patsubst $(KERNEL)/%, $(KBUILDDIR)/%, $(KCFILES:.c=.test.o))
 
 
 
@@ -56,7 +58,7 @@ $(EXE): $(OBJ)
 
 
 
-%.test.o: %.c
+$(KBUILDDIR)/%.test.o: $(KERNEL)/%.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 
