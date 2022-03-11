@@ -22,3 +22,19 @@ void utf16le2ascii(
         }
     }
 }
+
+void ascii2utf16le(
+    uint16_t*   __restrict__ utf16le,
+    const char* __restrict__ ascii, 
+    size_t len
+) {
+    unsigned char c;
+
+    for(;len>0;--len) {
+
+        *utf16le++ = c = *ascii++;
+
+        if(!c)
+            break;
+    }
+}
