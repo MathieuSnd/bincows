@@ -44,6 +44,12 @@ size_t heap_get_size() {
 size_t heap_get_brk(void) {
     return 0;
 }
+void heap_defragment(void) {
+
+}
+void heap_print(void) {
+
+}
 
 size_t stack_size = 4096;
 void* stack_base = NULL;
@@ -57,4 +63,6 @@ void ps2kb_poll_wait_for_key(uint8_t key) {
 
     getchar();
 }
+
+
 

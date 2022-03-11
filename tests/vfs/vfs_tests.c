@@ -232,22 +232,23 @@ void test_disk_overflow(void) {
 
 #ifndef DISKFILE
 #define DISKFILE "disk.bin"
+#warning DISKFILE undefined
 #endif
 
+void test_vfs() {
 
-int main() {
     vfs_init();
 
     atshutdown(gpt_cleanup);
     printf("DISKFILE: %s\n", DISKFILE);
     disk_tb_install(DISKFILE);
-    disk_part_t* part = search_partition("Bincows2");
+    disk_part_t* part = search_partition("Bincows");
     assert(part);
 
     vfs_mount(part, "/fs");
 
-    TEST(test_disk_overflow());
-    //TEST(test_print_file(441));
+    //TEST(test_disk_overflow());
+    TEST(test_print_file(441));
 
     //TEST(read_seek_big_file(1));
     //TEST(read_seek_big_file(234));
@@ -258,6 +259,24 @@ int main() {
     //TEST(test_write());
     //TEST(test_file_write_extend());
 
-
+    //vfs_unmount(part)
     shutdown();
+
+}
+
+
+void kfree(void* addr) {
+    free(addr);
+}
+void* kmalloc(size_t s) {
+    return malloc(s);
+}
+void* krealloc(void* p, size_t s) {
+    return realloc(p,s);
+}
+
+int main() {
+    test_vfs();
+    test_vfs();
+    test_vfs();
 }

@@ -28,7 +28,25 @@ void dread(struct driver* this,
     assert(fread(sbuf, size, count, data->f) == count);
     memcpy(buf, sbuf, size*count);
     free(sbuf);
+
+    printf("READ %u blocks\n", count);
 }
+
+
+static
+void dasync_read(struct driver* this,
+                uint64_t lba,
+                void*    buf,
+                size_t   count
+) {
+    dread(this,lba,buf,count);
+}
+
+static void dsync(struct driver* this) {
+    printf("SYNC\n");
+    (void) this;
+}
+
 
 static
 void dwrite(struct driver* this,
@@ -63,11 +81,13 @@ int install(driver_t* this) {
     this->name = (string_t){"tb disk controller", 0},
 
     data->si = (struct storage_interface) {
-        .capacity = ftell(dfile),
-        .driver   = this,
-        .lbashift = 9, 
-        .read = dread,
-        .write = dwrite,
+        .capacity   = ftell(dfile),
+        .driver     = this,
+        .lbashift   = 9, 
+        .read       = dread,
+        .async_read = dasync_read,
+        .sync       = dsync,
+        .write      = dwrite,
     };
     data->f = dfile;
 
