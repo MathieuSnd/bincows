@@ -7,6 +7,7 @@
 
 #include "../drivers/driver.h"
 #include "../drivers/dev.h"
+#include "../fs/vfs.h"
 
 #include "gpt.h"
 
@@ -77,10 +78,40 @@ disk_part_t* search_partition(const char* name) {
     return NULL;
 }
 
+void gpt_remove_drive_parts(driver_t* driver) {
+    assert(partitions);
+
+    int n_removed = 0;
+
+    for(unsigned i = 0; i < n_partitions; i++) {
+        if(partitions[i].interface->driver == driver) {
+            
+            // the partition is mounted
+            // somewhere
+            if(partitions[i].mount_point) 
+                vfs_unmount(partitions[i].mount_point);
+
+            n_removed++;
+            n_partitions--;
+            memmove(
+                &partitions[i], 
+                &partitions[i+1], 
+                sizeof(partitions[i]) * (n_partitions - i)
+            );
+            
+            i--;
+        }
+    }
+
+    if(!n_partitions)
+       ;// gpt_cleanup();
+}
 
 void gpt_cleanup(void) {
-    if(partitions != NULL)
+    if(partitions != NULL) {
         free(partitions);
+        partitions = NULL;
+    }
     n_partitions = 0;
 }
 

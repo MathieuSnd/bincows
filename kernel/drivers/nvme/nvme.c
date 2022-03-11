@@ -40,6 +40,8 @@ static void remove(driver_t* this);
 #define ADMIN_QUEUE_SIZE 2
 #define IO_QUEUE_SIZE    64
 
+#define CMD_ID_ASYNC_READ 0xf00f
+
 struct namespace {
     uint32_t id;
 
@@ -51,6 +53,13 @@ struct namespace {
     uint32_t pref_write_size;
     int      flags; // bit 0: optperf
 };
+
+
+struct async_read {
+    void* target_buffer;
+    unsigned size;
+};
+
 
 /**
  * the whole structure is zeroed when
@@ -69,6 +78,9 @@ struct data {
     // number of namespaces 
     unsigned          nns;
 
+    struct async_read read_queue[IO_QUEUE_SIZE];
+
+
     // namespace ids array
     struct namespace  namespaces[HANDLED_NAMESPACES];
 
@@ -77,6 +89,7 @@ struct data {
     uint64_t prps[IO_QUEUE_SIZE];
 };
 
+void nvme_sync(driver_t* this);
 
 static
 void perform_read_command(
@@ -84,7 +97,8 @@ void perform_read_command(
     struct regs* regs,
     uint64_t lba,
     void*    _buf,
-    size_t   count
+    size_t   count,
+    unsigned cmdid
 );
 
 static
@@ -244,6 +258,7 @@ void doorbell_completion(driver_t* this,
     *doorbell = cq->head;
 }
 
+
 // update queue structure and doorbells
 // and panics if an error occured
 static void handle_queue(
@@ -254,11 +269,23 @@ static void handle_queue(
     update_queues(queues);
     struct queue* cq = &queues->cq;
 
+    struct data* data = this->data;
 
     // handler every new entry
     while(!queue_empty(cq)) {
         volatile
         struct compqueuee* entry = queue_head_ptr(cq);
+
+        if(entry->cmd_id == CMD_ID_ASYNC_READ) {
+            // we need to perform async task
+            uint16_t head = cq->head;
+            //log_warn("ASYNC READ");
+            memcpy(
+                data->read_queue[head].target_buffer,
+                translate_address((void*)data->prps[head]),
+                data->read_queue[head].size
+            );
+        }
 
         if(entry->status) {
             // error 
@@ -290,12 +317,13 @@ static void irq_handler(driver_t* this) {
             &data->admin_queues);
     
     // if io queues are well initialized..
-    if(data->io_queues.cq.base)
+    if(data->io_queues.cq.base) {
         handle_queue(
             this, 
             data->registers,  
             &data->io_queues);
 
+    }
 
     // acknowledge the irq to the apic
     apic_eoi();
@@ -716,11 +744,13 @@ int nvme_install(driver_t* this) {
         
         // fill the storage interface structure
         data->si = (struct storage_interface) {
-            .capacity = data->namespaces[0].capacity,
-            .driver   = this,
-            .lbashift = data->namespaces[0].block_size_shift,
-            .read     = nvme_sync_read,
-            .write    = nvme_sync_write,
+            .capacity   = data->namespaces[0].capacity,
+            .driver     = this,
+            .lbashift   = data->namespaces[0].block_size_shift,
+            .read       = nvme_sync_read,
+            .async_read = nvme_async_read,
+            .write      = nvme_sync_write,
+            .sync       = nvme_sync,
         };
 
         gpt_scan(&data->si);
@@ -764,6 +794,8 @@ static void shutdown(struct driver* this) {
 
 
 static void remove(driver_t* this) {
+    gpt_remove_drive_parts(this);
+    
     shutdown(this);
     struct data* data = this->data;
     
@@ -830,7 +862,8 @@ void perform_read_command(
     struct regs* regs,
     uint64_t lba,
     void*    _buf,
-    size_t   count
+    size_t   count,
+    unsigned cmdid
 ) {
     // general assert protection
     assert(lba         < data->namespaces[0].capacity);
@@ -875,7 +908,7 @@ void perform_read_command(
             regs,                    // NVMe register space
             &data->io_queues.sq,  // admin submission queue
             OPCODE_IO_READ,
-            0,                       // cmdid - unused
+            cmdid,                   // cmdid
             1,                       // nsid
             paddr,                   // prp0
             0,                       // prp1
@@ -973,13 +1006,9 @@ void nvme_sync_read(struct driver* this,
 
     unsigned max_count = 0x1000 >> shift;
 
-    // we only use one prp.
-    // this is slow.    
-    uint64_t prp_paddr = createPRP();    
-
-
+    
     while(queue_full(&data->io_queues.sq))
-        sleep(1);
+        sleep(25);
 
     while(count != 0) {
         // busy wait for a submission entry to be 
@@ -992,10 +1021,7 @@ void nvme_sync_read(struct driver* this,
         else
             c = max_count;
 
-
-        while(queue_full(&data->io_queues.sq))
-            sleep(25);
-            
+        //log_warn("sdfgb");
 
         uint64_t prp_paddr = data->prps[data->io_queues.sq.tail];
 
@@ -1005,7 +1031,8 @@ void nvme_sync_read(struct driver* this,
             data->registers,
             lba,
             translate_address((void*)prp_paddr),
-            c
+            c,
+            0 // not async
         );
 
         while(!queue_empty(&data->io_queues.sq))
@@ -1022,9 +1049,82 @@ void nvme_sync_read(struct driver* this,
         lba   += c;
         count -= c;
     }
+}
 
 
-    freePRP(prp_paddr);
+void nvme_async_read(struct driver* this,
+                    uint64_t lba,
+                    void*    buf,
+                    size_t   count
+) {
+    assert(this->status == DRIVER_STATE_OK);
+    struct data* data = this->data;
+    assert(data->nns);
+
+
+
+    unsigned shift = data->namespaces[0].block_size_shift;
+
+    unsigned max_count = 0x1000 >> shift;
+
+
+
+    while(count != 0) {
+        // busy wait for a submission entry to be 
+        // available
+
+        unsigned c;
+
+        if(count < max_count)
+            c = count;
+        else
+            c = max_count;
+
+
+        while(queue_full(&data->io_queues.sq))
+            sleep(10);
+            
+
+        unsigned tailid = data->io_queues.sq.tail;
+
+        uint64_t prp_paddr = data->prps[tailid];
+
+
+        perform_read_command(
+            data, 
+            data->registers,
+            lba,
+            translate_address((void*)prp_paddr),
+            c,
+            CMD_ID_ASYNC_READ // async
+        );
+
+        data->read_queue[tailid] = (struct async_read) {
+            .target_buffer = buf,
+            .size = c << shift,
+        };
+        // the copy from prp to buf will occur 
+        // in the irq
+/*
+        memcpy(
+            buf, 
+            translate_address((void*)prp_paddr), 
+            c << shift
+        );
+*/
+        
+        buf += c << shift;
+
+        lba   += c;
+        count -= c;
+    }
+}
+
+void nvme_sync(driver_t* this) {
+    struct data* data = this->data;
+    
+    while(!queue_empty(&data->io_queues.cq))
+        sleep(1);
 }
 
 
@@ -1083,9 +1183,6 @@ void nvme_sync_write(struct driver* this,
         );
 
 
-//        while(!queue_empty(&data->io_queues.sq))
-//            ;
-        
         buf += c << shift;
 
         lba   += c;

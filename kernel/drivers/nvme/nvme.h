@@ -28,6 +28,23 @@ void nvme_sync_read(struct driver* this,
                     size_t   count);
 
 
+/**
+ * @brief assynchronously read contiguous 
+ * memory region from NVME drive. On error, 
+ * a kernel panic occurs.
+ * Call nvme_sync to wait for every operaiton
+ * to finish
+ * 
+ * @param this  the driver structure
+ * @param lba   the lba address
+ * @param buf   the destination.
+ * @param count the number of blocks to read
+ */
+void nvme_async_read(struct driver* this,
+                    uint64_t lba,
+                    void*    buf,
+                    size_t   count);
+
 
 /**
  * @brief write contiguous memory region to 

@@ -17,6 +17,10 @@ typedef struct disk_part {
     uint64_t end;
 
     uint64_t attributes;
+
+    // null if the partition
+    // is not mounted
+    char* mount_point;
     
     // null terminated
     char     name[36];
@@ -48,6 +52,10 @@ static unsigned __attribute__((pure)) block_size(disk_part_t* part) {
 
 
 void gpt_scan(const struct storage_interface* sti);
+
+// this should be called from
+// driver_t::remove
+void gpt_remove_drive_parts(struct driver* driver);
 
 
 disk_part_t* find_partition(GUID guid);
