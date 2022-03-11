@@ -163,7 +163,7 @@ size_t heap_get_size(void) {
 }
 
 
-size_t heap_get_brk(void) {
+void* heap_get_brk(void) {
     return heap_begin + heap_size;
 }
 
@@ -387,7 +387,6 @@ void* __attribute__((noinline)) malloc(size_t size) {
         n_allocations++;
 
         log_heap(" --> %lx", (void*)seg+sizeof(seg_header));
-
         
         return (void *)seg + sizeof(seg_header);
     }
@@ -461,14 +460,19 @@ void __attribute__((noinline)) free(void *ptr) {
 }
 
 
+void heap_defragment(void) {
+    defragment();
+}
+
+
 #ifndef NDEBUG
 //#ifdef DEBUG_HEAP
 
-void print_heap(void) {
+void heap_print(void) {
     for(seg_header* seg = current_segment; 
                     seg != NULL;
                     seg = seg->next) {
-        log_heap("%lx size=%x,free=%u", seg,seg->size, seg->free);
+        log_debug("%lx size=%x,free=%u", seg,seg->size, seg->free);
     }
 }
 
@@ -495,7 +499,7 @@ void malloc_test(void) {
     }
 
     defragment();
-    print_heap();
+    heap_print();
 }
 
 //#endif

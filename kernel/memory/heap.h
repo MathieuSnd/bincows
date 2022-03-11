@@ -11,7 +11,9 @@ void  heap_init(void);
 
 size_t heap_get_n_allocation(void);
 size_t heap_get_size(void);
-size_t heap_get_brk(void);
+void* heap_get_brk(void);
+void heap_print(void);
+void heap_defragment(void);
 
 #ifndef NDEBUG
 void  malloc_test(void);
