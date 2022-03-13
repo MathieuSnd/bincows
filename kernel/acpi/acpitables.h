@@ -3,7 +3,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "../lib/common.h"
 #include "../drivers/pcie/scan.h"
 
 struct RSDPDescriptor {
@@ -12,7 +11,7 @@ struct RSDPDescriptor {
     uint8_t  OEMID[6];
     uint8_t  revision;
     uint32_t rsdtAddress;
-} __packed;
+} __attribute__((packed));
 
 struct RSDPDescriptor20 {
     struct RSDPDescriptor firstPart;
@@ -21,13 +20,13 @@ struct RSDPDescriptor20 {
     uint64_t xsdtAddress;
     uint8_t  extendedChecksum;
     uint8_t  reserved[3];
-} __packed;
+} __attribute__((packed));
 
 
 union acpi_signature {
     char arg[4];
     uint32_t raw;
-} __packed;
+} __attribute__((packed));
 
 
 #define MADT_SIGNATURE 0x43495041
@@ -51,7 +50,7 @@ struct ACPISDTHeader {
     uint32_t OEMrevision;
     uint32_t creatorID;
     uint32_t creator_revision;
-} __packed;
+} __attribute__((packed));
 
 // end
 
@@ -59,19 +58,19 @@ struct ACPISDTHeader {
 struct XSDT {
     struct ACPISDTHeader header;
     struct ACPISDTHeader* entries[];
-} __packed;
+} __attribute__((packed));
 
 
 struct RSDT {
     struct ACPISDTHeader header;
     uint32_t entries[];
-} __packed;
+} __attribute__((packed));
 
 
 struct MADTEntryHeader {
     uint8_t type;
     uint8_t length;
-} __packed;
+} __attribute__((packed));
 
 
 struct MADT_lapic_entry {
@@ -79,7 +78,7 @@ struct MADT_lapic_entry {
     uint8_t  proc_apic_ID;
     uint8_t  procID;
     uint32_t flags; // bit0: enabled
-} __packed;
+} __attribute__((packed));
 
 
 struct MADT_ioapic_entry {
@@ -88,7 +87,7 @@ struct MADT_ioapic_entry {
     uint8_t  reserved;
     uint32_t address;
     uint32_t global_system_interrupt_base;
-} __packed;
+} __attribute__((packed));
 
 
 struct MADT_ioapic_interrupt_source_override_entry {
@@ -97,7 +96,7 @@ struct MADT_ioapic_interrupt_source_override_entry {
     uint8_t  irq_source;
     uint32_t global_system_interrupt;
     uint16_t flags;
-} __packed;
+} __attribute__((packed));
 
 
 struct MADT_IO_NMI_entry {
@@ -105,7 +104,7 @@ struct MADT_IO_NMI_entry {
     uint8_t  source;
     uint8_t  reserved;
     uint32_t global_system_interrupt;
-} __packed;
+} __attribute__((packed));
 
 
 struct MADT_LOCAL_NMI_entry {
@@ -113,7 +112,7 @@ struct MADT_LOCAL_NMI_entry {
     uint8_t  procID;
     uint16_t flags;
     uint8_t  lint; // 0 or 1
-} __packed;
+} __attribute__((packed));
 
 
 struct MADT_LAPIC_address_override_entry {
@@ -121,7 +120,7 @@ struct MADT_LAPIC_address_override_entry {
     uint8_t procID;
     uint8_t flags;
     uint32_t lint; // 0 or 1
-} __packed;
+} __attribute__((packed));
 
 
 struct MADT_lapicx2_entry {
@@ -129,7 +128,7 @@ struct MADT_lapicx2_entry {
     uint8_t  proc_lapic_ID;
     uint64_t flags; // bit0: enabled
     uint32_t acpi_id;
-} __packed;
+} __attribute__((packed));
 
 
 struct MADT {
@@ -137,7 +136,7 @@ struct MADT {
     uint32_t lAPIC_address;
     uint32_t flags;
     struct MADTEntryHeader* entries[];
-} __packed;
+} __attribute__((packed));
 
 
 static_assert(
@@ -148,7 +147,7 @@ struct PCIETable {
     uint64_t reserved0;
 
     struct PCIE_busgroup segments[];
-} __packed;
+} __attribute__((packed));
 
 
 // MADT entry types

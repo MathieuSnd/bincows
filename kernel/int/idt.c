@@ -1,7 +1,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "../lib/common.h"
 #include "idt.h"
 
 
@@ -9,7 +8,7 @@
 typedef struct {
     uint16_t    size;
     const void* offset;
-} __packed IDTD;
+} __attribute__((packed)) IDTD;
 
 
 typedef struct {
@@ -17,7 +16,7 @@ typedef struct {
     uint8_t z        : 1;
     uint8_t dpl      : 2;
     uint8_t p        : 1;
-} __packed type_attr_t;
+} __attribute__((packed)) type_attr_t;
 
 
 static_assert(sizeof(type_attr_t) == 1);
@@ -33,7 +32,7 @@ typedef struct {
    uint16_t    offset_2;  // offset bits 16..31
    uint32_t    offset_3;  // offset bits 32..63
    uint32_t    zero;      // reserved
-} __packed IDTE;
+} __attribute__((packed)) IDTE;
 
 static_assert_equals(sizeof(IDTE), 16);
 

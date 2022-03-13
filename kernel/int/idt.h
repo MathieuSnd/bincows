@@ -4,7 +4,6 @@
 #include <stdint.h>
 #include <stddef.h>
 #include "../lib/assert.h"
-#include "../lib/common.h"
 
 #define ATTR_64_GATE 0b1110
 #define ATTR_64_TRAP 0b1110
@@ -17,7 +16,7 @@ struct IFrame {
     uint64_t RFLAGS;
     uint64_t RSP;
     uint64_t SS;
-} __packed;
+} __attribute__((packed));
 
 static_assert(sizeof(struct IFrame) == 40);
 

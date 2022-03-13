@@ -1,5 +1,4 @@
 #include "gdt.h"
-#include "../lib/common.h"
 #include "../lib/sprintf.h"
 #include "../lib/assert.h"
 
@@ -24,44 +23,44 @@ static_assert_equals(sizeof(struct TSS), 104);
 const struct TSS tss = {0, {(uint64_t)kernel_stack,0,0}, 0, {0}, 0,0,sizeof(struct TSS)};
 
 struct GDTentry {
-    u16 limit1;             // x86_64: ignrored
-    u16 base1;              // x86_64: ignrored
-    u8  base2;              // x86_64: ignrored
+    uint16_t limit1;             // x86_64: ignrored
+    uint16_t base1;              // x86_64: ignrored
+    uint8_t  base2;              // x86_64: ignrored
 // access byte
 //union {
   //  struct {
-    u8  accessed: 1;        // should be 0 (the CPU sets it to 1 when accessed)
-    u8  read_write: 1;      // for code selectors: readable bit
+    uint8_t  accessed: 1;        // should be 0 (the CPU sets it to 1 when accessed)
+    uint8_t  read_write: 1;      // for code selectors: readable bit
                             // for data selectors: writable bit
-    u8  dir_conforming: 1;  // for code selectors: should be 0 in longmode 
+    uint8_t  dir_conforming: 1;  // for code selectors: should be 0 in longmode 
                             //                     (code can be executed by lower privilege level)
                             // for data selectors: 0: segment grows upward, downward otherwise 
-    u8  executable: 1;      // for code selectors
-    u8  descriptor: 1;      // should be 1 for data/code segments, 0 for system (tss)
-    u8  ring: 2;            // privilege ring
-    u8  present: 1;         // should always be 1
-    //} __packed;
-  //  u8 access_byte;
-//} __packed;
+    uint8_t  executable: 1;      // for code selectors
+    uint8_t  descriptor: 1;      // should be 1 for data/code segments, 0 for system (tss)
+    uint8_t  ring: 2;            // privilege ring
+    uint8_t  present: 1;         // should always be 1
+    //} __attribute__((packed));
+  //  uint8_t access_byte;
+//} __attribute__((packed));
 
 
-    u8  limit2: 4;          // x86_64: ignrored
+    uint8_t  limit2: 4;          // x86_64: ignrored
 //union {
     //struct {
-    u8  nullbits: 1;        // must be 0
-    u8  longcode: 1;        // x86_64: 1
-    u8  size: 1;            // x86_64: must be 0
-    u8  granularity: 1;     // x86_64: ignrored
-    //} __packed;
-//    u8 flags: 4;
-//} __packed;
-    u8  base3;           // x86_64: ignrored
-} __packed;
+    uint8_t  nullbits: 1;        // must be 0
+    uint8_t  longcode: 1;        // x86_64: 1
+    uint8_t  size: 1;            // x86_64: must be 0
+    uint8_t  granularity: 1;     // x86_64: ignrored
+    //} __attribute__((packed));
+//    uint8_t flags: 4;
+//} __attribute__((packed));
+    uint8_t  base3;           // x86_64: ignrored
+} __attribute__((packed));
 
 struct GDTDescriptor {
     uint16_t size;    // size of the GDT - 1
     uint64_t offset;  // address of the table
-} __packed;
+} __attribute__((packed));
 
 
 

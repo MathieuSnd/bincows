@@ -1,14 +1,13 @@
 #ifndef  REGISTERS_H
 #define  REGISTERS_H
 
-#include "common.h"
 
-u16 _cs(void);
-u16 _ds(void);
-u16 _ss(void);
-u16 _es(void);
-u16 _fs(void);
-u16 _gs(void);
+uint16_t _cs(void);
+uint16_t _ds(void);
+uint16_t _ss(void);
+uint16_t _es(void);
+uint16_t _fs(void);
+uint16_t _gs(void);
 
 uint64_t get_rflags(void);
 uint64_t get_cr0(void);

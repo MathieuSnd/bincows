@@ -34,8 +34,12 @@ void reboot(void) {
     unsigned still_allocated = heap_get_n_allocation();
 
     if(still_allocated) {
-        log_warn("%d FREE BLOCKS AT SHUTDOWN", still_allocated);
+        log_warn("%d FREE BLOCKS AT SHUTDOWN:", still_allocated);
+#ifndef NDEBUG
+        heap_defragment();
+        heap_print();
         panic("oui");
+#endif
     }
     //panic("non");
     //_cli();

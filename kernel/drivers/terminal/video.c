@@ -7,7 +7,6 @@
 
 #include "../../lib/string.h"
 #include "../../lib/logging.h"
-#include "../../lib/common.h"
 #include "../../lib/assert.h"
 #include "../../lib/panic.h"
 
@@ -280,7 +279,7 @@ struct BMPFileHeader {
     int32_t  h;          // BMP height in pixels
     uint16_t one;        // should be eq to 1
     uint16_t bpp;        // bits per pixel
-} __packed;
+} __attribute__((packed));
 
 
 static bool check_BMP_header(const struct BMPFileHeader* header) {

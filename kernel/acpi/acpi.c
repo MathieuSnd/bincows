@@ -6,7 +6,6 @@
 #include "acpi.h"
 #include "acpitables.h"
 
-#include "../lib/common.h"
 #include "../lib/assert.h"
 #include "../lib/dump.h"
 #include "../lib/sprintf.h"
