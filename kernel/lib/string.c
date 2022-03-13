@@ -334,7 +334,7 @@ char* strtok(char* restrict str, const char* restrict delim) {
 }
 
 
-int memsum(const char* ptr, size_t size) {
+int memsum(const void* ptr, size_t size) {
     uint8_t sum = 0;
     const uint8_t* raw = ptr;
 

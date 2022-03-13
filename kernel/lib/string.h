@@ -45,7 +45,7 @@ char* strtok_r(char* __restrict__ str, const char* __restrict__ delim, char** __
 int checksum(const void* table, size_t size);
 
 
-int memsum(const char* ptr, size_t size);
+int memsum(const void* ptr, size_t size);
 
 
 #endif//KSTRING_H
