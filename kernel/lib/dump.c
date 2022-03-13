@@ -53,7 +53,7 @@ void dump(const void* addr, size_t size, size_t line_size, uint8_t mode) {
     char base_id;
 
 
-    if((mode & DUMP_HEX) == 0) // hex
+    if((mode & DUMP_DEC) == 0) // hex
         base_id = 'x';
     else               // dec
         base_id = 'u';
