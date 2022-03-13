@@ -26,15 +26,6 @@ extern struct PCIE_Descriptor pcie_descriptor;
 static struct XSDT* xsdt;
 
 
-static bool __ATTR_PURE__ checksum(const void* table, size_t size) {
-    uint8_t sum = 0;
-    const uint8_t* raw = table;
-
-    for(size_t i;size > 0; --size) {
-        sum += raw[i++];
-    }
-    return sum == 0;
-}
 
 static void parse_madt(const struct MADT* table);
 static void parse_hpet(const struct HPET* table);

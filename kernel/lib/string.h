@@ -40,5 +40,12 @@ char* strtok(char* __restrict__ str, const char* __restrict__ delim);
 char* strtok_r(char* __restrict__ str, const char* __restrict__ delim, char** __restrict__ saveptr);
 
 
+// return 0 if the check sum is 0
+// this is equivalent to memsum(table, size) == 0
+int checksum(const void* table, size_t size);
+
+
+int memsum(const char* ptr, size_t size);
+
 
 #endif//KSTRING_H

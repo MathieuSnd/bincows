@@ -334,4 +334,20 @@ char* strtok(char* restrict str, const char* restrict delim) {
 }
 
 
+int memsum(const char* ptr, size_t size) {
+    uint8_t sum = 0;
+    const uint8_t* raw = ptr;
+
+    for(size_t i = 0;size > 0; --size) {
+        sum += raw[i++];
+    }
+    return sum;
+}
+
+int checksum(const void* table, size_t size) {
+    return ~memsum(table,size);
+}
+
+
+
 
