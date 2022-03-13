@@ -4,13 +4,21 @@
 HDD_ROOT := disc_root 
 DISK_FILE := disk.bin
 
-PARTITION := /dev/nvme0n1p5
+PARTITION :=/dev/nvme0n1p5
 
-USED_LOOPBACK := /dev/loop2
+USED_LOOPBACK :=/dev/loop2
 
 LIMINE_INSTALL := ./limine-bootloader/limine-install-linux-x86_64
 
 QEMU_PATH := qemu-system-x86_64
+
+
+# default: passing -g -fno-inline
+# to gcc
+# you can change this to 
+# 'release' to replace by
+# NDEBUG
+KERNEL_TARGET := debug
 
 
 QEMU_COMMON_ARGS := -bios ./ovmf/OVMF.fd \
@@ -19,12 +27,12 @@ QEMU_COMMON_ARGS := -bios ./ovmf/OVMF.fd \
 			 -vga virtio \
 			 -no-reboot  -no-shutdown \
 			 -D qemu.log \
-			 -trace "pci_nvme_*" \
-			 -trace "apic_*" \
-			-device nvme,drive=NVME1,serial=deadbeef \
+			 -device nvme,drive=NVME1,serial=deadbeef \
 			-drive format=raw,if=none,id=NVME1,file=disk.bin \
 
-
+# -trace "pci_nvme_*" \
+			 -trace "apic_*" \
+			
 			
 
 QEMU_ARGS := -monitor stdio $(QEMU_COMMON_ARGS)
@@ -39,6 +47,7 @@ run: all
 	$(QEMU_PATH) $(QEMU_ARGS)
 
 native_disk: all
+	./write_disk.sh
 	sudo $(QEMU_PATH) $(QEMU_ARGS) -device nvme,drive=NVME2,serial=dead \
 			-drive format=raw,if=none,id=NVME2,file=/dev/nvme0n1
 
@@ -55,8 +64,8 @@ test: force_look
 
 
 debug: all
-	$(QEMU_PATH) $(QEMU_DEBUG_ARGS)$(DISK_FILE)
-	gdb-multiarch -x gdb_cfg
+	$(QEMU_PATH) $(QEMU_DEBUG_ARGS)
+# gdb -x gdb_cfg ./disk_root/boot/kernel.elf
 pdebug: $(PARTITION)
 	DISK_FILE := $(PARTITION)
 	$(QEMU_PATH) $(QEMU_ARGS) 
@@ -83,7 +92,7 @@ $(DISK_FILE): kernel/entry.c
 diskfile: kernel $(DISK_FILE)
 	sudo losetup -P $(USED_LOOPBACK) $(DISK_FILE)
 	
-	sudo mkfs.fat -F 32 $(USED_LOOPBACK)p1
+	sudo /sbin/mkfs.fat -F 32 $(USED_LOOPBACK)p1
 	mkdir -p img_mount
 	sudo mount $(USED_LOOPBACK)p1 img_mount
 
@@ -96,7 +105,7 @@ diskfile: kernel $(DISK_FILE)
 
 
 kernel: force_look
-	$(MAKE) -C ./kernel/
+	$(MAKE) -C ./kernel/ $(KERNEL_TARGET)
 
 clean:
 	cd ./kernel/ && make clean

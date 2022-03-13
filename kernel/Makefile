@@ -21,7 +21,6 @@ INTERNALLDFLAGS :=  -Tlinker.ld            \
 INTERNALCFLAGS  :=  -mgeneral-regs-only    \
 					-ffreestanding         \
 					-mno-red-zone          \
-					-mno-80387             \
 					-fno-omit-frame-pointer\
 					-std=gnu11 			   \
 					-Wall -Wextra -Wno-trigraphs \
@@ -29,7 +28,7 @@ INTERNALCFLAGS  :=  -mgeneral-regs-only    \
 					-I/opt/cross/include/  \
 					-I../lai/include       \
 					-fPIE                  \
-					-fno-inline -g
+					
 #					-D BIGGER_FONT
 
 
@@ -47,7 +46,13 @@ OBJ    := $(patsubst ./%, $(BUILDDIR)/%, $(OBJ))
 
 LDSCRIPT := linker.ld 
 
-.PHONY: all clean
+.PHONY: all clean debug release
+
+debug: INTERNALCFLAGS += -fno-inline -g
+debug: all
+
+release: INTERNALCFLAGS += -DNDEBUG
+release: all
  
 all: $(KERNEL)
 
