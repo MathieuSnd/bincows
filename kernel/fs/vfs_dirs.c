@@ -10,7 +10,6 @@
 #include "../acpi/power.h"
 
 #include "../memory/heap.h"
-
 #include "fat32/fat32.h"
 
 typedef struct vdir
@@ -330,7 +329,7 @@ static void free_cache_entry(dir_cache_ent_t *cache_ent)
  * @param dent dirent data
  */
 static 
-void add_cache_entry(char* path, fs_t* fs, dirent_t* dent) {
+void add_cache_entry(char* path, fs_t* fs, fast_dirent_t* dent) {
     uint16_t hash = path_hash(path) & (cache_size - 1);
 
     dir_cache_ent_t *cache_ent = &cached_dir_list[hash];
@@ -382,7 +381,7 @@ static dirent_t *read_dir(fs_t *fs, ino_t ino, const char *dir_path, size_t *n)
         strcat(path, "/");
         strcat(path, dent->name);
 
-        add_cache_entry(path, fs, dent);
+        add_cache_entry(path, fs, &dent->fast);
     }
 
     return ents;
@@ -701,7 +700,7 @@ fs_t *vfs_open(const char *path, fast_dirent_t *dir)
     if (!vdir)
     {
         free(pathbuf);
-        // there is no wat the dir could
+        // there is no way the dir could
         // exist
         return NULL;
     }
@@ -714,12 +713,13 @@ fs_t *vfs_open(const char *path, fast_dirent_t *dir)
     char* parent_path = pathbuf + strlen(vdir->path);
 
 
-
     fast_dirent_t cur = {
         .ino = fs->root_addr,
         .file_size = 0,
         .type = DT_DIR,
     };
+
+
 
     char* name_end = parent_path; 
 
@@ -728,6 +728,10 @@ fs_t *vfs_open(const char *path, fast_dirent_t *dir)
         // entire path
         if(! name_end) break; 
 
+        // this is the first iteration
+        // and the path is "": this is the root
+        if(! *name_end) break; 
+
         // this should point to the 
         // '/' separator between the
         // end of the parent path and
@@ -735,7 +739,7 @@ fs_t *vfs_open(const char *path, fast_dirent_t *dir)
         // file name
         char* name_sep = name_end;
 
-        name_end = strchr(name_sep + 1, '/');
+        name_end = (char*) strchr(name_sep + 1, '/');
 
 
         if(name_end)
@@ -761,6 +765,8 @@ fs_t *vfs_open(const char *path, fast_dirent_t *dir)
 
             continue;
         }
+
+        // miss
 
         *name_sep = '\0';
 
