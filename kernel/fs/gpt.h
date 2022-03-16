@@ -32,7 +32,7 @@ typedef struct disk_part {
 } disk_part_t;
 
 inline 
-static unsigned __attribute__((pure)) block_size(disk_part_t* part) {
+static unsigned __attribute__((pure)) block_size(const disk_part_t* part) {
     return 1 << part->interface->lbashift;
 }
 
