@@ -57,22 +57,10 @@ typedef struct file {
 // in the vfs
 typedef uint64_t ino_t;
 
-/**
- * @brief almost linux complient dirent
- * (missing d_off)
- * structure used by vfs_read_dir
- */
-typedef struct dirent {
-    ino_t         ino;       /* Inode number */
-    size_t        file_size;    /* Length of this record */
-    unsigned char type;      /* Type of file; not supported
-                                    by all filesystem types */
-    char          name[MAX_FILENAME_LEN+1]; /* Null-terminated filename */
-} dirent_t;
 
 
 /**
- * same as above but without
+ * same as bellow but without
  * the name, for moments
  * when it's not needed
  * 
@@ -83,6 +71,26 @@ typedef struct fast_dirent {
     unsigned char   type;      /* Type of file; not supported
                                     by all filesystem types */
 } fast_dirent_t;
+
+
+/**
+ * @brief almost linux complient dirent
+ * (missing d_off)
+ * structure used by vfs_read_dir
+ */
+typedef struct dirent {
+    union {
+        fast_dirent_t fast;
+        struct {
+            ino_t         ino;       /* Inode number */
+            size_t        file_size; /* Length of this record */
+            unsigned char type;      /* Type of file; not supported
+                                        by all filesystem types */
+        };
+    };
+
+    char name[MAX_FILENAME_LEN+1];   /* Null-terminated filename */
+} dirent_t;
 
 
 /**
@@ -140,6 +148,7 @@ typedef struct fs {
      */
     uint64_t root_addr;
 
+
     /**
      * @brief create a cursor over a file
      * 
@@ -177,7 +186,7 @@ typedef struct fs {
      * first sector to read
      * @return int the number of read bytes.
      */
-    int (*read_file_sectors)(struct fs* restrict fs,file_t* fd,
+    int (*read_file_sectors)(struct fs* restrict fs,file_t* restrict fd,
             void* restrict buf, uint64_t begin, size_t n);
 
 
@@ -217,7 +226,7 @@ typedef struct fs {
      * structure elementns
      * 
      */
-    dirent_t* (*read_dir)(struct fs* fs, uint64_t dir_addr, size_t* n);
+    dirent_t* (*read_dir)(struct fs* restrict fs, uint64_t dir_addr, size_t* restrict n);
 
     /**
      * @brief remove a list of dir entries
@@ -246,11 +255,24 @@ typedef struct fs {
                 const char* file_name, uint64_t file_addr, uint64_t file_size);
 
 
+    /**
+     * @brief add a dirent to a given directory
+     * 
+     * @param dir_addr  the directory to add a dirent to
+     * @param name      name of the dirent to create
+     * @param dirent_addr the address of the dirent to create
+     * @param file_szie must be 0 if the dirent to create is not 
+     * a file. Otherwise, it should be the filesize in bytes
+     * @param type the type of the dirent to create (DT_REG, DT_DIR, ...)
+     * @return int 0 on success
+     */
+    int (*add_dirent)(struct fs* restrict fs, uint64_t dir_addr, const char* name, 
+                    uint64_t dirent_addr, uint64_t file_size, unsigned type);
+
 /*
-    int create_dirent(uint64_t parent_dir_addr, unsigned type);
-    int move_dirent(uint64_t addr, uint64_t src_parent_addr, uint64_t dst_parent_addr);
     int remove_dirent(uint64_t addr, uint64_t src_parent_addr);
 */
+
 
     /**
      * @brief destruct this structure,
@@ -263,6 +285,7 @@ typedef struct fs {
      * 
      */
     void (*unmount)(struct fs* fs);
+
 } fs_t;
 
 
