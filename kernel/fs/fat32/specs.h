@@ -54,14 +54,14 @@ typedef struct fat_dir {
 
 
 typedef struct fat_long_filename {
-	uint8_t  order;
-	uint16_t chars0[5];
-	uint8_t  attr; // = FAT32_LFN
-	uint8_t  checksum;
-	uint8_t  type;
-	uint16_t chars1[6];
-	uint16_t zero;
-	uint16_t chars2[2];
+	uint8_t  order;						// 43
+	uint16_t chars0[5];					// ame_w
+	uint8_t  attr; // = FAT32_LFN       // f
+	uint8_t  type;						// 0
+	uint8_t  checksum;					// ?
+	uint16_t chars1[6];					// tf.aya
+	uint16_t zero;						// 0
+	uint16_t chars2[2];	
 } __attribute__((packed)) fat_long_filename_t;
 
 

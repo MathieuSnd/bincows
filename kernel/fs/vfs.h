@@ -53,6 +53,22 @@ void vfs_init(void);
 // free every memory block
 void vfs_cleanup(void);
 
+
+/**
+ * @brief create a file.
+ * Can only create file if
+ * the parent directory already 
+ * exists
+ * 
+ * 
+ * @param path file path to create
+ * @param type DT_DIR, DT_REG, ...
+ * @return 0 on success,
+ * non 0 on failure
+ */
+int vfs_create(const char* path, int type);
+
+
 /**
  * @brief file handler used to read,
  * write, seek. Uses polymorphic calls

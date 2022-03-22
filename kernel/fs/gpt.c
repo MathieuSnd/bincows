@@ -88,8 +88,10 @@ void gpt_remove_drive_parts(driver_t* driver) {
             
             // the partition is mounted
             // somewhere
-            if(partitions[i].mount_point) 
+            if(partitions[i].mount_point) {
+                log_warn("part %u is mounted on %s, let's unmount it", i, partitions[i].mount_point);
                 vfs_unmount(partitions[i].mount_point);
+            }
 
             n_removed++;
             n_partitions--;

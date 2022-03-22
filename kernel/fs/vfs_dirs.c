@@ -38,10 +38,9 @@ static dir_cache_ent_t *cached_dir_list;
 // cache size must be a power of two
 static unsigned cache_size = 0;
 
-// dynamic array of every mounted
-// file system
-// static fs_t** mounted_fs_list = NULL;
-// static unsigned n_mounted_fs = 0;
+
+static int unmount(vdir_t *vdir);
+
 
 static int is_absolute(const char *path)
 {
@@ -125,22 +124,31 @@ uint16_t path_hash(const char *path)
 
 // recursively destruct the entire
 // vdir tree
+// does not remove the root path
 static void free_vtree(vdir_t *root)
 {
     for (unsigned i = 0; i < root->n_children; i++)
     {
         vdir_t *child = &root->children[i];
-
+        log_warn("free_vtree");
+        log_warn("unmounting %s", child->path);
         // unmount mounted entries
         if (child->fs)
-            child->fs->unmount(child->fs);
+            unmount(child);
         else
             free_vtree(child);
 
-        free(child->path);
-        free(child);
     }
-    root->n_children = 0;
+
+    if(root->n_children) {
+        free(root->children);
+        root->n_children = 0;
+    }
+
+    // don't free the root path:
+    // the vfs root path is static
+
+    log_warn("free_vtree end");
 }
 
 // return the vdir associated with given fs
@@ -184,13 +192,18 @@ static int remove_vdir(vdir_t *vdir)
             if (&vd->children[i] == vdir)
             {
                 // actually remove it
+                free(vdir->path);
+
                 memmove(
                     vd->children + i,
                     vd->children + i + 1,
                     (vd->n_children - i - 1) * sizeof(vdir_t)
                 );
+                
+
 
                 vd->n_children--;
+                vd->children = realloc(vd->children, vd->n_children);
 
                 return 1;
             }
@@ -217,8 +230,7 @@ static int remove_vdir(vdir_t *vdir)
 
 // return 0 iif something
 // went wrong
-static int unmount(vdir_t *vdir)
-{
+static int unmount(vdir_t *vdir) {
     fs_t *fs = vdir->fs;
     assert(vdir);
 
@@ -237,14 +249,29 @@ static int unmount(vdir_t *vdir)
 
         return 0;
     }
+    
+    // assert that the partition 
+    // is actually mounted
 
+    log_warn("----------------------------------------------------- %u", fs->part->mount_point);
+
+    assert(fs->part->mount_point);
+    
     free(fs->part->mount_point);
+
     fs->part->mount_point = NULL;
+    // set the partition not mounted
+        
 
     if (vdir == &vfs_root)
         vfs_root.fs = NULL;
-    else
+    else {
         free_vtree(vdir);
+        remove_vdir(vdir);
+    }
+
+    
+
 
     // remove cache entries related with this thing
     for (unsigned i = 0; i < cache_size; i++)
@@ -255,6 +282,8 @@ static int unmount(vdir_t *vdir)
             cached_dir_list[i].path = NULL;
         }
     }
+
+    fs->unmount(fs);
 
     return 1;
 }
@@ -655,16 +684,16 @@ static dir_cache_ent_t *get_cache_entry(const char *path)
     // check cache
     dir_cache_ent_t *ent = &cached_dir_list[hash];
     if (ent->path == NULL) {// not present entry
-        log_debug("VFS cache miss for %s (hash %u): not present", path, hash);
+        //log_debug("VFS cache miss for %s (hash %u): not present", path, hash);
         return NULL;
     }
 
     if (!strcmp(ent->path, path)) {// right entry (no collision)
-        log_debug("VFS cache hit for %s (hash %u)", path, hash);
+        //log_debug("VFS cache hit for %s (hash %u)", path, hash);
         return ent;
     }
 
-    log_debug("VFS cache miss for %s (hash %u): conflit", path, hash);
+    //log_debug("VFS cache miss for %s (hash %u): conflit", path, hash);
 
     return NULL;
 }
@@ -680,8 +709,6 @@ fs_t *vfs_open(const char *path, fast_dirent_t *dir)
     simplify_path(pathbuf, path);
     assert(is_absolute(pathbuf));
 
-
-    log_warn("VFS OPEN: %s -> %s", path, pathbuf);
 
     // check cache
     dir_cache_ent_t *ent = get_cache_entry(pathbuf);
@@ -886,7 +913,7 @@ int vfs_mount(disk_part_t *part, const char *path)
 
 int vfs_unmount(const char *path)
 {
-    log_warn("vfs_unmount(%s)", path);
+    log_info("vfs_unmount(%s)", path);
     // do stuf!
     char *pbuf = malloc(strlen(path) + 1);
     simplify_path(pbuf, path);
@@ -899,6 +926,46 @@ int vfs_unmount(const char *path)
         return 0;
     log_info("unmounting %s", path);
     return unmount(vdir);
+}
+
+
+
+int vfs_create(const char* path, int type) {
+    char* pathbuf = malloc(strlen(path) + 1);
+
+    simplify_path(pathbuf, path);
+
+    char* last_sep = (char*)strrchr(pathbuf, '/');
+
+    if(!last_sep) {
+        // bad
+        free(pathbuf);
+        return 1;
+    }
+
+
+    *last_sep = 0;
+
+    fast_dirent_t parentdir;
+    fs_t* fs = vfs_open(pathbuf, &parentdir);
+
+    free(pathbuf);
+
+    // if the parent directory
+    // is not a directory, or does not
+    // exist
+    if(!fs || parentdir.type != DT_DIR)
+        return 1;
+    
+
+    // actually add the entry
+
+    
+    assert(0);
+    //fs->add_dirent()
+    
+
+    return 0;
 }
 
 

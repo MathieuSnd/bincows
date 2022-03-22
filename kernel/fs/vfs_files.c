@@ -371,7 +371,7 @@ size_t vfs_read_file(void *ptr, size_t size, size_t nmemb,
 
     if(bsize == 0)
         return 0;
-    
+
 
     // first read unaligned 
     if(stream->buffer_valid && cachable) {
