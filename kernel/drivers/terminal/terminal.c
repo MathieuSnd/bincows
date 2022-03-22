@@ -31,7 +31,14 @@ static void flush_screen    (driver_t* this);
 
 struct data {
     terminal_handler_t terminal_handler;
-    struct Char* char_buffer;
+
+    // double char buffering,
+    // single pixel buffering
+    struct Char* char_buffers[2];
+
+    // the buffer swiches when flushing it:
+    // generally when scrolling
+    unsigned cur_char_buffer;
 
     uint16_t ncols, nlines;
     uint16_t term_nlines;
@@ -44,6 +51,8 @@ struct data {
     uint32_t current_bgcolor;
     unsigned margin_left, margin_top;
     unsigned timerID;
+
+    // this buffer keeps a copy of the framebuffer
 };
 
 
@@ -113,6 +122,7 @@ char terminal_install(driver_t* this) {
 // as we will realloc it
     struct data* restrict d = this->data = malloc(sizeof(struct data));
 
+
     d->first_line = 0;
     
 // dynamicly create the terminal
@@ -146,14 +156,23 @@ char terminal_install(driver_t* this) {
     d->margin_left = d->margin_left & ~0xf;
 
 
+    // allocate a framebuffer copy 
+    //data->framebuffer = malloc(framebuffer);
+
+
     // allocate the terminal buffer
     // to minimize the number of heap allocations,
     // we realloc our data buffer
+    size_t charbuffer_size = d->ncols * d->nlines * sizeof(struct Char);
+
     d = this->data = realloc(d, 
                         sizeof(struct data) 
-                     + d->ncols * d->nlines * sizeof(struct Char));
+                     + charbuffer_size);
 
-    d->char_buffer = ((void*) d) + sizeof(struct data);
+    d->char_buffers[0] = ((void*) d) + sizeof(struct data);
+    d->char_buffers[1] = ((void*) d->char_buffers[0]) + charbuffer_size;
+
+    d->cur_char_buffer = 0;
 
 
     //d->timerID = apic_create_timer(
@@ -205,7 +224,7 @@ void terminal_clear(driver_t* this) {
     
     size_t buffer_len = d->nlines * d->ncols;
 
-    struct Char* ptr = d->char_buffer;
+    struct Char* ptr = d->char_buffers[d->cur_char_buffer];
 
     for(;buffer_len > 0; --buffer_len)
         *(ptr++) = make_Char(this, 0);
@@ -239,15 +258,19 @@ static void move_buffer(driver_t* this, int lines) {
         size_t bytes = d->ncols * lines;
         size_t buff_size = d->nlines * d->ncols;
 
-        memmove(
-            d->char_buffer, 
-            d->char_buffer + bytes,
+        unsigned old = d->cur_char_buffer;
+
+        unsigned new = d->cur_char_buffer = !d->cur_char_buffer;
+        
+        memcpy(
+            d->char_buffers[new], 
+            d->char_buffers[old] + bytes,
             sizeof(struct Char)*(buff_size - bytes)
         );
 
         // cannot touch the first one: it is already written
         for(unsigned i = 1; i < bytes; i++) {
-            d->char_buffer[i+buff_size-bytes] = make_Char(this,0);
+            d->char_buffers[new][i+buff_size-bytes] = make_Char(this,0);
         }
     }
 }
@@ -262,7 +285,7 @@ static void next_line(driver_t* this) {
         move_buffer(this, 4);
     }  
     else if(d->cur_line >= d->first_line + d->term_nlines) {
-        d->first_line++;
+        d->first_line += 4;
         d->need_refresh = true;
     }
 }
@@ -286,9 +309,9 @@ static void emplace_normal_char(driver_t* this, char c) {
         next_line(this);
     }
     
-    d->char_buffer[d->ncols * d->cur_line + d->cur_col] = make_Char(this, c);
+    d->char_buffers[d->cur_char_buffer][d->ncols * d->cur_line + d->cur_col] = make_Char(this, c);
     
-    struct Char* ch = &d->char_buffer[d->ncols * d->cur_line + d->cur_col];
+    struct Char* ch = &d->char_buffers[d->cur_char_buffer][d->ncols * d->cur_line + d->cur_col];
     
     if(!d->need_refresh)
         print_char(this, ch, d->cur_line - d->first_line, d->cur_col);
@@ -387,7 +410,8 @@ static void print_char(driver_t* this,
 static void flush_screen(driver_t* this) {
     struct data* d = this->data;
         // begins at the terminal's first line
-    const struct Char* curr = d->char_buffer + d->first_line * d->ncols;
+    const struct Char* curr = d->char_buffers[d->cur_char_buffer]
+                                     + d->first_line * d->ncols;
 
     for(size_t l = 0; l < d->term_nlines; l++) {
         for(size_t c = 0; c < d->ncols; c++) {
