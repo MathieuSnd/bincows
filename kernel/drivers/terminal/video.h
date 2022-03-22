@@ -76,15 +76,27 @@ void bmp_free(Image* i);
 
 
 
-void blitchar(const struct framebuffer_dev* dev,
+void blitchar(void*, unsigned,
               const struct Image *charset,
               char c, uint32_t fg_color, uint32_t bg_color,
               uint16_t dstx, uint16_t dsty
 );
-void blitcharX2(const struct framebuffer_dev* dev,
+void blitcharX2(void*, unsigned,
                 const struct Image *charset,
                 char c, uint32_t fg_color, uint32_t bg_color,
                 uint16_t dstx, uint16_t dsty
 );
+
+// non temporal equivalent functions
+// taking 2 chars to fill entire non
+// temporal cache lines
+void nt_blitchar(const struct framebuffer_dev* dev,
+              const struct Image *charset,
+              char c0, uint32_t fg_color0, uint32_t bg_color0,
+              char c1, uint32_t fg_color1, uint32_t bg_color1,
+              uint16_t dstx0, uint16_t dsty
+);
+
+
 
 #endif

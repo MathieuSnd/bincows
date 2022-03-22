@@ -6,6 +6,7 @@
 #include "video.h"
 
 #include "../../lib/string.h"
+#include "../../lib/registers.h"
 #include "../../lib/assert.h"
 #include "../../lib/logging.h"
 #include "../../memory/heap.h"
@@ -32,13 +33,16 @@ static void flush_screen    (driver_t* this);
 struct data {
     terminal_handler_t terminal_handler;
 
-    // double char buffering,
-    // single pixel buffering
-    struct Char* char_buffers[2];
+    // single char buffering,
+    struct Char* char_buffer;
 
+    // double pixel buffering
+    void* px_buffers[2];
     // the buffer swiches when flushing it:
     // generally when scrolling
-    unsigned cur_char_buffer;
+    unsigned cur_px_buffer;
+
+    size_t fb_size;
 
     uint16_t ncols, nlines;
     uint16_t term_nlines;
@@ -164,15 +168,21 @@ char terminal_install(driver_t* this) {
     // to minimize the number of heap allocations,
     // we realloc our data buffer
     size_t charbuffer_size = d->ncols * d->nlines * sizeof(struct Char);
+    size_t pxbuffer_size   = dev->height * dev->pitch;
 
     d = this->data = realloc(d, 
                         sizeof(struct data) 
-                     + charbuffer_size);
+                     + charbuffer_size
+                     + 2 * pxbuffer_size);
 
-    d->char_buffers[0] = ((void*) d) + sizeof(struct data);
-    d->char_buffers[1] = ((void*) d->char_buffers[0]) + charbuffer_size;
+    d->fb_size = pxbuffer_size;
+    d->char_buffer = ((void*) d) + sizeof(struct data);
+    d->px_buffers[0] = ((void*) d->char_buffer)   + charbuffer_size;
+    d->px_buffers[1] = ((void*) d->px_buffers[0]) + pxbuffer_size;
+    
+    memset(d->px_buffers[0], 0, 2 * pxbuffer_size);
 
-    d->cur_char_buffer = 0;
+    d->cur_px_buffer = 0;
 
 
     //d->timerID = apic_create_timer(
@@ -224,7 +234,7 @@ void terminal_clear(driver_t* this) {
     
     size_t buffer_len = d->nlines * d->ncols;
 
-    struct Char* ptr = d->char_buffers[d->cur_char_buffer];
+    struct Char* ptr = d->char_buffer;
 
     for(;buffer_len > 0; --buffer_len)
         *(ptr++) = make_Char(this, 0);
@@ -258,19 +268,15 @@ static void move_buffer(driver_t* this, int lines) {
         size_t bytes = d->ncols * lines;
         size_t buff_size = d->nlines * d->ncols;
 
-        unsigned old = d->cur_char_buffer;
-
-        unsigned new = d->cur_char_buffer = !d->cur_char_buffer;
-        
-        memcpy(
-            d->char_buffers[new], 
-            d->char_buffers[old] + bytes,
+        memmove(
+            d->char_buffer, 
+            d->char_buffer + bytes,
             sizeof(struct Char)*(buff_size - bytes)
         );
 
         // cannot touch the first one: it is already written
         for(unsigned i = 1; i < bytes; i++) {
-            d->char_buffers[new][i+buff_size-bytes] = make_Char(this,0);
+            d->char_buffer[i+buff_size-bytes] = make_Char(this,0);
         }
     }
 }
@@ -309,9 +315,9 @@ static void emplace_normal_char(driver_t* this, char c) {
         next_line(this);
     }
     
-    d->char_buffers[d->cur_char_buffer][d->ncols * d->cur_line + d->cur_col] = make_Char(this, c);
+    d->char_buffer[d->ncols * d->cur_line + d->cur_col] = make_Char(this, c);
     
-    struct Char* ch = &d->char_buffers[d->cur_char_buffer][d->ncols * d->cur_line + d->cur_col];
+    struct Char* ch = &d->char_buffer[d->ncols * d->cur_line + d->cur_col];
     
     if(!d->need_refresh)
         print_char(this, ch, d->cur_line - d->first_line, d->cur_col);
@@ -360,46 +366,26 @@ static void print_char(driver_t* this,
                        int line, int col) {
 
     struct data* restrict d = this->data;
-/*
-    Pos srcpos = {
-        FONTWIDTH  * c_x,
-        FONTHEIGHT * c_y,
-    };
-    Rect dstrect = {
-        .x = col  * FONTWIDTH, 
-        .y = line * LINE_HEIGHT,
 
-        .w = FONTWIDTH,
-        .h = FONTHEIGHT,
-    };
-*/
-    //imageDrawMask(charmap, &srcpos, &dstrect, c->fg_color, c->bg_color);
-    //imageLower_draw(charmap, &srcpos, &dstrect);
-    //imageLower_blitBinaryMask(
-    //    charmap,
-    //    FONTWIDTH * c_x,  FONTHEIGHT * c_y,
-    //    col  * FONTWIDTH, line * LINE_HEIGHT,
-    //    FONTWIDTH, FONTHEIGHT,
-    //    c->bg_color, c->fg_color);
-    //
-    /*
-    Rect interlineRect = {
-        .x = col  * FONTWIDTH, 
-        .y = line * LINE_HEIGHT + FONTHEIGHT,
-        .w = FONTWIDTH,
-        .h = INTERLINE,
-    };
-*/
+    struct framebuffer_dev * dev = (struct framebuffer_dev *)this->device;
+
+    void* pitch = dev->pitch;
+    void* px = dev->pix;
+
+    void* px_buffer = d->px_buffers[d->cur_px_buffer];
 #ifdef BIGGER_FONT
     blitcharX2((struct framebuffer_dev *)this->device, 
                 &charmap, c->c, c->fg_color, c->bg_color,
                 d->margin_left + 2 * col  * TERMINAL_FONTWIDTH, 
                 d->margin_top  + 2 * line * TERMINAL_LINE_HEIGHT);
     
-
 #else
-
-    blitchar((struct framebuffer_dev *)this->device, 
+    blitchar(px, pitch, 
+             &charmap, c->c, c->fg_color, c->bg_color,
+             d->margin_left + col  * TERMINAL_FONTWIDTH, 
+             d->margin_top  + line * TERMINAL_LINE_HEIGHT);
+             
+    blitchar(px_buffer, pitch, 
              &charmap, c->c, c->fg_color, c->bg_color,
              d->margin_left + col  * TERMINAL_FONTWIDTH, 
              d->margin_top  + line * TERMINAL_LINE_HEIGHT);
@@ -407,17 +393,113 @@ static void print_char(driver_t* this,
 
 }
 
+// print in buffer exclusively
+static void buff_print_char(driver_t* this, 
+        const struct Char* restrict c, 
+        int line, int col
+) {
+    struct framebuffer_dev * dev = (struct framebuffer_dev *)this->device;
+   
+    struct data* restrict d = this->data;
+    
+    void* px = d->px_buffers[d->cur_px_buffer];
+    void* pitch = dev->pitch;
+
+#ifdef BIGGER_FONT
+    blitcharX2((struct framebuffer_dev *)this->device, 
+                &charmap, c->c, c->fg_color, c->bg_color,
+                d->margin_left + 2 * col  * TERMINAL_FONTWIDTH, 
+                d->margin_top  + 2 * line * TERMINAL_LINE_HEIGHT);
+    
+#else
+    blitchar(px, pitch, 
+             &charmap, c->c, c->fg_color, c->bg_color,
+             d->margin_left + col  * TERMINAL_FONTWIDTH, 
+             d->margin_top  + line * TERMINAL_LINE_HEIGHT);
+#endif
+}
+
+static void update_framebuffer(driver_t* this) {
+    struct data* restrict d = this->data;
+    struct framebuffer_dev * dev = (struct framebuffer_dev *)this->device;
+    
+    // 64 bytes = 8 qwords
+    const unsigned cache_line = 8;
+
+    uint64_t* devfb = dev->pix;
+    uint64_t* buff = d->px_buffers[d->cur_px_buffer];
+    uint64_t* otherbuff = d->px_buffers[!d->cur_px_buffer];
+    //asm("int $3");
+
+    //set_cr0(get_cr0() | (3llu << 9));
+
+    for(unsigned i = 0; i < d->fb_size / 8; i += cache_line) {
+        uint64_t diff = 0;
+
+        uint64_t* ptr = buff;
+
+        uint64_t* otherptr = otherbuff;
+
+        // check if something is modified
+        for(unsigned i = 0; i < cache_line; i++) {
+            diff = *(ptr++) ^ *(otherptr++);
+            if(diff)
+                break;
+        }
+
+        if(!!diff) {
+            // have to append changes
+
+            ptr = buff;
+            uint64_t* devptr = devfb;
+//
+            for(unsigned j = 0; j < cache_line; j++) {
+                asm volatile(
+                    "movnti %1, %0"
+                    : "=m" (*(devptr++))
+                    : "r"  (*ptr++)
+                );
+            }
+       }
+       else {
+            uint64_t* devptr = devfb;
+            //for(unsigned j = 0; j < cache_line; j++)
+            //    *(devptr++) = 0x00;
+
+       }
+
+        buff      += cache_line;
+        otherbuff += cache_line;
+        devfb     += cache_line;
+    }
+
+    //set_cr0(get_cr0() & ~(3 << 9));
+
+}
+
+
 static void flush_screen(driver_t* this) {
     struct data* d = this->data;
         // begins at the terminal's first line
-    const struct Char* curr = d->char_buffers[d->cur_char_buffer]
-                                     + d->first_line * d->ncols;
+    const struct Char* curr = d->char_buffer + d->first_line * d->ncols;
+
+
+    d->cur_px_buffer = !d->cur_px_buffer;
+    
 
     for(size_t l = 0; l < d->term_nlines; l++) {
+        /*
+        for(size_t c = 0; c < d->ncols; c += 2) {
+            nt_print_chars(this, curr, l, c);
+            curr += 2;
+        }
+        */
         for(size_t c = 0; c < d->ncols; c++) {
-            print_char(this, curr++, l, c);
+            buff_print_char(this, curr, l, c);
+            curr++;
         }
     }
+    update_framebuffer(this);
 }
 
 

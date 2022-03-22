@@ -419,7 +419,7 @@ for(ptr = col; ; ptr += 2px) {
 */
 __attribute__((optimize("unroll-loops")))
 
-void blitchar(const struct framebuffer_dev* dev,
+void blitchar(void* pixels, unsigned pitch,
               const struct Image* charset,
               char c, uint32_t fg_color, uint32_t bg_color,
               uint16_t dstx, uint16_t dsty
@@ -435,8 +435,8 @@ void blitchar(const struct framebuffer_dev* dev,
     uint16_t srcy = c * TERMINAL_FONTHEIGHT;
      
 
-    uint64_t* dst_ptr = (uint64_t *)(dev->pix + dev->pitch * dsty + 4 * dstx);
-    uint16_t  dst_skip = dev->pitch - TERMINAL_FONTWIDTH * 4;
+    uint64_t* dst_ptr = (uint64_t *)(pixels + pitch * dsty + 4 * dstx);
+    uint16_t  dst_skip = pitch - TERMINAL_FONTWIDTH * 4;
 
     // 4 2-byte lines = 8*8 = 64 (1 access every 4 lines)
 
@@ -470,7 +470,7 @@ void blitchar(const struct framebuffer_dev* dev,
 
 __attribute__((optimize("unroll-loops")))
 
-void blitcharX2(const struct framebuffer_dev* dev,
+void blitcharX2(void* pixels, unsigned pitch,
                 const struct Image* charset,
                 char c, uint32_t fg_color, uint32_t bg_color,
                 uint16_t dstx, uint16_t dsty
@@ -485,11 +485,11 @@ void blitcharX2(const struct framebuffer_dev* dev,
     
     uint16_t srcy = c * TERMINAL_FONTHEIGHT;
 
-    uint64_t* dst_ptr = (uint64_t *)(dev->pix + dev->pitch * dsty + 4 * dstx);
-    uint16_t  dst_skip = 2 * dev->pitch - 2 * TERMINAL_FONTWIDTH * 4;
+    uint64_t* dst_ptr = (uint64_t *)(pixels + pitch * dsty + 4 * dstx);
+    uint16_t  dst_skip = 2 * pitch - 2 * TERMINAL_FONTWIDTH * 4;
 
 /// second line to modify
-    uint64_t* dst_ptr2 = dst_ptr + dev->pitch / 8;
+    uint64_t* dst_ptr2 = dst_ptr + pitch / 8;
 
     uint64_t* lines_ptr = (uint64_t*)charset->pix + srcy / sizeof(uint64_t);
     uint64_t lines = *lines_ptr;
