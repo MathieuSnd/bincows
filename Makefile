@@ -82,9 +82,9 @@ $(PARTITION): kernel
 
 
 $(DISK_FILE): kernel/entry.c
-	dd if=/dev/zero bs=1M count=0 seek=72 of=$(DISK_FILE)
+	dd if=/dev/zero bs=1M count=0 seek=513 of=$(DISK_FILE)
 	sudo /sbin/parted -s $(DISK_FILE) mklabel gpt
-	sudo /sbin/parted -s $(DISK_FILE) mkpart Bincows fat32 2048s 100%
+	sudo /sbin/parted -s $(DISK_FILE) mkpart Bincows fat32 0% 100%
 	sudo /sbin/parted -s $(DISK_FILE) set 1 esp on
 #	$(LIMINE_INSTALL) $(DISK_FILE)
 
@@ -92,7 +92,7 @@ $(DISK_FILE): kernel/entry.c
 diskfile: kernel $(DISK_FILE)
 	sudo losetup -P $(USED_LOOPBACK) $(DISK_FILE)
 	
-	sudo /sbin/mkfs.fat -F 32 $(USED_LOOPBACK)p1
+	sudo /sbin/mkfs.fat -F 32 $(USED_LOOPBACK)p1 -s 8
 	mkdir -p img_mount
 	sudo mount $(USED_LOOPBACK)p1 img_mount
 
