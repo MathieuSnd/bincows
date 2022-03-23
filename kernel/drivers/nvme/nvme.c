@@ -1121,8 +1121,10 @@ void nvme_async_read(struct driver* this,
 
 void nvme_sync(driver_t* this) {
     struct data* data = this->data;
-    
-    while(!queue_empty(&data->io_queues.cq))
+    while(
+        !queue_empty(&data->io_queues.cq)
+     || !queue_empty(&data->io_queues.sq) 
+    )
         sleep(1);
 }
 
