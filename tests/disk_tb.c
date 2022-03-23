@@ -20,16 +20,16 @@ void dread(struct driver* this,
                 void*    buf,
                 size_t   count
 ) {
+  //  printf("READ %u blocks blocks: %lu -> %lu\n", count, lba, lba+count);
     struct data* data = this->data;
     size_t size = 1 << data->si.lbashift;
 
     char* sbuf = malloc(size*count);
     fseek(data->f, lba * size, SEEK_SET);
-    assert(fread(sbuf, size, count, data->f) == count);
+    size_t c = fread(sbuf, size, count, data->f);
+    assert(c == count);
     memcpy(buf, sbuf, size*count);
     free(sbuf);
-
-    printf("READ %u blocks\n", count);
 }
 
 
@@ -43,7 +43,7 @@ void dasync_read(struct driver* this,
 }
 
 static void dsync(struct driver* this) {
-    printf("SYNC\n");
+    //printf("SYNC\n");
     (void) this;
 }
 
@@ -58,15 +58,22 @@ void dwrite(struct driver* this,
     size_t size = 1 << data->si.lbashift;
 
     fseek(data->f, lba * size, SEEK_SET);
-    assert(fwrite(buf, size, count, data->f) == count);
+    size_t c = fwrite(buf, size, count, data->f);
+    assert(c == count);
+
+    //printf("WRITE %u blocks: %lu -> %lu\n", count, lba, lba+count);
 }
 
 
 static
 void dremove(driver_t* this) {
-    fclose(this->data);
+    printf("REMOVE DISK TB\n");
+    assert(this->status == DRIVER_STATE_OK);
+    fclose(((struct data*)this->data)->f);
     this->status = DRIVER_STATE_SHUTDOWN;
+    free(this->data);
 }
+
 
 static 
 int install(driver_t* this) {

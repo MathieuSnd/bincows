@@ -1,13 +1,21 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+
+#ifdef NDEBUG
+#define assert(x) do { (void)sizeof(x);} while (0)
+#else
+#include <assert.h>
+#endif
+
 #include <fs/vfs.h>
-#include <lib/assert.h>
+//#include <assert.h>
 #include <lib/string.h>
 #include <lib/panic.h>
 #include <lib/logging.h>
 #include <lib/dump.h>
 #include <acpi/power.h>
+
 
 #include "../tests.h"
 
@@ -66,11 +74,11 @@ static inline
 void test_write(void) {
     file_handle_t* f = vfs_open_file("/fs/file.dat");
     assert(f);
-
-    assert(!vfs_seek_file(f, 0, SEEK_END));
+    int r = vfs_seek_file(f, 0, SEEK_END);
+    assert(!r);
     log_warn("FILE SIZE = %u", vfs_tell_file(f));
 
-    size_t seek = 234567;
+    size_t seek = 0;//234567;
 
     vfs_seek_file(f, seek, SEEK_SET);
 
@@ -84,7 +92,10 @@ void test_write(void) {
     vfs_seek_file(f, seek, SEEK_SET);
 
     char rd[1025];
-    assert(vfs_read_file(rd, 1024, 1, f) == 1);
+    memset(rd, 0x69, 1024);
+
+    size_t read = vfs_read_file(rd, 1024, 1, f);
+    assert(read == 1);
     rd[1024] = 0;
     printf("READ: %s\n\n", rd);
     printf("READ: %c\n\n", *rd);
@@ -154,7 +165,7 @@ void test_file_write_extend(void) {
 
     assert(writer);
 
-    size_t dsize = 3001;
+    size_t dsize = 3000;
     uint8_t* buf = malloc(dsize);
 
     for(int i = 0; i < dsize; i++)
@@ -190,22 +201,23 @@ static inline
 void test_disk_overflow(void) {
     file_handle_t* f = vfs_open_file("/////fs/boot/limine.cfg//");
 
-    const int bsize = 1024 * 1024;
+    const int bsize = 8 * 1024 * 1024;  
 
-    const size_t size = 1024*1024*28;
+    const size_t size = bsize * 20;
 
-    uint8_t* buf = malloc(bsize);
-    for(int i = 0; i < bsize; i++)
+    uint16_t* buf = malloc(bsize);
+    for(int i = 0; i < bsize/2; i++)
         buf[i] = i;
 
     uint64_t time = clock();
 
-    for(int i = 0; i < size / bsize; i++) {
+    for(unsigned i = 0; i < size / bsize; i++) {
         log_debug("write %u (%u)", i * bsize, clock() - time);
         time = clock();
         
         assert(vfs_write_file(buf, bsize, 1, f) == 1); 
     }
+    //assert(0);
 
 // check
     //read
@@ -214,19 +226,29 @@ void test_disk_overflow(void) {
     f = vfs_open_file("/////fs/boot/limine.cfg//");
 
     time = clock();
-    int rsize = 1024 * 1024;
+    int rsize = bsize;
     int i = 0;
     while(vfs_read_file(buf, rsize, 1, f) == 1) {
         int begin = i++ * rsize;
         log_debug("read %u (%u)", begin, clock() - time);
         time = clock();
 
-        for(int j = begin; j < begin + rsize; j++)
-            assert(buf[j - begin] == (j & 0xff));
+        for(int j = 0; j < (rsize)/2; j++)
+            assert(buf[j] == (j & 0xffff));
+        
+        memset(buf, 0xff, rsize);
             
     }
     vfs_close_file(f);
     free(buf);
+}
+
+
+void test_open(void) {
+    vfs_open_file("");
+    vfs_open_file("c");
+    vfs_opendir("");
+    vfs_opendir("c");
 }
 
 
@@ -235,11 +257,19 @@ void test_disk_overflow(void) {
 #warning DISKFILE undefined
 #endif
 
+
+void remove_all_drivers();
+void free_all_devices();
+
 void test_vfs() {
+    
+
 
     vfs_init();
-
+    atshutdown(remove_all_drivers);
+    atshutdown(free_all_devices);
     atshutdown(gpt_cleanup);
+
     printf("DISKFILE: %s\n", DISKFILE);
     disk_tb_install(DISKFILE);
     disk_part_t* part = search_partition("Bincows");
@@ -248,7 +278,9 @@ void test_vfs() {
     vfs_mount(part, "/fs");
 
     //TEST(test_disk_overflow());
-    TEST(test_print_file(441));
+    //TEST(test_print_file(441));
+
+    
 
     //TEST(read_seek_big_file(1));
     //TEST(read_seek_big_file(234));
@@ -257,7 +289,8 @@ void test_vfs() {
     //TEST(read_seek_big_file(456523));
     //TEST(read_seek_big_file(145652));
     //TEST(test_write());
-    //TEST(test_file_write_extend());
+    //TEST(test_open());
+    TEST(test_disk_overflow());
 
     //vfs_unmount(part)
     shutdown();
@@ -276,7 +309,7 @@ void* krealloc(void* p, size_t s) {
 }
 
 int main() {
-    test_vfs();
-    test_vfs();
+    //test_vfs();
+    //test_vfs();   
     test_vfs();
 }
