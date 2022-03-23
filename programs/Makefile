@@ -7,6 +7,7 @@ CFLAGS := -O0 -fno-inline -mno-red-zone -mgeneral-regs-only \
 		  -ffreestanding
 
 
+
 CFILES :=$(shell find -name "*.c")
 EFILES := $(CFILES:.c=.elf)
 
@@ -14,8 +15,8 @@ all: $(EFILES)
 	cp *.elf ../disk_root/bin/
 
 %.elf: %.c
-	$(CC) $(CFLAGS) -c $< -o $@ 
-
+	$(CC) $(CFLAGS) -c $< -o $@.o
+	$(LD) -static $@.o -o $@
 
 clean:
 	rm -rf *.s *.elf

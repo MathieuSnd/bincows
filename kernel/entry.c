@@ -28,22 +28,22 @@
 #include "lib/sprintf.h"
 #include "lib/string.h"
 #include "lib/logging.h"
-#include "lib/common.h"
 #include "lib/registers.h"
 #include "lib/dump.h"
 #include "lib/stacktrace.h"
 #include "lib/panic.h"
+#include "lib/elf/elf.h"
 
 #include "early_video.h"
  
 
 // 8K stack
-#define KERNEL_STACK_SIZE 8192
+#define KERNEL_STACK_SIZE 8192 * 2
 
 // accessible by other compilation units
 // like panic.c
 const size_t stack_size = KERNEL_STACK_SIZE;
-uint8_t stack_base[KERNEL_STACK_SIZE] __attribute__((section(".stack"))) __align(16);
+uint8_t stack_base[KERNEL_STACK_SIZE] __attribute__((section(".stack"))) __attribute__((aligned(16)));
 
 #define INITIAL_STACK_PTR ((uintptr_t)(stack_base + KERNEL_STACK_SIZE))
 
@@ -201,7 +201,51 @@ disk_part_t* find_main_part(struct stivale2_guid* part_guid) {
 }
 
 
-// Registers %rbp, %rbx and %r12 through %r15 “belong” to the calling functio
+static inline
+void test_disk_overflow(void) {
+    file_handle_t* f = vfs_open_file("/////fs/boot/bg.bmp//");
+
+    const int bsize = 1024 * 1024 * 8;
+
+    const size_t size = 1024*1024*64;
+
+    uint8_t* buf = malloc(bsize);
+    for(int i = 0; i < bsize; i++)
+        buf[i] = i;
+
+    uint64_t time = clock();
+
+    for(int i = 0; i < size / bsize; i++) {
+        log_info("write %u (%u)", i * bsize, clock() - time);
+        time = clock();
+        
+        size_t r = vfs_write_file(buf, bsize, 1, f);
+        assert(r == 1); 
+    }
+
+// check
+    //read
+    vfs_close_file(f);
+    
+    f = vfs_open_file("/////fs/boot/bg.bmp//");
+
+    time = clock();
+    int rsize = bsize;
+    int i = 0;
+    while(vfs_read_file(buf, rsize, 1, f) == 1) {
+        int begin = i++ * rsize;
+        log_info("read %u (%u)", begin, clock() - time);
+        time = clock();
+
+        for(int j = begin; j < begin + rsize; j++)
+            assert(buf[j - begin] == (j & 0xff));
+            
+    }
+    vfs_close_file(f);
+    free(buf);
+}
+
+
 // The following will be our kernel's entry point.
 void _start(struct stivale2_struct *stivale2_struct) {
 
@@ -292,14 +336,54 @@ void _start(struct stivale2_struct *stivale2_struct) {
     
 
     disk_part_t* part = find_main_part((GUID*)&boot_volume_tag->part_guid);
-    
     assert(part);
-    assert(vfs_mount(part, "/fs/"));
+    int r = vfs_mount(part, "/fs/");
+    assert(r);
+    
+
+    void* elf_file;
+
+    // open load and run elf file
+    file_handle_t* f = vfs_open_file("/fs/bin/prog0.elf");
+
+    assert(f);
+
+    vfs_seek_file(f, 0, SEEK_END);
+    size_t file_size = vfs_tell_file(f);
+
+    elf_file = malloc(file_size); 
+
+    vfs_seek_file(f, 0, SEEK_SET);
+
+    int rd = vfs_read_file(elf_file, 1, file_size, f);
+    //sleep(10);
+    assert(rd == file_size);
+    vfs_close_file(f);
+    log_warn("fgr");
+
+    
+    dump(
+        elf_file,
+        512,//file_size,
+        32,
+        DUMP_8
+    );
+
+
+    
+    //test_disk_overflow();
+    elf_program_t* program = elf_load(elf_file, file_size);
+
+    assert(program);
+
+    int (*prog_entry)(int,char**) = program->main;
+
+    log_warn("main()=%u", prog_entry(0,NULL));
 
 
 
-    //printf("issou");
-    //log_info("%x allocated heap blocks", get_n_allocation());
+
+    log_info("%x allocated heap blocks", heap_get_n_allocation());
 
     for(;;) {
         asm volatile("hlt");

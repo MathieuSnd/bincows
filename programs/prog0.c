@@ -1,6 +1,9 @@
 
 
 int x = 8;
+const char* rodata = " zefgrbefvzegr ";
+
+int g = 0;
 
 int fibo(int v) {
     if(v < 2)
@@ -9,6 +12,6 @@ int fibo(int v) {
         return fibo(v - 1);
 }
 
-int main(int argc, char** argv) {
-    return fibo(x);
+int _start(int argc, char** argv) {
+    return 2;
 }
