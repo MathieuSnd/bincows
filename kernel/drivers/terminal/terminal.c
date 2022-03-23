@@ -369,7 +369,7 @@ static void print_char(driver_t* this,
 
     struct framebuffer_dev * dev = (struct framebuffer_dev *)this->device;
 
-    void* pitch = dev->pitch;
+    unsigned pitch = dev->pitch;
     void* px = dev->pix;
 
     void* px_buffer = d->px_buffers[d->cur_px_buffer];
@@ -403,7 +403,7 @@ static void buff_print_char(driver_t* this,
     struct data* restrict d = this->data;
     
     void* px = d->px_buffers[d->cur_px_buffer];
-    void* pitch = dev->pitch;
+    unsigned pitch = dev->pitch;
 
 #ifdef BIGGER_FONT
     blitcharX2((struct framebuffer_dev *)this->device, 
@@ -429,9 +429,6 @@ static void update_framebuffer(driver_t* this) {
     uint64_t* devfb = dev->pix;
     uint64_t* buff = d->px_buffers[d->cur_px_buffer];
     uint64_t* otherbuff = d->px_buffers[!d->cur_px_buffer];
-    //asm("int $3");
-
-    //set_cr0(get_cr0() | (3llu << 9));
 
     for(unsigned i = 0; i < d->fb_size / 8; i += cache_line) {
         uint64_t diff = 0;
@@ -452,7 +449,6 @@ static void update_framebuffer(driver_t* this) {
 
             ptr = buff;
             uint64_t* devptr = devfb;
-//
             for(unsigned j = 0; j < cache_line; j++) {
                 asm volatile(
                     "movnti %1, %0"
@@ -462,9 +458,6 @@ static void update_framebuffer(driver_t* this) {
             }
        }
        else {
-            uint64_t* devptr = devfb;
-            //for(unsigned j = 0; j < cache_line; j++)
-            //    *(devptr++) = 0x00;
 
        }
 
@@ -472,8 +465,6 @@ static void update_framebuffer(driver_t* this) {
         otherbuff += cache_line;
         devfb     += cache_line;
     }
-
-    //set_cr0(get_cr0() & ~(3 << 9));
 
 }
 
