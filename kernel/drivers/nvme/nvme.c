@@ -1036,7 +1036,7 @@ void nvme_sync_read(struct driver* this,
         );
 
         while(!queue_empty(&data->io_queues.sq))
-            ;// sleep(0);
+             asm volatile("pause");
         
         memcpy(
             buf, 
@@ -1079,7 +1079,6 @@ void nvme_async_read(struct driver* this,
             c = count;
         else
             c = max_count;
-
 
         while(queue_full(&data->io_queues.sq))
             sleep(10);
