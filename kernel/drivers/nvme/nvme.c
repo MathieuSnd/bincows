@@ -279,7 +279,7 @@ static void handle_queue(
         if(entry->cmd_id == CMD_ID_ASYNC_READ) {
             // we need to perform async task
             uint16_t head = cq->head;
-            //log_warn("ASYNC READ");
+
             memcpy(
                 data->read_queue[head].target_buffer,
                 translate_address((void*)data->prps[head]),
@@ -324,7 +324,6 @@ static void irq_handler(driver_t* this) {
             &data->io_queues);
 
     }
-
     // acknowledge the irq to the apic
     apic_eoi();
 }
@@ -1021,7 +1020,6 @@ void nvme_sync_read(struct driver* this,
         else
             c = max_count;
 
-        //log_warn("sdfgb");
 
         uint64_t prp_paddr = data->prps[data->io_queues.sq.tail];
 
@@ -1083,11 +1081,19 @@ void nvme_async_read(struct driver* this,
         while(queue_full(&data->io_queues.sq))
             sleep(10);
             
+        
 
+        // mutual exclusion with the irq handler
+        _cli();
         unsigned tailid = data->io_queues.sq.tail;
 
         uint64_t prp_paddr = data->prps[tailid];
 
+
+        data->read_queue[tailid] = (struct async_read) {
+            .target_buffer = buf,
+            .size = c << shift,
+        };
 
         perform_read_command(
             data, 
@@ -1097,11 +1103,7 @@ void nvme_async_read(struct driver* this,
             c,
             CMD_ID_ASYNC_READ // async
         );
-
-        data->read_queue[tailid] = (struct async_read) {
-            .target_buffer = buf,
-            .size = c << shift,
-        };
+        _sti();
         // the copy from prp to buf will occur 
         // in the irq
 /*
@@ -1117,13 +1119,13 @@ void nvme_async_read(struct driver* this,
         lba   += c;
         count -= c;
     }
+
 }
 
 void nvme_sync(driver_t* this) {
     struct data* data = this->data;
     while(
-        !queue_empty(&data->io_queues.cq)
-     || !queue_empty(&data->io_queues.sq) 
+        !queue_empty(&data->io_queues.sq)
     )
         sleep(1);
 }
@@ -1174,7 +1176,7 @@ void nvme_sync_write(struct driver* this,
             c << shift
         );
 
-
+        _cli();
         perform_write_command(
             data,
             data->registers,
@@ -1182,6 +1184,7 @@ void nvme_sync_write(struct driver* this,
             translate_address((void*)prp_paddr),
             c
         );
+        _sti();
 
 
         buf += c << shift;

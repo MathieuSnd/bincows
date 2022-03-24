@@ -2,6 +2,7 @@
 #include "../../memory/paging.h"
 #include "../../memory/vmap.h"
 #include "../../lib/dump.h"
+#include "../../lib/logging.h"
 
 #include "queue.h"
 #include "spec.h"
@@ -63,12 +64,7 @@ void free_queue(struct queue* q) {
 void update_queues(struct queue_pair* queues) {
     // check all phase bits that could 
     // have changed
-    /*dump(
-        queues->cq.base,
-        16*3,
-        8,
-        DUMP_HEX8
-    );*/
+
     while(1) {
         volatile
         struct compqueuee* entry = 
