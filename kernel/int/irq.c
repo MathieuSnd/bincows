@@ -3,6 +3,7 @@
 #include "../lib/panic.h"
 #include "../lib/logging.h"
 #include "../lib/sprintf.h"
+#include "../sched/thread.h"
 
 #include "irq.h"
 
@@ -65,7 +66,7 @@ void release_irq(unsigned n) {
 }
 
 // called from irq.s
-void irq_common_handler(uint8_t irq_n) {
+void irq_common_handler(uint8_t irq_n, gp_regs_t* context) {
     assert(irq_n <= IRQ_END);
     assert(irq_n >= IRQ_BEGIN);
     // the irq_n th irq just fired
@@ -79,6 +80,11 @@ void irq_common_handler(uint8_t irq_n) {
     }
 
 
+    sched_save(context);
+
     handler(driver);
+
+    if(!schedule())
+        return;
 }
 

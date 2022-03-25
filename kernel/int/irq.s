@@ -1,20 +1,29 @@
 
 [extern irq_common_handler]
 
+
 ; macro argument: irq number
 %macro create_irq 1
 [extern _irq_handler%1]
 _irq_handler%1:
-    ; enter stack frame
-    ; push rbp
-    ; mov rbp, rsp
+; already pushed stuf:
+;    uint64_t RIP;
+;    uint64_t CS;
+;    uint64_t RFLAGS;
+;    uint64_t RSP;
+;    uint64_t SS;
 
 ; enter stack frame
     push rbp
-    mov rbp, rsp
-    push rdi
-    mov dil, byte %1
+    ; save stack pointer
     
+    ; save frame pointer and enter stack frame
+;    mov rbp, rsp
+    
+    ; save rax
+    push rax
+    mov al, byte %1
+
     jmp common_stub
     
 
@@ -41,33 +50,66 @@ create_irq 47
 
 common_stub:
 
-    push rax
-    push rcx
-    push rdx
-    push rsi
-    push r8
-    push r9
-    push r10
-    push r11
-
 ; clear DF flag
 ;  DF need to be clear on function 
 ; entry and exit (System-V ABI)
     cld
 
+    ; save context
+    ; we already saved rsp, rbp, rax
+    ; here, al = the irq handler number
+
+    push rcx
+    push rdx
+    push rbx
+    push rsi
+    push rdi
+
+    push r8
+    push r9
+    push r10
+    push r11
+    push r12
+    push r13
+    push r14
+    push r15
+
+
+
+    ; put the irq handler number in dil: the 
+    ; argument for the irq_common_handler function
+    mov dil, al
+
+    ; beginning of the interrupt stack = beginning of
+    ; the context structure 
+    mov rsi, rsp
+
+
+
     call irq_common_handler
 
+    ; restore the context
+    ; this function only returns
+    ; if no rescheduling is done
 
+
+
+    pop r15
+    pop r14
+    pop r13
+    pop r12
     pop r11
     pop r10
     pop r9
     pop r8
+
+    pop rdi
     pop rsi
+    pop rbx
     pop rdx
     pop rcx
     pop rax
-    pop rdi
-    ; mov rsp, rbp
-    ; pop rbp
-    leave
+    pop rbp
+
+
     iretq
