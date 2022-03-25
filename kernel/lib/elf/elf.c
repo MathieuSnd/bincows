@@ -11,6 +11,8 @@
 #include "../../memory/paging.h"
 #include "../../memory/heap.h"
 
+#include "../../sched/thread.h"
+
 
 /**
  * @brief return 0 if invalid header
@@ -51,7 +53,7 @@ static int check_elf_header(const ehdr_t* ehdr, size_t file_size) {
 
 static
 unsigned convert_flags(unsigned p_flags) {
-    unsigned flags =  0;
+    unsigned flags = PRESENT_ENTRY;
 
     if((p_flags & 1) == 0) {
         // no execute
@@ -82,7 +84,7 @@ elf_program_t* elf_load(const void* file, size_t file_size) {
     );
 
 
-    prog->main   = (void *)ehdr->program_entry;
+    prog->entry   = (void *)ehdr->program_entry;
 
     unsigned j = 0;
     assert(ehdr->phdr_entry_size == 56);
@@ -126,12 +128,17 @@ elf_program_t* elf_load(const void* file, size_t file_size) {
             free(prog);
             return NULL;
         }
-        
+    
+    
+        size_t page_count = (prog->segs[j].length+0xfff) >> 12;
+        // map segments without paging attributes
+        // until we copied the content
         alloc_pages(
             prog->segs[j].base,
-            (prog->segs[j].length+0xfff) >> 12,
-            PRESENT_ENTRY//prog->segs[j].flags
+            page_count,
+            PRESENT_ENTRY
         );
+        
 
         memset(
             prog->segs[j].base, 
@@ -139,12 +146,18 @@ elf_program_t* elf_load(const void* file, size_t file_size) {
             phdr->p_memsz
         );
 
-
         memcpy(           
             prog->segs[j].base, 
             file + phdr->p_offset,
             phdr->p_filesz
         );
+
+        remap_pages(
+            prog->segs[j].base,
+            page_count,
+            0
+        );
+
     }
 
     prog->n_segs = j;
