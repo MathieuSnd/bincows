@@ -528,6 +528,60 @@ static void internal_map_pages(uint64_t physical_addr,
 }
 
 
+void remap_pages(void*    vaddr_ptr, 
+                 size_t   count,
+                 uint64_t flags) {
+
+    uint64_t virtual_addr = (uint64_t)vaddr_ptr;
+    
+    while(count > 0) {
+        
+        // fetch table indexes
+        unsigned pml4i = pml4_offset(virtual_addr),
+                pdpti = pdpt_offset(virtual_addr),
+                pdi   = pd_offset(virtual_addr),
+                pti   = pt_offset(virtual_addr);
+
+        assert(pml4i == 0 || pml4i == 511 || pml4i == 256);
+        // those entries should exist
+        pml4e restrict pml4entry = extract_pointer(get_entry_or_allocate((void**)pml4,      pml4i));
+        pdpte restrict pdptentry = extract_pointer(get_entry_or_allocate((void**)pml4entry, pdpti));
+        pde   restrict pdentry   = extract_pointer(get_entry_or_allocate((void**)pdptentry, pdi));
+
+
+        while(count > 0 && pti < 512) {
+            // create a new entry
+            
+            void** entry_ptr = (void**)translate_address(pdentry) + pti;
+            
+
+            if(!present_entry(*entry_ptr)) {
+
+                char buff[256];
+
+                sprintf(buff, 
+                    "remap_pages(...,flags=%lu):\n"
+                    " tried to remap virtual memory 0x%lx, nothing was mapped there",
+                    flags, virtual_addr
+                );
+                
+                panic(buff);
+            }
+
+            // extract physical page and remake an entry with 
+            // the given flags
+            void*  e = create_table_entry(0,flags);
+
+            *entry_ptr = e;
+            
+            pti++;
+            count--;
+            virtual_addr  += 0x1000;               
+        }
+    }
+}
+
+
 void alloc_pages(void*  virtual_addr_begin, 
                size_t   count,
                uint64_t flags) {
@@ -557,7 +611,6 @@ void alloc_pages(void*  virtual_addr_begin,
         virtual_addr_begin += size * 0x1000;
     }
 }
-
 
 void map_pages(uint64_t physical_addr, 
                uint64_t virtual_addr, 

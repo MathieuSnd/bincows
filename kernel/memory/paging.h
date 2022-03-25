@@ -54,3 +54,13 @@ void unmap_pages(uint64_t virtual_addr, size_t count);
 void alloc_pages(void* virtual_addr, 
                size_t   count,
                uint64_t flags);
+
+/**
+ * @brief change page level attributes: PL_RW PL_US PWT PCD
+ * of already mapped pages
+ * 
+ */
+void remap_pages(void* virtual_addr, 
+                 size_t count,
+                 uint64_t new_flags);
+
