@@ -76,6 +76,33 @@
 #define KERNEL_DATA_BEGIN   0xffffffff80000000llu
 #define KERNEL_HEAP_BEGIN   0xffffffff80300000llu
 
+
+// Bincows segmentation
+
+#define KERNEL_CS 0x08
+#define KERNEL_DS 0x10
+
+#define USER_CS 0x1b
+#define USER_DS 0x23
+
+
+
+
+/**
+ *  user memory map for Bincows:
+ * 
+ * 0                   ------------------
+ *                     |      USER      |
+ *                     |     MEMORY     | 
+ * 0x0000007fffffffff  |----------------|   
+ * 
+ */
+
+
+
+
+
+
 // return non 0 value iif the given address
 // resides in kernel memory
 static inline int is_user(uint64_t vaddr) {
