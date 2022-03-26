@@ -62,7 +62,7 @@ static void map_bar(uint64_t paddr,
         (size 
         + ((uint64_t)vaddr & 0xfff) // take account
         + 0xfff) / 0x1000,          // of missalignment
-        PRESENT_ENTRY | PCD
+        PRESENT_ENTRY | PCD | PL_RW
     );
 }
 
@@ -330,8 +330,8 @@ static void map_possible_config_spaces(void) {
             256 * // busses
             32  * // devices
             8,    // functions
-            PRESENT_ENTRY | PCD | PL_XD
-            // no cache, execute disable
+            PRESENT_ENTRY | PCD | PL_XD | PL_RW
+            // no cache, execute disable, writable
         );
     }
 }

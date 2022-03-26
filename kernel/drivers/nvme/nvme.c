@@ -195,7 +195,7 @@ static uint64_t createPRP(void) {
         paddr, 
         vaddr, 
         1,
-        PRESENT_ENTRY | PL_XD | PCD              
+        PRESENT_ENTRY | PL_XD | PCD | PL_RW             
     ); 
     
     return paddr;
@@ -217,7 +217,7 @@ static void freePRP(uint64_t paddr) {
         paddr, 
         vaddr, 
         1,
-        PRESENT_ENTRY | PL_XD // cache enable
+        PRESENT_ENTRY | PL_XD | PL_RW // cache enable
     );
     physfree(paddr);
 
@@ -1106,13 +1106,6 @@ void nvme_async_read(struct driver* this,
         _sti();
         // the copy from prp to buf will occur 
         // in the irq
-/*
-        memcpy(
-            buf, 
-            translate_address((void*)prp_paddr), 
-            c << shift
-        );
-*/
         
         buf += c << shift;
 

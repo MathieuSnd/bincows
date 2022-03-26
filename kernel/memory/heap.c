@@ -137,7 +137,7 @@ static void expand_heap(size_t size) {
         alloc_pages(
             heap_begin + (old_heap_pages_size << 12),
             new_heap_pages_size - old_heap_pages_size,
-            PRESENT_ENTRY | PL_XD // execute disable pages
+            PRESENT_ENTRY | PL_XD | PL_RW // execute disable pages
         );
     }
 

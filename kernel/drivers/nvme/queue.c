@@ -29,7 +29,7 @@ struct queue create_queue(
         paddr, 
         (uint64_t)vaddr,
         1,
-        PRESENT_ENTRY | PL_XD | PCD
+        PRESENT_ENTRY | PL_XD | PCD | PL_RW
     );
   
     return (struct queue) {
@@ -55,7 +55,7 @@ void free_queue(struct queue* q) {
         paddr, 
         vaddr,
         1,
-        PRESENT_ENTRY | PL_XD
+        PRESENT_ENTRY | PL_XD | PL_RW
     );
   
     physfree(paddr);

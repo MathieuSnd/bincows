@@ -11,6 +11,7 @@
 #include "../lib/registers.h"
 
 
+#define CR0_WP            (1lu << 16)
 #define CR0_PG_BIT        (1lu << 31)
 #define CR4_PAE_BIT       (1lu << 5)
 #define CR4_PCIDE         (1lu << 17)
@@ -173,10 +174,12 @@ static void map_physical_memory(const struct stivale2_struct_tag_memmap* memmap)
             void* virtual_addr = translate_address((void *)phys_addr);
 
 
-            internal_map_pages(phys_addr, 
-                               (uint64_t)virtual_addr, 
-                               size, 
-                               PRESENT_ENTRY | PL_XD);
+            internal_map_pages(
+                phys_addr, 
+                (uint64_t)virtual_addr, 
+                size, 
+                PRESENT_ENTRY | PL_XD | PL_RW
+            );
             // use the allocator to allocate page tables
             // to map its own data
         }
@@ -236,18 +239,18 @@ static void map_kernel(const struct stivale2_struct_tag_memmap* memmap) {
             {
             case 0:
                 /* .text */
-                flags |= PL_RW;
                 break;
             case 1:
                 /* rodata */
                 flags |= PL_XD;
-                flags |= PL_RW;
                 break;
             case 2:
+                flags |= PL_RW;
                 /* data+bss */
                 break;
             default:
                 //modules: do not map in higher half!
+                flags |= PL_RW;
                 virtual_addr = base | TRANSLATED_PHYSICAL_MEMORY_BEGIN;
                 break;
             }
@@ -318,10 +321,11 @@ void init_paging(const struct stivale2_struct_tag_memmap* memmap) {
 // 256th supervisor: 0xffff800000000000 -> 0xffff807fffffffff
 // 511st supervisor: 0xffffff8000000000 -> 0xffffffffffffffff
     pml4[0]   = create_table_entry(
-            alloc_page_table(), // alloc a new page table
-                                // with pmm
-            PRESENT_ENTRY       // execute enable, read 
-                                // write for all the lower half
+            alloc_page_table(),   // alloc a new page table
+                                  // with pmm
+            PRESENT_ENTRY | PL_US // execute enable, read 
+            | PL_RW               // write for all the lower half
+                                  // and accessible from userspace
     );
 
 // the two high half memory regions are supervisor only
@@ -329,13 +333,13 @@ void init_paging(const struct stivale2_struct_tag_memmap* memmap) {
 // stays in the pml4 table  
     pml4[256] = create_table_entry(
             alloc_page_table(),   // once again use the pmm
-            PRESENT_ENTRY | PL_US // supervisor flag the whole
+            PRESENT_ENTRY | PL_RW // supervisor only
     );
                     
 // same as above
     pml4[511] = create_table_entry(
             alloc_page_table(),   // once again use the pmm
-            PRESENT_ENTRY | PL_US
+            PRESENT_ENTRY | PL_RW // supervisor only  
     );
 
 
@@ -362,7 +366,7 @@ void append_paging_initialization(void) {
     set_cr4((get_cr4() | CR4_PAE_BIT) & ~CR4_PCIDE);
 
 // enable the PG bit
-    set_cr0(get_cr0() | CR0_PG_BIT);
+    set_cr0(get_cr0() | CR0_PG_BIT | CR0_WP);
 
 // enable NXE bit
     write_msr(IA32_EFER_MSR, read_msr(IA32_EFER_MSR) | IA32_EFER_NXE_BIT);
@@ -449,7 +453,7 @@ static void* get_entry_or_allocate(void** restrict table, unsigned index)  {
 
         void* e = create_table_entry(
             alloc_page_table(), 
-            PRESENT_ENTRY);
+            PRESENT_ENTRY | PL_US | PL_RW);
         return virtual_addr_table[index] = e;
     }
     else

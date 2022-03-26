@@ -96,9 +96,9 @@ void map_acpi_mmios(void) {
     // mmios to map: HPET, PCIE
     // cache disable
     map_pages((uint64_t)apic_config_base, APIC_VADDR, 1,
-                                 PRESENT_ENTRY | PCD | PL_XD);
+                                 PRESENT_ENTRY | PCD | PL_XD | PL_RW);
     map_pages((uint64_t)hpet_config_space, HPET_VADDR, 1,
-                                 PRESENT_ENTRY | PCD | PL_XD);
+                                 PRESENT_ENTRY | PCD | PL_XD | PL_RW);
 }
 
 static void parse_hpet(const struct HPET* table) {

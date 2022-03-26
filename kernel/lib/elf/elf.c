@@ -108,7 +108,7 @@ elf_program_t* elf_load(const void* file, size_t file_size) {
             "prog->segs[j].flag=%lu \n",
             i,
             prog->segs[j].base,
-            prog->segs[j].length >> 12,
+            (prog->segs[j].length+0xfff) >> 12,
             prog->segs[j].flags
         );
 
@@ -136,7 +136,7 @@ elf_program_t* elf_load(const void* file, size_t file_size) {
         alloc_pages(
             prog->segs[j].base,
             page_count,
-            PRESENT_ENTRY
+            PRESENT_ENTRY | PL_US | PL_RW
         );
         
 
@@ -151,13 +151,13 @@ elf_program_t* elf_load(const void* file, size_t file_size) {
             file + phdr->p_offset,
             phdr->p_filesz
         );
-
+/*
         remap_pages(
             prog->segs[j].base,
             page_count,
             0
         );
-
+*/
     }
 
     prog->n_segs = j;
