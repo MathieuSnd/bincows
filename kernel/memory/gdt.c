@@ -104,6 +104,9 @@ void init_gdt_table() {
     gdt[5].base1 = (uint64_t)&tss       & 0xfffflu;
     gdt[5].base2 = (uint64_t)&tss >> 16 & 0x00ffllu;
     gdt[5].base3 = (uint64_t)&tss >> 24 & 0x00ffllu;
+    gdt[5].limit1 = sizeof(tss);
+    gdt[5].limit2 = 0;
+
     *(uint64_t *)(&gdt[6]) = (uint64_t)(&tss) >> 32;
     
     _lgdt(&gdt_descriptor);
