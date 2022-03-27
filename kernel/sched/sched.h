@@ -21,3 +21,6 @@ void schedule(void);
  */
 pid_t alloc_pid(void);
 
+
+void sched_register_process(process_t* process);
+

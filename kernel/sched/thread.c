@@ -26,5 +26,7 @@ int create_thread(
 
     thread[0].regs.rsp = stack_base + stack_size;
 
+    printf("issou %lx", thread[0].regs.rsp);
+
     return 0;
 }

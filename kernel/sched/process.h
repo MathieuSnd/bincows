@@ -43,9 +43,22 @@ typedef struct process {
  *  
  * 
  * @param process output process structure
+ * @param pparent parent process structure
+ * if pparent is NULL, the process will have
+ * no parent (its parent's pid is the kernel pid)
  * @param elf_file input file
  * @return int 0 if failure, non-0 otherwise
  */
-int create_process(process_t* process, const void* elffile, size_t elffile_sz);
+int create_process(process_t* process, process_t* pparent, const void* elffile, size_t elffile_sz);
 
+
+/**
+ * @brief free an exited process
+ * (no remainng thread)
+ * 
+ * @param process 
+ */
 void free_process(process_t* process);
+
+
+
