@@ -1,12 +1,14 @@
 #include "gdt.h"
 #include "../lib/sprintf.h"
 #include "../lib/assert.h"
+#include "../lib/logging.h"
 
 extern void _ltr(uint16_t tss_selector);
 
 
 // kernel stack
-extern const uint8_t kernel_stack[];
+extern const uint8_t stack_base[];
+extern const size_t stack_size;
 
 struct TSS {
     uint32_t reserved0;
@@ -20,7 +22,15 @@ struct TSS {
 
 static_assert_equals(sizeof(struct TSS), 104);
 
-const struct TSS tss = {0, {(uint64_t)kernel_stack,0,0}, 0, {0}, 0,0,sizeof(struct TSS)};
+static struct TSS tss = {
+        .reserved0   = 0, 
+        .RSP         = {0, 0, 0}, // kernel stacks must be initialized at runtime
+        .reserved1   = 0, 
+        .IST         = {0}, 
+        .reserved2   = 0,
+        .reserved3   = 0,
+        .IOPB_offset = sizeof(struct TSS)
+};
 
 struct GDTentry {
     uint16_t limit1;             // x86_64: ignrored
@@ -110,6 +120,10 @@ void init_gdt_table() {
     *(uint64_t *)(&gdt[6]) = (uint64_t)(&tss) >> 32;
     
     _lgdt(&gdt_descriptor);
+
+
+
+    tss.RSP[0] = (uint64_t)stack_base + stack_size;
 
 
     // the TSS offset in the GDT table << 3 (the first 3 bits are DPL)
