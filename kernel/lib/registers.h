@@ -1,6 +1,7 @@
 #ifndef  REGISTERS_H
 #define  REGISTERS_H
 
+#include <stdint.h>
 
 uint16_t _cs(void);
 uint16_t _ds(void);
