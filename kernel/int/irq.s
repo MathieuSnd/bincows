@@ -74,6 +74,11 @@ common_stub:
     push r14
     push r15
 
+    ; load kernel data segment
+    mov di, 0x10
+    mov ss, di
+    mov ds, di
+    mov es, di
 
 
     ; put the irq handler number in dil: the 
@@ -108,6 +113,13 @@ common_stub:
     pop rbx
     pop rdx
     pop rcx
+
+    ; load target ss into rax
+    mov rax, [rsp + 40]
+    mov ds, ax
+    mov es, ax
+
+    
     pop rax
     pop rbp
 
