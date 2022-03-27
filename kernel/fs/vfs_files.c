@@ -134,12 +134,32 @@ struct file_ent* search_or_insert_file(
         .n_insts = 0,
     };
 
+    fs->n_open_files++;
+
+
     return &open_files[n_open_files - 1];
 }
 
 
+
+static void register_handle_to_vfile(
+                struct file_ent* file_ent, 
+                file_handle_t*    handle
+) { 
+    handle->open_vfile = file_ent;
+
+    // register the handle in the file entry
+    file_ent->n_insts++;
+    file_ent->fhs = realloc(file_ent->fhs, 
+                        file_ent->n_insts * sizeof(file_handle_t *));
+
+    file_ent->fhs[file_ent->n_insts - 1] = handle;
+}
+
+
+
 /**
- * @brief create a file handler and
+ * @brief create a file handle and
  * registers it in the open file table:
  * if no handler is already open on this
  * vfile, then the function creates a
@@ -172,38 +192,30 @@ file_handle_t* create_handler(
     
     // big allocation to allocate the
     // sector buffer too
-    file_handle_t *handler = malloc(
+    file_handle_t *handle = malloc(
         sizeof(file_handle_t)
         // size of one sector
         + fs->file_access_granularity);
 
 
-    handler->fs = fs;
-    handler->file_offset = 0;
+    handle->fs = fs;
+    handle->file_offset = 0;
     // empty buffer
-    handler->sector_offset = 0;
-    handler->buffer_valid = 0;
-    handler->sector_count = 0;
+    handle->sector_offset = 0;
+    handle->buffer_valid = 0;
+    handle->sector_count = 0;
 
-    handler->sector_buff = (void *)handler + sizeof(file_handle_t);
+    handle->sector_buff = (void *)handle + sizeof(file_handle_t);
 
 
     struct file_ent* file_ent = search_or_insert_file(
                         fs, dirent->ino, dirent->file_size, path);
 
-    handler->open_vfile = file_ent;
 
-    // register the handler in the file entry
-    file_ent->n_insts++;
-    file_ent->fhs = realloc(file_ent->fhs, 
-                        file_ent->n_insts * sizeof(file_handle_t *));
+    register_handle_to_vfile(file_ent, handle);
 
-    file_ent->fhs[file_ent->n_insts - 1] = handler;
-
-
-    fs->n_open_files++;
     
-    return handler;
+    return handle;
 }
 
 
@@ -244,6 +256,34 @@ file_handle_t *vfs_open_file(const char *path) {
 
     
     return create_handler(fs, &dirent, path);
+}
+
+
+file_handle_t* vfs_clone_handle(file_handle_t* from) {
+    // see vfs_open_file
+
+    fs_t* fs = from->fs;
+
+    struct file_ent* vfile = from->open_vfile;
+
+
+    file_handle_t* new = malloc(
+        sizeof(file_handle_t)
+        // size of one sector
+        + fs->file_access_granularity);
+
+
+    new->fs = fs;
+    new->buffer_valid  = 0;
+    new->file_offset   = from->file_offset;
+    new->sector_count  = from->sector_count;
+    new->sector_offset = from->sector_offset;
+    new->sector_buff   = new + 1;
+
+
+    register_handle_to_vfile(vfile, new);
+
+    return new;
 }
 
 

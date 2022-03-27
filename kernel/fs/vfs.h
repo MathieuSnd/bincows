@@ -214,7 +214,18 @@ int vfs_update_metadata(const char* path, uint64_t cluster, size_t file_size);
 /////////////////////////////
 
 file_handle_t* vfs_open_file(const char* filename);
+
+/**
+ * @brief create a file handle
+ * on the same file, at the same position
+ * 
+ * @return file_handle_t* 
+ */
+file_handle_t* vfs_clone_handle(file_handle_t*);
+
 void vfs_close_file(file_handle_t* handle);
+
+
 
 
 size_t vfs_read_file(void* ptr, size_t size, size_t nmemb, 

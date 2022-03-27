@@ -1222,6 +1222,7 @@ int fat32_read_file_sectors(
         }
         //log_warn("READ AT CLUSTER=%u", cluster);
         async_read(fs->part, lba, buf, read_size);
+        //read(fs->part, lba, buf, read_size);
 
         buf += bsize * read_size;
     }
