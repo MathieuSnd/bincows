@@ -44,7 +44,7 @@ uint64_t physalloc_single(void);
 void physfree(uint64_t physical_page_addr);
 
 // return the number of available pages in the system
-int available_pages(void);
+size_t available_pages(void);
 
 // return the pages in the system
-int total_pages(void);
+size_t total_pages(void);

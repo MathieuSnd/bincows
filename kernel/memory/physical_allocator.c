@@ -90,6 +90,7 @@ static struct memory_range memory_ranges_buffer[512];
 static unsigned n_ranges = 0;
 
 static unsigned total_available_pages = 0;
+static unsigned total_memory_pages = 0;
 
 // lists of memory ranges: sorted by biggest free range
 static struct memory_range* mr_lists[4] = {0};
@@ -187,11 +188,11 @@ void init_physical_allocator(const struct stivale2_struct_tag_memmap* memmap) {
     }
 
     n_ranges = j;
-    total_available_pages = total_pages - n_ranges;
+    total_memory_pages = total_available_pages = total_pages - n_ranges;
     log_info(
         "found %u MB of usable memory in the system (%u pages, %u physical ranges)",
-        total_available_pages * 4 / 1024,
-        total_available_pages,
+        total_memory_pages * 4 / 1024,
+        total_memory_pages,
         n_ranges
     );
 }
@@ -629,3 +630,17 @@ const struct physical_allocator_data_page_entry*
     *size = n_ranges;
     return (struct physical_allocator_data_page_entry *)memory_ranges_buffer;
 }
+
+
+
+
+// return the number of available pages in the system
+size_t available_pages(void) {
+    return total_available_pages;
+}
+
+// return the pages in the system
+size_t total_pages(void)  {
+    return total_memory_pages;
+}
+
