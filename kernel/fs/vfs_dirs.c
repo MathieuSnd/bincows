@@ -11,6 +11,7 @@
 
 #include "../memory/heap.h"
 #include "fat32/fat32.h"
+#include "devfs/devfs.h"
 
 typedef struct vdir
 {
@@ -231,8 +232,16 @@ static int remove_vdir(vdir_t *vdir)
 // return 0 iif something
 // went wrong
 static int unmount(vdir_t *vdir) {
-    fs_t *fs = vdir->fs;
     assert(vdir);
+    assert(vdir->fs);
+
+    fs_t *fs = vdir->fs;
+
+
+    if(fs->type == FS_TYPE_DEVFS) {
+        log_warn("issou ayaooooooooooooooo");
+     
+    }
 
     if (vdir->n_children)
     {
@@ -253,14 +262,14 @@ static int unmount(vdir_t *vdir) {
     // assert that the partition 
     // is actually mounted
 
-    log_warn("----------------------------------------------------- %u", fs->part->mount_point);
+    if(fs->part) {
+        assert(fs->part->mount_point);
+        
+        free(fs->part->mount_point);
 
-    assert(fs->part->mount_point);
-    
-    free(fs->part->mount_point);
-
-    fs->part->mount_point = NULL;
-    // set the partition not mounted
+        // set the partition not mounted
+        fs->part->mount_point = NULL;
+    }
         
 
     if (vdir == &vfs_root)
@@ -863,8 +872,9 @@ static void log_tree(const char *path, int level)
 }
 
 
-int vfs_mount(disk_part_t *part, const char *path)
-{
+
+// if it cannot be inserted, return NULL
+static vdir_t* emplace_vdir(const char* path) {
     // register the new virtual directory
     vdir_t tmp = {
         .fs = NULL,
@@ -878,6 +888,17 @@ int vfs_mount(disk_part_t *part, const char *path)
     simplify_path(tmp.path, path);
     vdir_t *new = insert_vdir(&tmp);
 
+    if(!new)
+        free(tmp.path); 
+
+    return new;
+}
+
+
+int vfs_mount(disk_part_t *part, const char *path)
+{
+    vdir_t* new = emplace_vdir(path);
+
     // if it cannot be inserted
     if (!new)
     {
@@ -885,9 +906,8 @@ int vfs_mount(disk_part_t *part, const char *path)
             "cannot mount %s,"
             "impossible to create virtual directory %s",
             part->name,
-            tmp.path);
+            path);
 
-        free(tmp.path);
         return 0;
     }
 
@@ -900,14 +920,44 @@ int vfs_mount(disk_part_t *part, const char *path)
     }
 
     new->fs = fs;
-    part->mount_point = malloc(strlen(tmp.path) + 1);
-    strcpy(part->mount_point, tmp.path);
+    part->mount_point = malloc(strlen(new->path) + 1);
+    strcpy(part->mount_point, new->path);
 
-    //test_file_read_seek();    
-    
     
     return 1;
 }
+
+int vfs_mount_devfs(void) {
+
+    const char* path = "/dev";
+
+    vdir_t* new = emplace_vdir(path);
+
+    // if it cannot be inserted
+    if (!new)
+    {
+        log_warn(
+            "cannot mount %s,"
+            "impossible to create virtual directory %s",
+            "devfs",
+            path);
+
+        return 0;
+    }
+
+    fs_t *fs = devfs_mount();
+
+    if (!fs)
+    {
+        log_warn("cannot mount %s, unrecognized format", path);
+        return 0;
+    }
+
+    new->fs = fs;
+
+    return 1;
+}
+
 
 
 

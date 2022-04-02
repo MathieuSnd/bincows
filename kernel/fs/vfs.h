@@ -17,6 +17,9 @@
 int vfs_mount(disk_part_t* part, const char* path);
 
 
+// mount the devfs to /dev
+int vfs_mount_devfs(void);
+
 
 
 /**
