@@ -22,7 +22,10 @@ void set_cr0(uint64_t cr0);
 void set_cr4(uint64_t cr4);
 
 
-#define IA32_EFER_MSR 0xC0000080
+#define IA32_EFER_MSR  0xC0000080
+#define IA32_STAR_MSR  0xC0000081
+#define IA32_LSTAR_MSR 0xC0000082
+#define IA32_FMASK_MSR 0xC0000084
 
 uint64_t read_msr(uint32_t addr);
 uint64_t write_msr(uint32_t addr, uint64_t value);
