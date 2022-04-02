@@ -64,6 +64,16 @@ static void fill_page_table_allocator_buffer(size_t n);
 static void* alloc_page_table(void);
 
 
+// buffer the allocation requests
+// ask for 16 pages per call is the
+// optimal thing as its the granularity
+// of the highest level bitmap
+#define PTAAB_SIZE 64
+#define PTAAB_REFILL 16
+static void* page_table_allocator_buffer[PTAAB_SIZE];
+static size_t page_table_allocator_buffer_size = 0;
+
+
 static void internal_map_pages(uint64_t physical_addr, 
                                uint64_t virtual_addr, 
                                size_t  count,
@@ -256,7 +266,7 @@ static void map_kernel(const struct stivale2_struct_tag_memmap* memmap) {
             }
             //alloc the page table pages
             // before doing any allocation
-            fill_page_table_allocator_buffer(64);
+            fill_page_table_allocator_buffer(PTAAB_SIZE);
             internal_map_pages(base, virtual_addr, size, flags);
         }
     }
@@ -320,13 +330,11 @@ void init_paging(const struct stivale2_struct_tag_memmap* memmap) {
 // 1st   user:       0x0000000000000000 -> 0x0000007fffffffff
 // 256th supervisor: 0xffff800000000000 -> 0xffff807fffffffff
 // 511st supervisor: 0xffffff8000000000 -> 0xffffffffffffffff
-    pml4[0]   = create_table_entry(
-            alloc_page_table(),   // alloc a new page table
-                                  // with pmm
-            PRESENT_ENTRY | PL_US // execute enable, read 
-            | PL_RW               // write for all the lower half
-                                  // and accessible from userspace
-    );
+
+// we don't map the user space yet.
+// for every process, we need to allocate a new page map
+// structure, meaning allocating the pml4's first entry
+// using the alloc_user_page_map() function
 
 // the two high half memory regions are supervisor only
 // so that no user can access it eventhough the entry
@@ -380,13 +388,6 @@ void append_paging_initialization(void) {
 }
 
 
-// buffer the allocation requests
-// ask for 16 pages per call is the
-// optimal thing as its the granularity
-// of the highest level bitmap
-static void* page_table_allocator_buffer[64];
-static size_t page_table_allocator_buffer_size = 0;
-
 
 // callback for the page allocator
 static void page_table_allocator_callback(uint64_t phys_addr, 
@@ -406,7 +407,7 @@ static void zero_page_table_page(void* physical_address) {
 
 // fill the page table allocator buffer
 static void fill_page_table_allocator_buffer(size_t n) {
-    assert(n <= 64);
+    assert(n <= PTAAB_SIZE);
     
     int to_alloc = n - page_table_allocator_buffer_size;
     
@@ -431,14 +432,30 @@ static void* alloc_page_table(void) {
                 "page tables"
             );
 
-        physalloc(16, 0, page_table_allocator_callback);
-        page_table_allocator_buffer_size = 16;
+        physalloc(PTAAB_REFILL, 0, page_table_allocator_callback);
+        page_table_allocator_buffer_size = PTAAB_REFILL;
         
-        for(int i = 0; i < 16; i++)
+        for(int i = 0; i < PTAAB_REFILL; i++)
             zero_page_table_page(page_table_allocator_buffer[i]);
     }
 
     return page_table_allocator_buffer[--page_table_allocator_buffer_size];
+}
+
+
+static void free_page_table(uint64_t pt) {
+    // try to emplace pt in the allocator buffer
+
+    // if the buffer is full already, we cannot store it
+    // we need to free it
+    if(page_table_allocator_buffer_size == PTAAB_SIZE) {
+        physfree(pt);
+    }
+
+    // if the buffer is not full, we can store it
+    else {
+        page_table_allocator_buffer[page_table_allocator_buffer_size++] = (void*)pt;
+    }
 }
 
 
@@ -461,16 +478,17 @@ static void* get_entry_or_allocate(void** restrict table, unsigned index)  {
 }
 
 // kernel panic if the entrty is not present
-static void* get_entry_or_panic(void** restrict table, unsigned index)  {
+static void* get_entry_or_panic(void** restrict table, unsigned index) {
     assert(index < 512);
 
     void** virtual_addr_table =  translate_address(table);
 
     void* entry = virtual_addr_table[index];
 
-    assert(present_entry(entry));
-    
-    return entry;
+    if(!present_entry(entry))
+        panic("get_entry_or_panic(): entry not present");
+    else
+        return entry; 
 }
 
 /**
@@ -492,9 +510,9 @@ static void internal_map_pages(uint64_t physical_addr,
                 pdi   = pd_offset(virtual_addr),
                 pti   = pt_offset(virtual_addr);
 
-        assert(pml4i == 0 || pml4i == 511 || pml4i == 256);
         // those entries should exist
-        pml4e restrict pml4entry = extract_pointer(get_entry_or_allocate((void**)pml4,      pml4i));
+        pml4e restrict pml4entry = extract_pointer(get_entry_or_panic   ((void**)pml4,      pml4i));
+
         pdpte restrict pdptentry = extract_pointer(get_entry_or_allocate((void**)pml4entry, pdpti));
         pde   restrict pdentry   = extract_pointer(get_entry_or_allocate((void**)pdptentry, pdi));
 
@@ -607,7 +625,7 @@ void alloc_pages(void*  virtual_addr_begin,
         if(size > MAX_ALLOC)
             size = MAX_ALLOC;
 
-        fill_page_table_allocator_buffer(16);
+        fill_page_table_allocator_buffer(PTAAB_REFILL);
 
         physalloc(size, virtual_addr_begin, callback);
 
@@ -621,8 +639,8 @@ void map_pages(uint64_t physical_addr,
                size_t   count,
                uint64_t flags) {
 
-    while(count > 64) {
-        fill_page_table_allocator_buffer(64);
+    while(count > PTAAB_SIZE) {
+        fill_page_table_allocator_buffer(PTAAB_SIZE);
         internal_map_pages(physical_addr, virtual_addr, 64, flags);
         count -= 64;
 
@@ -631,7 +649,7 @@ void map_pages(uint64_t physical_addr,
     }
 
     // count <= 64
-    fill_page_table_allocator_buffer(64);
+    fill_page_table_allocator_buffer(PTAAB_SIZE);
     internal_map_pages(physical_addr, virtual_addr, count, flags);
 }
 
@@ -737,3 +755,68 @@ uint64_t get_paddr(const void* vaddr) {
 
     return page_paddr | ((uint64_t)vaddr & 0x0fff);
 }
+
+
+
+
+/**
+ * @brief return the highest level 
+ * map table physical base address
+ */
+uint64_t get_user_page_map(void) {
+    // 4 level paging: 
+    // userspace = first 512GB 
+    return (uint64_t)extract_pointer((void*)pml4[0]);
+}
+
+/**
+ * @brief set the highest level 
+ * map table physical base address
+ */
+void set_user_page_map(uint64_t paddr) {
+    log_warn("mouais ayaoi %lx", paddr);
+    pml4[0]   = create_table_entry(
+            (void*)paddr,   
+            PRESENT_ENTRY | PL_US // execute enable, read 
+            | PL_RW               // write for all the lower half
+                                  // and accessible from userspace
+    );
+}
+
+
+uint64_t alloc_user_page_map(void) {
+    return (uint64_t)alloc_page_table();
+}
+
+
+// deep free the page map:
+// recursively free all the page tables 
+// that it references
+static void deep_free_map(uint64_t page_table) {
+    void** translated = (void**)translate_address((void*)page_table);
+
+    for(unsigned i = 0; i < 512; i++) {
+        if(present_entry(translated[i])) {
+            uint64_t page_table_addr = (uint64_t)extract_pointer(translated[i]);
+            deep_free_map(page_table_addr);
+        }
+    }
+
+    free_page_table(page_table);
+}
+
+
+void free_user_page_map(uint64_t user_page_map) {
+
+    // deep free the page map
+    deep_free_map(user_page_map);
+}
+
+
+void unmap_user(void) {
+    pml4[0] = create_table_entry(
+            NULL,
+            0
+    );
+}
+
