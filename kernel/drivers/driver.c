@@ -46,7 +46,7 @@ static void pop_driver_struct(void) {
     free_node(old);
 }
 
-void driver_register_and_install(
+driver_t* driver_register_and_install(
                 int (*install)(struct driver*), 
                 struct dev* dev
 ) {
@@ -60,9 +60,13 @@ void driver_register_and_install(
         dev->driver = dr;
 
         log_debug("'%s' installed", dr->name);
+
+        return dr;
     }
-    else
+    else {
         pop_driver_struct();
+        return NULL;
+    }
 }
 
 

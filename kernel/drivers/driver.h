@@ -44,7 +44,7 @@ typedef struct driver {
 
 
 
-void driver_register_and_install(
+driver_t* driver_register_and_install(
             int (*install)(struct driver*), 
             struct dev* dev
 );
