@@ -6,7 +6,7 @@
 
 typedef struct framebuffer_dev fd_t;
 
-void video_init(
+driver_t* video_init(
         const struct stivale2_struct_tag_framebuffer* framebuffer_tag
 ) {
 
@@ -30,7 +30,7 @@ void video_init(
 
     register_dev((struct dev *)fb_dev);
 
-    driver_register_and_install(
+    return driver_register_and_install(
         (int (*)(struct driver*))
         terminal_install,
         (struct dev *)fb_dev
