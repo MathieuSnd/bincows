@@ -33,7 +33,6 @@ syscall_entry:
     pop rcx
 
 
-    jmp $
     ; x86_64 version of sysret 
     ; without the p64 it would enter
     ; x86 32bit compatibility mode

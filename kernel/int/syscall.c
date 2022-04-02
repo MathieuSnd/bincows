@@ -35,7 +35,7 @@ static inline void sc_warn(const char* msg, void* args, size_t args_sz) {
 // the process accessible range
 // 0: fine
 // non-0: check failed
-static int check_args(const process_t* proc, void* args, size_t args_sz) {
+static int check_args(const process_t* proc, const void* args, size_t args_sz) {
     // find a range in which the args are
     
     const uint64_t arg_begin = (uint64_t)args;
@@ -64,8 +64,8 @@ static int check_args(const process_t* proc, void* args, size_t args_sz) {
         
         const struct elf_segment* seg = &proc->program->segs[i];
 
-        if(arg_begin >= seg->base 
-        && arg_end < seg->base + seg->length)
+        if(arg_begin >= (uint64_t)seg->base 
+        && arg_end   <  (uint64_t)seg->base + seg->length)
             // found
             return 0;
     }
@@ -88,7 +88,11 @@ static uint64_t sc_sleep(process_t* proc, void* args, size_t args_sz) {
         sc_warn("bad args_sz", args, args_sz);
     }
 
+    (void) proc;
+
     sc_warn("sleep", args, args_sz);
+
+    return 0;
 }
 
 
@@ -117,7 +121,7 @@ static uint64_t sc_sbrk(process_t* proc, void* args, size_t args_sz) {
     if(
         !is_user(new_brk)                    // avoid userspace overflow
      || unaligned_new_brk < proc->heap_begin // avoid underflow
-     || available_pages()*0x1000 > delta     // avoid memory overflow
+     || (int64_t)available_pages()*0x1000 > delta     // avoid memory overflow
     ) {
         return -1;
     }
@@ -134,7 +138,7 @@ static uint64_t sc_sbrk(process_t* proc, void* args, size_t args_sz) {
     }
     else {
         unmap_pages(
-            new_brk,
+            (uint64_t)new_brk,
             -needed_pages
         );
     }
@@ -144,7 +148,7 @@ static uint64_t sc_sbrk(process_t* proc, void* args, size_t args_sz) {
     proc->brk = new_brk;
 
 
-    return old_brk;
+    return (uint64_t)old_brk;
 }
 
 
@@ -190,7 +194,7 @@ static uint64_t sc_open(process_t* proc, void* args, size_t args_sz) {
 
     fd_t fd = insert_process_file(proc, h);
 
-    if(fd == -1) {
+    if((int)fd == -1) {
         sc_warn("too many open files", args, args_sz);
 
         vfs_close_file(h);
@@ -202,7 +206,7 @@ static uint64_t sc_open(process_t* proc, void* args, size_t args_sz) {
 
 
 static uint64_t sc_close(process_t* proc, void* args, size_t args_sz) {
-    if(args_sz != 8) {
+    if(args_sz != sizeof(fd_t)) {
         sc_warn("bad args_sz", args, args_sz);
         return -1;
     }
@@ -267,6 +271,9 @@ static uint64_t sc_read(process_t* proc, void* args, size_t args_sz) {
         return -1;
     }
 
+    // check that the buffer is mapped
+    check_args(proc, a->buf, a->count);
+
     return vfs_read_file(a->buf, a->count, 1, proc->files[a->fd]);
 }
 
@@ -288,6 +295,10 @@ static uint64_t sc_write(process_t* proc, void* args, size_t args_sz) {
         sc_warn("bad fd", args, args_sz);
         return -1;
     }
+
+
+    // check that the buffer is mapped
+    check_args(proc, a->buf, a->count);
 
     return vfs_write_file(a->buf, a->count, 1, proc->files[a->fd]);
 }
@@ -353,7 +364,7 @@ void syscall_init(void) {
 // called from syscall_entry
 uint64_t syscall_main(uint8_t scid, void* args, size_t args_sz) {
 
-    log_warn("SYSCALL %u", scid);
+    //log_warn("SYSCALL %u", scid);
 
     process_t* process = sched_current_process();
 
