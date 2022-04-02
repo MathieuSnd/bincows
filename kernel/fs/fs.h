@@ -292,6 +292,7 @@ typedef struct fs {
 
 // fs::type field values
 #define FS_TYPE_FAT 1
+#define FS_TYPE_DEVFS 2
 
 // seek whence field values
 #define SEEK_SET 0
