@@ -67,4 +67,5 @@ void terminal_set_colors(driver_t* this,
                          uint32_t foreground, 
                          uint32_t background);
 
+void terminal_register_dev_file(const char* filename, driver_t* this);
 

@@ -12,6 +12,7 @@
 #include "../../memory/heap.h"
 #include "../../int/apic.h"
 #include "../../int/idt.h"
+#include "../../fs/devfs/devfs.h"
 
 
 #define TAB_SPACE 6
@@ -437,6 +438,7 @@ static void update_framebuffer(driver_t* this) {
 
         uint64_t* otherptr = otherbuff;
 
+
         // check if something is modified
         for(unsigned i = 0; i < cache_line; i++) {
             diff = *(ptr++) ^ *(otherptr++);
@@ -444,7 +446,7 @@ static void update_framebuffer(driver_t* this) {
                 break;
         }
 
-        if(!!diff) {
+        if(diff) {
             // have to append changes
 
             ptr = buff;
@@ -460,6 +462,7 @@ static void update_framebuffer(driver_t* this) {
        else {
 
        }
+
 
         buff      += cache_line;
         otherbuff += cache_line;
@@ -511,6 +514,8 @@ static void append_string(const char *string, size_t length) {
 */
 
 void write_string(driver_t* this, const char *string, size_t length) {
+
+    //for(;;);
     struct data* restrict d = this->data;
     d->need_refresh = false;
 
@@ -540,4 +545,62 @@ void terminal_set_colors(driver_t* this,
 
     d->current_fgcolor = foreground;
     d->current_bgcolor = background;
+}
+
+
+
+static int terminal_devfile_read(
+                driver_t* this,
+                void*  buffer,
+                size_t begin,
+                size_t count
+) { 
+    assert(this);
+    struct data* restrict d = this->data;
+    assert(d);
+
+
+    (void)buffer;
+    (void)begin;
+    (void)count;
+/*
+    size_t n = length;
+    char* c = buffer;
+    while(n--) {
+        *c++ = d->terminal_handler(this);
+    }
+
+*/
+    return 0;
+}
+
+static int terminal_devfile_write(
+                driver_t* this,
+                const void* buffer,
+                size_t begin,
+                size_t count
+) {
+    assert(this);
+    struct data* restrict d = this->data;
+    assert(d);
+
+    write_string(this, buffer, count);
+    return count;
+}
+
+
+//int (*write)(void* arg, const void* buf, size_t begin, size_t count);
+
+void terminal_register_dev_file(const char* filename, driver_t* this) {
+
+    struct data* restrict d = this->data;
+
+    int r = devfs_map_device((devfs_file_interface_t){
+        .arg   = this,
+        .read  = terminal_devfile_read,
+        .write = terminal_devfile_write,
+    }, filename);
+
+    // r = 0 on success
+    assert(!r);
 }
