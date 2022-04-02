@@ -80,8 +80,8 @@ static struct GDTentry gdt[] = {
     {0,0,0,  0,0,0,1,1,0,1,   0,  0,1,0,1,  0}, // kernel code segment
     {0,0,0,  0,1,0,0,1,0,1,   0,  0,0,1,1,  0}, // kernel data segment
     
-    {0,0,0,  0,0,0,1,1,3,1,   0,  0,1,0,1,  0}, // user code segment
     {0,0,0,  0,1,0,0,1,3,1,   0,  0,0,1,1,  0}, // user data segment
+    {0,0,0,  0,0,0,1,1,3,1,   0,  0,1,0,1,  0}, // user code segment
 
 // gcc is SO dumb we have to fill the struct by software
     {0,0,0,  1,0,0,1,0,0,1,   0,  1,0,0,0,  0}, // TSS segment1
