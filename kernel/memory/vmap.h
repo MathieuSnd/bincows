@@ -105,9 +105,9 @@
 
 // return non 0 value iif the given address
 // resides in kernel memory
-static inline int is_user(uint64_t vaddr) {
+static inline int is_user(void* vaddr) {
     // user is in the lower half
-    return (vaddr & ~USER_END) == 0;
+    return ((uint64_t)vaddr & ~USER_END) == 0;
 }
 
 static inline int is_kernel_memory(uint64_t vaddr) {

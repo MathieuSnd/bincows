@@ -3,7 +3,7 @@
 #include "../lib/panic.h"
 #include "../lib/logging.h"
 #include "../lib/sprintf.h"
-#include "../sched/thread.h"
+#include "../sched/sched.h"
 
 #include "irq.h"
 
@@ -84,7 +84,6 @@ void irq_common_handler(uint8_t irq_n, gp_regs_t* context) {
 
     handler(driver);
 
-    if(!schedule())
-        return;
+    schedule();
 }
 
