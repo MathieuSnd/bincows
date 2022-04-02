@@ -27,4 +27,6 @@ struct elf_program {
 
 elf_program_t* elf_load(const void* file, size_t file_size);
 
+void elf_free(elf_program_t* program);
+
 

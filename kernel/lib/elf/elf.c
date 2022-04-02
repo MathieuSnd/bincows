@@ -23,16 +23,14 @@ static int check_elf_header(const ehdr_t* ehdr, size_t file_size) {
     // file is too short
     if(file_size < sizeof(ehdr_t))
         return 0;
-    
-    log_warn("checked %x", ehdr->magic);
-
+/*
     dump(
         ehdr,
         sizeof(ehdr_t),
         16,
         DUMP_8
     );
-
+*/
 
     if(
            ehdr->magic     != 0x464c457f
@@ -92,8 +90,6 @@ elf_program_t* elf_load(const void* file, size_t file_size) {
         const phdr_t* phdr = file + ehdr->phdr_offset 
                                   +i * ehdr->phdr_entry_size;
 
-        log_warn("issou phdr->p_type=%u",phdr->p_type);
-
 
         prog->segs[j].flags  = convert_flags(phdr->flags);
         prog->segs[j].length = phdr->p_memsz;
@@ -120,7 +116,6 @@ elf_program_t* elf_load(const void* file, size_t file_size) {
         if(
             phdr->p_offset + phdr->p_filesz > file_size
          || phdr->p_filesz > phdr->p_memsz
-         || ((uint64_t)prog->segs[j].base & 0x0fff)
         ) {
             // bad file
             log_info("bad elf file");
@@ -130,11 +125,15 @@ elf_program_t* elf_load(const void* file, size_t file_size) {
         }
     
     
-        size_t page_count = (prog->segs[j].length+0xfff) >> 12;
+        size_t page_count = (
+                    prog->segs[j].length
+                +   ((uint64_t)prog->segs[j].base & 0x0fff)
+                +   0xfff) >> 12;
+
         // map segments without paging attributes
         // until we copied the content
         alloc_pages(
-            prog->segs[j].base,
+            (void*) ((uint64_t)prog->segs[j].base & ~0x0fff),
             page_count,
             PRESENT_ENTRY | PL_US | PL_RW
         );
@@ -170,3 +169,8 @@ elf_program_t* elf_load(const void* file, size_t file_size) {
 
     return prog;
 }
+
+void elf_free(elf_program_t* program) {
+    free(program);
+}
+
