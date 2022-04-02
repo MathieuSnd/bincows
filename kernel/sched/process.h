@@ -11,6 +11,11 @@
 
 typedef int pid_t;
 
+typedef unsigned fd_t;
+
+#define MAX_FDS 32
+
+
 
 typedef struct process {
     pid_t pid;
@@ -26,8 +31,14 @@ typedef struct process {
     elf_program_t* program;
 
 
-    size_t n_files;
-    file_handle_t** files;
+    void* heap_begin;
+    void* brk;
+
+    // brk as seen by processes
+    void* unaligned_brk;
+
+    
+    file_handle_t* files[MAX_FDS];
 
 } process_t;
 

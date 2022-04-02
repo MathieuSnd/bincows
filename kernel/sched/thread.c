@@ -18,15 +18,17 @@ int create_thread(
         .tid   = tid,
     };
 
-    thread->regs.cs  = USER_CS;
-    thread->regs.ss  = USER_DS;
+    thread->rsp = stack_base + stack_size - sizeof(gp_regs_t);
 
-    thread->regs.rflags = get_rflags();
-    thread->regs.rbp = 0;
+    thread->rsp->cs  = USER_CS;
+    thread->rsp->ss  = USER_DS;
 
-    thread[0].regs.rsp = stack_base + stack_size;
+    thread->rsp->rflags = get_rflags();
+    thread->rsp->rbp = 0;
 
-    printf("issou %lx", thread[0].regs.rsp);
+    thread->rsp->rsp = (uint64_t)stack_base + stack_size;
+
+    thread->type = READY;
 
     return 0;
 }

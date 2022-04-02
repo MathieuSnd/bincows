@@ -50,6 +50,13 @@ struct kernel_task {
     stack_t stack;
 };
 
+typedef 
+enum thread_state {
+    READY,
+    RUNNING,
+    BLOCKED
+} tstate_t;
+
 
 typedef 
 struct thread {
@@ -58,7 +65,9 @@ struct thread {
     tid_t tid;
 
     stack_t stack;
-    gp_regs_t regs;
+    gp_regs_t* rsp;
+
+    tstate_t type;
 
 } thread_t;
 

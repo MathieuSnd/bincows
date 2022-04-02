@@ -29,6 +29,15 @@ static void* alloc_stack(process_t* process) {
 
 int create_process(process_t* process, process_t* pparent, const void* elffile, size_t elffile_sz) {
 
+    // assert that no userspace is mapped
+    assert(get_user_page_map() == 0);
+
+    uint64_t user_page_map = alloc_user_page_map();
+
+    set_user_page_map(user_page_map);
+
+    // we have to have the userspace map ready
+    // before calling this
     elf_program_t* program = elf_load(elffile, elffile_sz);
     
     if(!program)
@@ -43,11 +52,10 @@ int create_process(process_t* process, process_t* pparent, const void* elffile, 
         ppid = pparent->pid;
 
         // inherit parent file handlers
-        n_files = pparent->n_files;
         files = malloc(sizeof(file_handle_t*) * n_files);
 
         for(unsigned i = 0; i < n_files; i++) {
-         //   files[i] = vfs_clone_handle(pparent->files[i]);
+            files[i] = vfs_clone_handle(pparent->files[i]);
         }
     }
 
@@ -66,7 +74,24 @@ int create_process(process_t* process, process_t* pparent, const void* elffile, 
         FIRST_TID
     );
 
-    threads[0].regs.rip = program->entry;
+    threads[0].rsp->rip = program->entry;
+
+
+    // choose an emplacement for heap base
+    // choose it above the highest elf 
+    // segment's end
+    void* elf_end = NULL;
+    for(int i = 0; i < program->n_segs; i++) {
+        void* segment_end = program->segs[i].base + program->segs[i].length;
+     
+        if((uint64_t)elf_end < (uint64_t)segment_end)
+            elf_end = segment_end;
+    }
+
+    // empty heap
+    process->brk = process->unaligned_brk = process->heap_begin = 
+                        (void *)(((uint64_t)elf_end+0xfff) & ~0x0fffllu);
+    
 
 
     *process = (process_t) {
@@ -74,11 +99,12 @@ int create_process(process_t* process, process_t* pparent, const void* elffile, 
         .n_files = n_files,
         .n_threads = 1,
         .threads = threads,
-        .page_dir_paddr = 0,
+        .page_dir_paddr = user_page_map,
         .pid = pid,
         .ppid = KERNEL_PID,
         .program = program,
     };
+    
 
     return 1;
 }
@@ -101,6 +127,8 @@ void free_process(process_t* process) {
     if(process->threads)
         // thread buffer hasn't been freed yet
         free(process->threads);
+
+    elf_free(process->program);
 
     free(process);
 }
