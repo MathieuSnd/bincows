@@ -553,6 +553,8 @@ static int terminal_devfile_read(
     (void)buffer;
     (void)begin;
     (void)count;
+
+    
 /*
     size_t n = length;
     char* c = buffer;
@@ -570,6 +572,9 @@ static int terminal_devfile_write(
                 size_t begin,
                 size_t count
 ) {
+    // unseekable
+    (void)count;
+
     assert(this);
     struct data* restrict d = this->data;
     assert(d);
@@ -583,12 +588,10 @@ static int terminal_devfile_write(
 
 void terminal_register_dev_file(const char* filename, driver_t* this) {
 
-    struct data* restrict d = this->data;
-
     int r = devfs_map_device((devfs_file_interface_t){
         .arg   = this,
-        .read  = terminal_devfile_read,
-        .write = terminal_devfile_write,
+        .read  = (void*) terminal_devfile_read,
+        .write = (void*) terminal_devfile_write,
     }, filename);
 
     // r = 0 on success
