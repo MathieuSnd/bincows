@@ -81,24 +81,18 @@ void lapic_timer_handler(void* arg) {
 }  
 
 
+static uint64_t lapic_period;
+
 
 uint64_t clock_ns(void)  {
-    return timer_offset + apic_config->timer_current_count.reg;
+    return timer_offset +
+             (apic_config->timer_initial_count.reg - apic_config->timer_current_count.reg) * lapic_period;
 }
 
 
 extern uint64_t read_msr(uint32_t address);
 extern void     write_msr(uint32_t address, uint64_t value);
 
-
-
-inline uint64_t read(uint32_t m_address) {
-    uint32_t low, high;
-
-    asm("rdmsr" : "=a"(low), "=d"(high) : "c"(m_address));
-
-    return ((uint64_t) high << 32) | low;
-}
 
 void apic_setup_clock(void) {
     log_info("setup local apic clock...");
@@ -135,6 +129,10 @@ void apic_setup_clock(void) {
     uint32_t t = (UINT32_MAX - apic_config->timer_current_count.reg);
 
     apic_config->timer_initial_count.reg = t;
+
+
+    lapic_period = (1000 * 1000 * 1000 / LAPIC_IRQ_FREQ) / t;
+
 
     // enable apic and set spurious int to 0xff
 // unmask the IRQ, periodic mode, timer on irq 48
