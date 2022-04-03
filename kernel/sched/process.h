@@ -37,8 +37,8 @@ typedef struct process {
     // brk as seen by processes
     void* unaligned_brk;
 
-    
-    file_handle_t* files[MAX_FDS];
+    // size [MAX_FDS]
+    file_handle_t** files;
 
 } process_t;
 

@@ -141,7 +141,6 @@ void  sched_save(gp_regs_t* rsp) {
 
     if(current_pid == KERNEL_PID) {
         kernel_saved_rsp = rsp;
-        unmap_user();
     }
     else {
         kernel_saved_rsp = NULL;

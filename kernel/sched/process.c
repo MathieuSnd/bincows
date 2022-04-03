@@ -3,6 +3,7 @@
 #include "../memory/vmap.h"
 #include "../memory/paging.h"
 #include "../lib/logging.h"
+#include "../lib/string.h"
 
 #include "sched.h"
 
@@ -45,19 +46,23 @@ int create_process(process_t* process, process_t* pparent, const void* elffile, 
 
     pid_t ppid = KERNEL_PID;
 
-    size_t n_files = 0;
     file_handle_t** files = NULL;
 
+    files = malloc(sizeof(file_handle_t*) * MAX_FDS);
+
     if(pparent) {
+        // inherit parent file handlers
         ppid = pparent->pid;
 
-        // inherit parent file handlers
-        files = malloc(sizeof(file_handle_t*) * n_files);
 
-        for(unsigned i = 0; i < n_files; i++) {
-            files[i] = vfs_clone_handle(pparent->files[i]);
+        for(unsigned i = 0; i < MAX_FDS; i++) {
+            if(pparent->files[i])
+                files[i] = vfs_clone_handle(pparent->files[i]);
         }
     }
+    else
+        memset(files, 0, sizeof(file_handle_t*) * MAX_FDS);
+
 
     thread_t* threads = malloc(sizeof(thread_t));
 
@@ -74,14 +79,14 @@ int create_process(process_t* process, process_t* pparent, const void* elffile, 
         FIRST_TID
     );
 
-    threads[0].rsp->rip = program->entry;
+    threads[0].rsp->rip = (uint64_t)program->entry;
 
 
     // choose an emplacement for heap base
     // choose it above the highest elf 
     // segment's end
     void* elf_end = NULL;
-    for(int i = 0; i < program->n_segs; i++) {
+    for(unsigned i = 0; i < program->n_segs; i++) {
         void* segment_end = program->segs[i].base + program->segs[i].length;
      
         if((uint64_t)elf_end < (uint64_t)segment_end)
@@ -96,12 +101,11 @@ int create_process(process_t* process, process_t* pparent, const void* elffile, 
 
     *process = (process_t) {
         .files   = files,
-        .n_files = n_files,
         .n_threads = 1,
         .threads = threads,
         .page_dir_paddr = user_page_map,
         .pid = pid,
-        .ppid = KERNEL_PID,
+        .ppid = ppid,
         .program = program,
     };
     
@@ -115,13 +119,12 @@ void free_process(process_t* process) {
 
     assert(!process->n_threads);
 
-    if(process->files) {
-        for(unsigned i = 0; i < process->n_files; i++) {
+    for(unsigned i = 0; i < MAX_FDS; i++) {
+        if(process->files)
             vfs_close_file(process->files[i]);
-        }
-
-        free(process->files);
     }
+
+    free(process->files);
 
 
     if(process->threads)
