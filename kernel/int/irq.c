@@ -38,6 +38,7 @@ void register_irq(
 
     irqs[irq_number].handler = handler;
     irqs[irq_number].driver  = driver;
+
 }
 
 unsigned install_irq(irq_handler_t  handler,
@@ -59,7 +60,6 @@ void release_irq(unsigned n) {
     assert(n >= IRQ_BEGIN);
     
     // replace the handler by the dummy one
-    set_irq_handler(n, IRQ_dummy_handler);
 
     // mark it as free
     irqs[n - IRQ_BEGIN].handler = NULL;

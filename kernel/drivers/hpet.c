@@ -60,13 +60,13 @@ void hpet_init(void) {
     hpet_period = base->capabilities >> 32;
 }
 
-void hpet_prepare_wait_ms(unsigned ms) {
+void hpet_prepare_wait_ns(uint64_t ns) {
     hpet_period = base->capabilities >> 32;
 
 // deactivate hpet timer
     base->general_config &= ~1;
     base->main_counter_value = 
-                - ((uint64_t)ms * 0xe8d4a51000llu / hpet_period);
+                - ((uint64_t)ns * 0xF4240llu / hpet_period);
 }
 //t * 1000 / (T * 1e15) * 
 

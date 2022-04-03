@@ -3,7 +3,7 @@
 #include <stdint.h>
 
 void hpet_init(void);
-void hpet_prepare_wait_ms(unsigned);
+void hpet_prepare_wait_ns(uint64_t);
 
 // enables HPET, busy wait until the main counteur
 // reaches 0, and returns without disabling HPET!  

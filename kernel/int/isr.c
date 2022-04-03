@@ -198,8 +198,9 @@ void setup_isrs(void) {
     set_irq_handler(45, _irq_handler45);
     set_irq_handler(46, _irq_handler46);
     set_irq_handler(47, _irq_handler47);
+    set_irq_handler(48, _irq_handler48);
 
-    for(int i = 48; i <= 254; i++)
+    for(int i = 49; i <= 254; i++)
         set_irs_handler(i, IRQ_dummy_handler);
 
 

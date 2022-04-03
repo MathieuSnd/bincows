@@ -46,6 +46,7 @@ create_irq 44
 create_irq 45
 create_irq 46
 create_irq 47
+create_irq 48
 
 
 common_stub:

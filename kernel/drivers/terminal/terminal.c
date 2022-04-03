@@ -55,7 +55,6 @@ struct data {
     uint32_t current_fgcolor;
     uint32_t current_bgcolor;
     unsigned margin_left, margin_top;
-    unsigned timerID;
 
     // this buffer keeps a copy of the framebuffer
 };
@@ -185,12 +184,6 @@ char terminal_install(driver_t* this) {
 
     d->cur_px_buffer = 0;
 
-
-    //d->timerID = apic_create_timer(
-    //                    (timer_callback_t)terminal_update, 
-    //                    UPDATE_PERIOD_MS,
-    //                    this);
-//
     if(terminals++ == 0)
         loadBMP_24b_1b(&_binary_charmap_bmp, &charmap);
     
@@ -215,9 +208,6 @@ void terminal_remove(driver_t* this) {
 
     //free(d->char_buffer);
     
-    if(d->timerID != INVALID_TIMER_ID)
-        apic_delete_timer(d->timerID);
-
     // the allocation of data also 
     // contains the char buffer
     free(d);

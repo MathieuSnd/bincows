@@ -5,7 +5,7 @@
 struct driver;
 
 #define IRQ_BEGIN 32
-#define IRQ_END   47
+#define IRQ_END   48
 
 typedef void(* irq_handler_t)(struct driver *);
 

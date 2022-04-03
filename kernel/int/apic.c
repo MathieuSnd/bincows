@@ -1,6 +1,7 @@
 #include <stdint.h>
 
 #include "idt.h"
+#include "irq.h"
 #include "apic.h"
 
 #include "../lib/assert.h"
@@ -10,6 +11,9 @@
 #include "../drivers/hpet.h"
 #include "../lib/string.h"
 #include "../memory/heap.h"
+#include "../sched/sched.h"
+
+
 
 struct APICRegister 
 {
@@ -57,106 +61,29 @@ static_assert(sizeof(struct APICConfig) == 0x400);
 static volatile struct APICConfig* apic_config = (void *)APIC_VADDR;
 
 
-static uint64_t apic_timer_clock_count = 0;
 
-
-// 1 ms
-#define CLOCK_FREQUENCY 1
-typedef struct {
-    unsigned period;    
-    unsigned counter;
-    char exists;
-    
-    void (*func)(void*);
-    void*    param;
-} timer_t;
-
-
-// realloc(NULL, s) ~ malloc(s)
-timer_t* timers = NULL;
-static unsigned n_timers = 0;
-
-
-static void timers_realloc(void) {
-    static unsigned buffsize = 0;
-    
-    if(n_timers == 0) {
-        // performs a free
-        buffsize = 0;
-    }
-    
-    if(n_timers > buffsize)
-        buffsize *= 2;
-    
-    else if(n_timers < buffsize / 2)
-        buffsize /= 2;
-    
-    timers = realloc(timers, buffsize*sizeof(timer_t));
-}
-
-
-unsigned apic_create_timer(timer_callback_t fun, int millisecs, void* param) {
-    unsigned id = n_timers++;
-
-    timers_realloc();
-
-    timers[id].counter = 0;
-    timers[id].period  = millisecs * CLOCK_FREQUENCY;
-    timers[id].func    = fun;
-    timers[id].func    = param;
-
-    timers[id].exists  = 1;
-
-    return id;
-}
-
-int apic_delete_timer(unsigned id) {
-    if(id >= n_timers)
-        return 0;
-    timers[id].exists = 0;
-
-    // check if we can free the end of the list 
-
-    // end of the list: 
-    // timers[timer_end -> n_timers-1].exist = 0
-    unsigned timer_end = 0; 
-    for(unsigned i = 0; i < n_timers; i++) {
-        if(timers[i].exists)
-            timer_end = i+1;
-    } 
-
-    if(n_timers != timer_end) {
-        n_timers = timer_end;
-        timers_realloc();
-    }
-
-    return 1;
-}
-
+// acknowledge an apic IRQ
 void apic_eoi(void) {
     apic_config->end_of_interrupt.reg = 0;
 }
 
 
-__attribute__((interrupt)) 
-void lapic_timer_handler(struct IFrame* frame) {
-    (void) frame;
-    ++apic_timer_clock_count;
+static uint64_t timer_offset = 0;
 
-    for(unsigned i = 0; i < n_timers; i++) {
-        if(++timers[i].counter >= timers[i].period) {
-            timers[i].func(timers[i].param);
-            timers[i].counter = 0;
-        }
-    }
-    
+void lapic_timer_handler(void* arg) {
+    (void)arg;
+
+    timer_offset += 1000 * 1000 * 1000 / LAPIC_IRQ_FREQ;
+
     apic_eoi();
+    
+    schedule();
 }  
 
 
 
-uint64_t clock(void)  {
-    return apic_timer_clock_count;
+uint64_t clock_ns(void)  {
+    return timer_offset + apic_config->timer_current_count.reg;
 }
 
 
@@ -183,17 +110,22 @@ void apic_setup_clock(void) {
 
 
     assert(apic_config != NULL);
-    set_irq_handler(48, lapic_timer_handler);
+
+    register_irq(IRQ_APIC_TIMER, (void*)lapic_timer_handler, NULL);
 
     // enable apic and set spurious int to 0xff
-    apic_config->spurious_interrupt_vector.reg = 0x100 | LAPIC_SPURIOUS_IRQ; 
+    apic_config->spurious_interrupt_vector.reg = 0x100 | IRQ_LAPIC_SPURIOUS; 
     
     // masks the irq, one shot mode
     apic_config->LVT_timer.reg = 0x20000; 
 
     apic_config->timer_divide_configuration.reg = 3; // divide by 16
 
-    hpet_prepare_wait_ms(1);
+
+
+    hpet_prepare_wait_ns(1000 * 1000 * 1000 / LAPIC_IRQ_FREQ);
+
+
 
     apic_config->timer_initial_count.reg = UINT32_MAX;
 
@@ -209,6 +141,5 @@ void apic_setup_clock(void) {
     apic_config->LVT_timer.reg = 0x20000 | 48;
 
     hpet_disable();
-
 }
 

@@ -2,8 +2,8 @@
 #include "../int/apic.h"
 
 void sleep(unsigned ms) {
-    uint64_t begin = clock();
+    uint64_t begin = clock_ns();
 
-    while (clock() < begin + ms)
+    while (clock_ns() < begin + (uint64_t)ms * 1000000)
         asm volatile("hlt");
 }
