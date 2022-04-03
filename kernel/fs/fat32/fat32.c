@@ -651,9 +651,9 @@ dirent_t* fat32_read_dir(
 
         read(part, cluster_begin(cluster, pr), buf, pr->cluster_size);
 
-        log_warn("bufsize=%u", bufsize);
+        //log_warn("bufsize=%u", bufsize);
 
-        dump(buf, 512, 32, DUMP_HEX8);
+        //dump(buf, 512, 32, DUMP_HEX8);
     
 
         for(unsigned i = 0; i < entries_per_cluster; i++) {

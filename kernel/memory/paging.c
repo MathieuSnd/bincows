@@ -485,8 +485,10 @@ static void* get_entry_or_panic(void** restrict table, unsigned index) {
 
     void* entry = virtual_addr_table[index];
 
-    if(!present_entry(entry))
+    if(!present_entry(entry)) {
+        log_warn("trying to access non-present entry %u", index);
         panic("get_entry_or_panic(): entry not present");
+    }
     else
         return entry; 
 }
@@ -774,7 +776,6 @@ uint64_t get_user_page_map(void) {
  * map table physical base address
  */
 void set_user_page_map(uint64_t paddr) {
-    log_warn("mouais ayaoi %lx", paddr);
     pml4[0]   = create_table_entry(
             (void*)paddr,   
             PRESENT_ENTRY | PL_US // execute enable, read 

@@ -238,11 +238,6 @@ static int unmount(vdir_t *vdir) {
     fs_t *fs = vdir->fs;
 
 
-    if(fs->type == FS_TYPE_DEVFS) {
-        log_warn("issou ayaooooooooooooooo");
-     
-    }
-
     if (vdir->n_children)
     {
         log_warn("cannot unmount partition %s: it is not a leaf partition", fs->part->name);

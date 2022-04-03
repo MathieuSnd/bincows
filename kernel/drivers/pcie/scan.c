@@ -220,15 +220,7 @@ static void new_dev(
 
     // our struct inherits from this one
     // don't worry
-/*
-    log_info(
-        "ISSOU %x:%x:%x:%x",
-        dev->path.domain,
-        dev->path.bus,
-        dev->path.device,
-        dev->path.func
-    );
-*/
+
     callback(dev);
 }
 
