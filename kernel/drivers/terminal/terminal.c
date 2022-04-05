@@ -302,10 +302,6 @@ static struct Char make_Char(driver_t* this, char c) {
 static void emplace_normal_char(driver_t* this, char c) {
     struct data* restrict d = this->data;
     
-    if(d->cur_col >= d->ncols) {
-        next_line(this);
-    }
-    
     d->char_buffer[d->ncols * d->cur_line + d->cur_col] = make_Char(this, c);
     
     struct Char* ch = &d->char_buffer[d->ncols * d->cur_line + d->cur_col];
@@ -314,6 +310,12 @@ static void emplace_normal_char(driver_t* this, char c) {
         print_char(this, ch, d->cur_line - d->first_line, d->cur_col);
     
     d->cur_col += 1;
+
+    
+    if(d->cur_col >= d->ncols) {
+        next_line(this);
+    }
+    
 }
 
 
@@ -331,7 +333,6 @@ static void emplace_char(driver_t* this, char c) {
     {
         for(unsigned i=d->cur_col;i < d->ncols; i++) 
         {
-            //print_char(ch, cur_line - first_line, cur_col);
             emplace_normal_char(this, ' ');
         }
     }
@@ -539,32 +540,26 @@ void terminal_set_colors(driver_t* this,
 
 
 
+///////////////////////////////////////////////////////////////////////////////
+/////////////      /dev/term0 driver      ////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
+
 static int terminal_devfile_read(
                 driver_t* this,
-                void*  buffer,
-                size_t begin,
-                size_t count
+                void*     buffer,
+                size_t    begin,
+                size_t    count
 ) { 
-    assert(this);
-    struct data* restrict d = this->data;
-    assert(d);
 
-
+    (void)this;
     (void)buffer;
     (void)begin;
     (void)count;
-
     
-/*
-    size_t n = length;
-    char* c = buffer;
-    while(n--) {
-        *c++ = d->terminal_handler(this);
-    }
-
-*/
+    // unreadable
     return 0;
 }
+
 
 static int terminal_devfile_write(
                 driver_t* this,
@@ -573,7 +568,7 @@ static int terminal_devfile_write(
                 size_t count
 ) {
     // unseekable
-    (void)count;
+    (void)begin;
 
     assert(this);
     struct data* restrict d = this->data;
@@ -584,14 +579,14 @@ static int terminal_devfile_write(
 }
 
 
-//int (*write)(void* arg, const void* buf, size_t begin, size_t count);
-
 void terminal_register_dev_file(const char* filename, driver_t* this) {
+
 
     int r = devfs_map_device((devfs_file_interface_t){
         .arg   = this,
         .read  = (void*) terminal_devfile_read,
         .write = (void*) terminal_devfile_write,
+        .file_size = ~0llu,
     }, filename);
 
     // r = 0 on success
