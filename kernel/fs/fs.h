@@ -186,7 +186,7 @@ typedef struct fs {
      * first sector to read
      * @return int the number of read bytes.
      */
-    int (*read_file_sectors)(struct fs* restrict fs,file_t* restrict fd,
+    int (*read_file_sectors)(struct fs* restrict fs, const file_t* restrict fd,
             void* restrict buf, uint64_t begin, size_t n);
 
 
@@ -208,7 +208,7 @@ typedef struct fs {
      * @param n amount of sectors to be written
      * @return int the number of read bytes.
      */
-    int (*write_file_sectors)(struct fs* restrict fs, file_t* fd, 
+    int (*write_file_sectors)(struct fs* restrict fs, const file_t* restrict fd, 
             const void* restrict buf, uint64_t begin, size_t n);
 
 

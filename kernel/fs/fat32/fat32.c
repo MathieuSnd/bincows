@@ -43,7 +43,7 @@ void fat32_unmount(fs_t* fs);
 
 int fat32_read_file_sectors(
         fs_t*   restrict fs, 
-        file_t* restrict fd, 
+        const file_t* restrict fd, 
         void*   restrict buf,
         uint64_t begin,
         size_t n
@@ -51,7 +51,7 @@ int fat32_read_file_sectors(
 
 int fat32_write_file_sectors(
         fs_t* restrict fs, 
-        file_t* restrict file, 
+        const file_t* restrict file, 
         const void* restrict buf,
         uint64_t begin,
         size_t n
@@ -1155,7 +1155,7 @@ cluster_t fetch_cluster(
 
 int fat32_read_file_sectors(
         fs_t*   restrict fs, 
-        file_t* restrict fd, 
+        const file_t* restrict fd, 
         void*   restrict buf,
         uint64_t begin,
         size_t n
@@ -1235,7 +1235,7 @@ int fat32_read_file_sectors(
 
 int fat32_write_file_sectors(
         fs_t* restrict fs, 
-        file_t* restrict fd, 
+        const file_t* restrict fd, 
         const void* restrict buf,
         uint64_t begin,
         size_t n
