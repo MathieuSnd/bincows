@@ -63,6 +63,7 @@ static void simplify_path(char *dst, const char *src)
 
     char *buf = malloc(strlen(src) + 1);
 
+
     *dst = 0;
 
     strcpy(buf, src);
@@ -152,23 +153,6 @@ static void free_vtree(vdir_t *root)
     log_warn("free_vtree end");
 }
 
-// return the vdir associated with given fs
-// or null if it is not found
-static vdir_t *search_fs(vdir_t *root, fs_t *fs)
-{
-    if (root->fs == fs)
-        return root;
-
-    for (unsigned i = 0; i < root->n_children; i++)
-    {
-        vdir_t *child = &root->children[i];
-
-        vdir_t *sub_result = search_fs(child, fs);
-        if (sub_result)
-            return sub_result;
-    }
-    return NULL;
-}
 
 // remove the vdir
 // return wether or not the vdir has
@@ -726,7 +710,9 @@ fs_t *vfs_open(const char *path, fast_dirent_t *dir)
         return ent->fs;
     }
 
+
     vdir_t *vdir = get_fs_vdir(pathbuf);
+
 
     if (!vdir)
     {
@@ -750,6 +736,20 @@ fs_t *vfs_open(const char *path, fast_dirent_t *dir)
         .type = DT_DIR,
     };
 
+
+    // in case vdir is the root
+    // the parent path is '/'
+    // and therefore finishes with a 
+    // '/'. Then, parent_path does
+    // not begin with '/' which is
+    // mendatory for the following code
+    if(*parent_path != '/') {
+        parent_path--;
+        if(parent_path[2] == 0) {
+            *dir = cur;
+            return fs;
+        }
+    }
 
 
     char* name_end = parent_path; 
@@ -805,7 +805,7 @@ fs_t *vfs_open(const char *path, fast_dirent_t *dir)
         {
             // the child does not exist
             free(pathbuf);
-
+        
             return NULL;
         }
 
@@ -833,43 +833,10 @@ fs_t *vfs_open(const char *path, fast_dirent_t *dir)
     return fs;
 }
 
-static void log_tree(const char *path, int level)
-{
-
-    struct DIR *dir = vfs_opendir(path);
-
-    struct dirent *dirent;
-
-    assert(dir);
-
-    while ((dirent = vfs_readdir(dir)))
-    {
-        for (int i = 0; i < level + 1; i++)
-            printf("-");
-
-        printf(" %d - %s (size %u) \n", dirent->type, dirent->name, dirent->file_size);
-
-        if (dirent->type == DT_DIR)
-        {
-            char *pathb = malloc(strlen(path) + strlen(dirent->name) + 2);
-
-            strcpy(pathb, path);
-            strcat(pathb, "/");
-            strcat(pathb, dirent->name);
-
-            log_tree(pathb, level + 1);
-
-            free(pathb);
-        }
-    }
-
-    vfs_closedir(dir);
-}
-
-
 
 // if it cannot be inserted, return NULL
 static vdir_t* emplace_vdir(const char* path) {
+
     // register the new virtual directory
     vdir_t tmp = {
         .fs = NULL,
@@ -881,6 +848,20 @@ static vdir_t* emplace_vdir(const char* path) {
     // path argument might not be in
     // cannonical form
     simplify_path(tmp.path, path);
+
+
+    // if we are mounting on the root dir,
+    // we should return it if it is not
+    // already monted
+    if (!strcmp(tmp.path, "/")) {
+        free(tmp.path);
+
+        if(vfs_root.fs == NULL)
+            return &vfs_root;
+        else
+            return NULL;
+    }
+
     vdir_t *new = insert_vdir(&tmp);
 
     if(!new)
@@ -915,8 +896,7 @@ int vfs_mount(disk_part_t *part, const char *path)
     }
 
     new->fs = fs;
-    part->mount_point = malloc(strlen(new->path) + 1);
-    strcpy(part->mount_point, new->path);
+    part->mount_point = strdup(new->path);
 
     
     return 1;
@@ -1008,11 +988,10 @@ int vfs_create(const char* path, int type) {
     
     assert(0);
     //fs->add_dirent()
-    
+    (void) type;
 
     return 0;
 }
-
 
 struct DIR *vfs_opendir(const char *path)
 {
@@ -1022,18 +1001,23 @@ struct DIR *vfs_opendir(const char *path)
      * and fs entries.
      *
      */
-    char *pathbuff = malloc(strlen(path) + 1);
-    simplify_path(pathbuff, path);
+    char *pathbuff = strdup(path);
 
     size_t n = 0;
 
     fast_dirent_t fdir;
     fs_t *fs = vfs_open(pathbuff, &fdir);
 
+
     struct DIR *dir = NULL;
 
     if (fs)
     { // dir does exist
+        if(fdir.type != DT_DIR) {
+            free(pathbuff);
+            return NULL;
+        }
+        
         dirent_t *list = read_dir(fs, fdir.ino, pathbuff, &n);
 
         dir = malloc(sizeof(struct DIR) + sizeof(dirent_t) * n);
@@ -1092,6 +1076,14 @@ struct DIR *vfs_opendir(const char *path)
 void vfs_closedir(struct DIR *dir)
 {
     free(dir);
+}
+
+struct DIR* vfs_dir_dup(struct DIR* dir) {
+    struct DIR* new = malloc(sizeof(struct DIR) + sizeof(dirent_t) * dir->len);
+    memcpy(new->children, dir->children, dir->len * sizeof(dirent_t));
+    new->len = dir->len;
+    new->cur = dir->cur;
+    return new;
 }
 
 
