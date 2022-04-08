@@ -77,18 +77,20 @@ void stacktrace_print(void) {
         
         if(*ptr == 0) // reached the top
             break;
-        puts("   ");
         
         int interrupt_routine = 0;
         
         uint64_t rip = (uint64_t) *(ptr+1);
         if(!is_kernel_memory(rip)) {
             //maybe it is an exception error code
+            // or maybe its the user....
+            return;
             interrupt_routine = 1;
             rip = (uint64_t) *(ptr+2);
             
         }
-        printf("%llx    ", rip);
+
+        printf("   %llx    ", rip);
 
         unsigned offset;
         const char* symbol  = get_symbol_name(rip, &offset);
