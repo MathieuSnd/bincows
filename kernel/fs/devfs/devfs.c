@@ -16,6 +16,8 @@ typedef struct devfs_file {
 
     void* arg;
 
+    uint64_t file_size;
+
     char name[DEVFS_MAX_NAME_LEN];
 } devfs_file_t;
 
@@ -40,8 +42,9 @@ static fs_t* devfs = NULL;
 
 
 
-static int read(struct fs* restrict fs,file_t* restrict fd,
+static int read(struct fs* restrict fs, const file_t* restrict fd,
         void* restrict buf, uint64_t begin, size_t n)  {
+
     
     assert(fs == devfs);
     assert(fs->type == FS_TYPE_DEVFS);
@@ -58,7 +61,7 @@ static int read(struct fs* restrict fs,file_t* restrict fd,
 }
 
 
-static int write(struct fs* restrict fs, file_t* fd, 
+static int write(struct fs* restrict fs, const file_t* restrict fd, 
         const void* restrict buf, uint64_t begin, size_t n) {
     struct devfs_priv* priv = (void *)(fs + 1);
 
@@ -94,8 +97,9 @@ static dirent_t* read_dir(struct fs* restrict fs, uint64_t dir_addr, size_t* res
 
     for (size_t i = 0; i < priv->n_files; i++) {
         strcpy(ret[i].name, priv->files[i].name);
-        ret[i].ino  = priv->files[i].id;
-        ret[i].type = DT_REG;
+        ret[i].ino       = priv->files[i].id;
+        ret[i].file_size = priv->files[i].file_size;
+        ret[i].type      = DT_REG;
     }
 
     return ret;
@@ -180,6 +184,7 @@ int devfs_map_device(devfs_file_interface_t fi, const char* name) {
     file->read = fi.read;
     file->write = fi.write;
     file->arg = fi.arg;
+    file->file_size = fi.file_size;
 
     if (strlen(name) >= DEVFS_MAX_NAME_LEN) {
         return -1;

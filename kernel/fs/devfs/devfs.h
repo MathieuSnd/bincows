@@ -10,6 +10,8 @@ typedef struct devfs_file_interface {
     int (*read )(void* arg,       void* buf, size_t begin, size_t count);
     int (*write)(void* arg, const void* buf, size_t begin, size_t count);
 
+    uint64_t file_size;
+
     // arg that will be passed to read/write
     void* arg;
 } devfs_file_interface_t;
