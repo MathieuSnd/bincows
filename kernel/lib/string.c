@@ -1,5 +1,5 @@
 #include "string.h"
-
+#include "../memory/heap.h"
 
 size_t  strlen(const char* str) {
     const char* ptr = str;
@@ -89,7 +89,7 @@ int   strncmp(const char* str1, const char* str2, size_t n) {
 }
 
 
-const char* strchr (const char *_s, int c) {
+char* strchr (const char *_s, int c) {
     const char* s=_s;
     char curr;
 
@@ -97,7 +97,7 @@ const char* strchr (const char *_s, int c) {
         curr = *s;
 
         if(curr == c)
-            return s;
+            return (const char *)s;
         else if(curr == '\0')
             break;
         
@@ -108,7 +108,7 @@ const char* strchr (const char *_s, int c) {
 }
 
 
-const char* strrchr(const char *s, int c) {
+char* strrchr(const char *s, int c) {
     char curr;
 
     const char* found = NULL;
@@ -124,11 +124,11 @@ const char* strrchr(const char *s, int c) {
         s++;
     }
 
-    return found;    
+    return (const char*)found;    
 }
 
 
-const char *strstr(const char *haystack, const char *needle) {
+char *strstr(const char *haystack, const char *needle) {
 
     int i = 0;
     char c, ci;
@@ -138,7 +138,7 @@ const char *strstr(const char *haystack, const char *needle) {
         ci = needle[i];
 
         if(ci == '\0')
-            return haystack - i - 1;
+            return (char *)(haystack - i - 1);
 
 
         c = *(haystack++);
@@ -332,6 +332,27 @@ char* strtok(char* restrict str, const char* restrict delim) {
 
     return strtok_r(str, delim, &saveptr);
 }
+
+char *strdup(const char *s) {
+    size_t len = strlen(s);
+    char* ret = malloc(len+1);
+    if(!ret)
+        return NULL;
+
+    memcpy(ret, s, len+1);
+    return ret;
+}
+
+char *strndup(const char *s, size_t n) {
+    size_t len = strnlen(s, n);
+    char* ret = malloc(len+1);
+    if(!ret)
+        return NULL;
+
+    memcpy(ret, s, len+1);
+    return ret;
+}
+
 
 
 int memsum(const void* ptr, size_t size) {
