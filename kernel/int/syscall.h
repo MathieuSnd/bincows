@@ -22,12 +22,18 @@ void syscall_init(void);
 #define SC_READ          6 
 #define SC_WRITE         7 
 #define SC_SEEK          8 
-#define SC_CREATE_THREAD 9 
-#define SC_JOIN_THREAD   10
-#define SC_EXIT_THREAD   11
-#define SC_SBRK          12
-#define SC_FORKEXEC      13
-#define SC_END           14 
+#define SC_DUP           9 
+#define SC_CREATE_THREAD 10
+#define SC_JOIN_THREAD   11
+#define SC_EXIT_THREAD   12
+#define SC_SBRK          13
+#define SC_FORK          14
+#define SC_EXEC          15
+#define SC_CHDIR         16
+#define SC_GETCWD        17
+#define SC_GETPID        18
+#define SC_GETPPID       19
+#define SC_END           20
 
 
 
@@ -86,3 +92,37 @@ struct sc_write_args {
 };
 
 
+struct sc_exec_args {
+
+    // args contains 0 terminated args
+    // total size: args_sz 
+    const char* args;
+    size_t args_sz;
+
+    // args: argv[0]
+    // args+strlen(argv[0])+1: argv[1]
+    // ...
+
+    // if 0, the syscall will 
+    // behave like the unix one
+    int new_process;
+};
+
+
+struct sc_chdir_args {
+    const char* path;
+    size_t path_len;
+};
+
+struct sc_getcwd_args {
+    char* buf;
+    size_t buf_sz;
+};
+
+struct sc_dup_args {
+    fd_t fd;
+    fd_t fd2; 
+    // if new == -1, this operation 
+    // performs dup(fd)
+    // else, it performs dup2(fd, fd2)
+};
