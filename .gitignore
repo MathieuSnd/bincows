@@ -5,6 +5,7 @@ limine-bootloader/
 *.o
 include_cp
 *.elf
+*.a
 qemu.log
 lai/
 kernel/symbols.txt
