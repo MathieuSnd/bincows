@@ -58,7 +58,7 @@ struct APICConfig
 static_assert(sizeof(struct APICConfig) == 0x400);
 
 
-static volatile struct APICConfig* apic_config = (void *)APIC_VADDR;
+volatile struct APICConfig* apic_config = (void *)APIC_VADDR;
 
 
 
@@ -92,6 +92,11 @@ uint64_t clock_ns(void)  {
 
 extern uint64_t read_msr(uint32_t address);
 extern void     write_msr(uint32_t address, uint64_t value);
+
+
+uint32_t get_lapic_id(void) {
+    return apic_config->LAPIC_ID.reg;
+}
 
 
 void apic_setup_clock(void) {

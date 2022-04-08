@@ -18,3 +18,6 @@ uint64_t clock_ns(void);
 // acknowledge an apic IRQ
 void apic_eoi(void);
 
+
+uint32_t get_lapic_id(void);
+
