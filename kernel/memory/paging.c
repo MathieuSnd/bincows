@@ -9,6 +9,7 @@
 #include "../lib/panic.h"
 #include "../lib/logging.h"
 #include "../lib/registers.h"
+#include "../smp/smp.h"
 
 
 #define CR0_WP            (1lu << 16)
@@ -606,11 +607,18 @@ void remap_pages(void*    vaddr_ptr,
 }
 
 
+
+
 void alloc_pages(void*  virtual_addr_begin, 
                size_t   count,
                uint64_t flags) {
     // don't allow recusion
     alloc_page_table_realloc = 0;
+
+    // @todo do better
+    static uint64_t cpu_private_flags[64];
+
+    cpu_private_flags[get_smp_count()] = flags;
 
     void callback(
             uint64_t physical_address, 
@@ -620,7 +628,7 @@ void alloc_pages(void*  virtual_addr_begin,
         internal_map_pages(physical_address,
                   virtual_address,
                   c,
-                  flags);
+                  cpu_private_flags[get_smp_count()]);
     };
     while(count > 0) {
         unsigned size = count;
