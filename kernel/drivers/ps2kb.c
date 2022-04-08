@@ -5,12 +5,8 @@
 #include "../int/pic.h"
 #include "../lib/registers.h"
 
-static void kbevent_default_handler(const struct kbevent* event) {
-    (void) event;
-    log_debug("%c ", event->keycode);
-}
+#include "../fs/devfs/devfs.h"
 
-static kbevent_handler handler = kbevent_default_handler;
 
 static char lshift_state, rshift_state, altgr_state; 
 
@@ -29,7 +25,47 @@ static void flush_output_buffer(void) {
     while((inb(0x64) & 1) != 0) {
         inb(0x60);
     }
+}
 
+
+// input values circular buffer
+#define BUFFER_SIZE 64
+static char file_buffer[BUFFER_SIZE];
+
+static volatile unsigned buff_tail = 0, buff_head = 0;
+
+
+static void append_event(const struct kbevent* ev) {
+    if(ev->type == KEYRELEASED && ev->scancode == PS2KB_ESCAPE) {
+        shutdown();
+        __builtin_unreachable();
+    }
+    
+    if(ev->type == KEYPRESSED && ev->keycode != 0) {
+        if((buff_head + 1) % BUFFER_SIZE == buff_tail) {
+            // buffer is full
+            return;
+        }
+        else {
+            file_buffer[buff_head] = ev->keycode;
+            buff_head = (buff_head + 1) % BUFFER_SIZE;
+        }
+    }
+};
+
+static int block_pop_chars(char* c, size_t n) {
+    size_t i;
+
+    for(i = 0; i < n; i++) {
+        while(buff_tail == buff_head) {
+            // buffer is empty
+            sleep(20);
+        }
+    
+        c[i] = file_buffer[buff_tail];
+        buff_tail = (buff_tail + 1) % BUFFER_SIZE;
+    }
+    return i;
 }
 
 
@@ -126,7 +162,7 @@ static void process_byte(uint8_t b) {
     else
         ev.keycode = ps2_azerty_table_lowercase[ev.scancode];
     
-    handler(&ev);
+    append_event(&ev);
 }
 
 
@@ -175,6 +211,33 @@ void ps2kb_init(void) {
 }
 
 
-void ps2kb_set_event_callback(kbevent_handler h) {
-    handler = h;
+
+
+static int devfs_read(void* arg, void* buf, size_t begin, size_t count) {
+    (void) arg;
+
+    return block_pop_chars(buf, count);
+}
+
+static int devfs_write(void* arg, const void* buf, size_t begin, size_t count) {
+    (void) buf;
+    (void) count;
+    panic("bordel");
+    // unwritable
+    return 0;
+}
+
+
+void ps2kb_register_dev_file(const char* filename) {
+
+
+    int r = devfs_map_device((devfs_file_interface_t){
+        .arg   = NULL,
+        .read  = (void*)devfs_read,
+        .write = (void*)devfs_write,
+        .file_size = ~0llu,
+    }, filename);
+
+    // r = 0 on success
+    assert(!r);
 }
