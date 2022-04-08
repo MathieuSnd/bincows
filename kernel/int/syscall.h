@@ -58,6 +58,7 @@ typedef enum open_flags {
     O_DIRECT    = 512,
     O_NOATIME   = 1024,
     O_CLOEXEC   = 2048,
+    O_DIR       = 4096,
 } open_flags_t; 
 
 

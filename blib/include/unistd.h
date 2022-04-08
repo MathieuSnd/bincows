@@ -3,91 +3,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
-
-/* Get values of POSIX options:
-
-   If these symbols are defined, the corresponding features are
-   always available.  If not, they may be available sometimes.
-   The current values can be obtained with `sysconf'.
-
-   _POSIX_JOB_CONTROL		Job control is supported.
-   _POSIX_SAVED_IDS		Processes have a saved set-user-ID
-				and a saved set-group-ID.
-   _POSIX_REALTIME_SIGNALS	Real-time, queued signals are supported.
-   _POSIX_PRIORITY_SCHEDULING	Priority scheduling is supported.
-   _POSIX_TIMERS		POSIX.4 clocks and timers are supported.
-   _POSIX_ASYNCHRONOUS_IO	Asynchronous I/O is supported.
-   _POSIX_PRIORITIZED_IO	Prioritized asynchronous I/O is supported.
-   _POSIX_SYNCHRONIZED_IO	Synchronizing file data is supported.
-   _POSIX_FSYNC			The fsync function is present.
-   _POSIX_MAPPED_FILES		Mapping of files to memory is supported.
-   _POSIX_MEMLOCK		Locking of all memory is supported.
-   _POSIX_MEMLOCK_RANGE		Locking of ranges of memory is supported.
-   _POSIX_MEMORY_PROTECTION	Setting of memory protections is supported.
-   _POSIX_MESSAGE_PASSING	POSIX.4 message queues are supported.
-   _POSIX_SEMAPHORES		POSIX.4 counting semaphores are supported.
-   _POSIX_SHARED_MEMORY_OBJECTS	POSIX.4 shared memory objects are supported.
-   _POSIX_THREADS		POSIX.1c pthreads are supported.
-   _POSIX_THREAD_ATTR_STACKADDR	Thread stack address attribute option supported.
-   _POSIX_THREAD_ATTR_STACKSIZE	Thread stack size attribute option supported.
-   _POSIX_THREAD_SAFE_FUNCTIONS	Thread-safe functions are supported.
-   _POSIX_THREAD_PRIORITY_SCHEDULING
-				POSIX.1c thread execution scheduling supported.
-   _POSIX_THREAD_PRIO_INHERIT	Thread priority inheritance option supported.
-   _POSIX_THREAD_PRIO_PROTECT	Thread priority protection option supported.
-   _POSIX_THREAD_PROCESS_SHARED	Process-shared synchronization supported.
-   _POSIX_PII			Protocol-independent interfaces are supported.
-   _POSIX_PII_XTI		XTI protocol-indep. interfaces are supported.
-   _POSIX_PII_SOCKET		Socket protocol-indep. interfaces are supported.
-   _POSIX_PII_INTERNET		Internet family of protocols supported.
-   _POSIX_PII_INTERNET_STREAM	Connection-mode Internet protocol supported.
-   _POSIX_PII_INTERNET_DGRAM	Connectionless Internet protocol supported.
-   _POSIX_PII_OSI		ISO/OSI family of protocols supported.
-   _POSIX_PII_OSI_COTS		Connection-mode ISO/OSI service supported.
-   _POSIX_PII_OSI_CLTS		Connectionless ISO/OSI service supported.
-   _POSIX_POLL			Implementation supports `poll' function.
-   _POSIX_SELECT		Implementation supports `select' and `pselect'.
-
-   _XOPEN_REALTIME		X/Open realtime support is available.
-   _XOPEN_REALTIME_THREADS	X/Open realtime thread support is available.
-   _XOPEN_SHM			Shared memory interface according to XPG4.2.
-
-   _XBS5_ILP32_OFF32		Implementation provides environment with 32-bit
-				int, long, pointer, and off_t types.
-   _XBS5_ILP32_OFFBIG		Implementation provides environment with 32-bit
-				int, long, and pointer and off_t with at least
-				64 bits.
-   _XBS5_LP64_OFF64		Implementation provides environment with 32-bit
-				int, and 64-bit long, pointer, and off_t types.
-   _XBS5_LPBIG_OFFBIG		Implementation provides environment with at
-				least 32 bits int and long, pointer, and off_t
-				with at least 64 bits.
-
-   If any of these symbols is defined as -1, the corresponding option is not
-   true for any file.  If any is defined as other than -1, the corresponding
-   option is true for all files.  If a symbol is not defined at all, the value
-   for a specific file can be obtained from `pathconf' and `fpathconf'.
-
-   _POSIX_CHOWN_RESTRICTED	Only the super user can use `chown' to change
-				the owner of a file.  `chown' can only be used
-				to change the group ID of a file to a group of
-				which the calling process is a member.
-   _POSIX_NO_TRUNC		Pathname components longer than
-				NAME_MAX generate an error.
-   _POSIX_VDISABLE		If defined, if the value of an element of the
-				`c_cc' member of `struct termios' is
-				_POSIX_VDISABLE, no character will have the
-				effect associated with that element.
-   _POSIX_SYNC_IO		Synchronous I/O may be performed.
-   _POSIX_ASYNC_IO		Asynchronous I/O may be performed.
-   _POSIX_PRIO_IO		Prioritized Asynchronous I/O may be performed.
-
-   Support for the Large File Support interface is not generally available.
-   If it is available the following constants are defined to one.
-   _LFS64_LARGEFILE		Low-level I/O supports large files.
-   _LFS64_STDIO			Standard I/O supports large files.
-   */
-
+#include <types.h>
 
 /* Standard file descriptors.  */
 #define	STDIN_FILENO	0	/* Standard input.  */
@@ -96,8 +12,6 @@
 
 
 
-#define	__need_size_t
-#define __need_NULL
 #include <stddef.h>
 
 typedef int pid_t;
@@ -569,7 +483,6 @@ int getentropy (void *__buffer, size_t __length) __wur
 #endif
 
 
-typedef uint64_t off_t;
 
 
 /* Values for the WHENCE argument to lseek.  */
@@ -688,6 +601,24 @@ extern pid_t getpid (void);
 extern pid_t getppid (void);
 
 
+typedef enum open_flags {
+    O_RDONLY    = 0,
+    O_WRONLY    = 1,
+    O_RDWR      = 2,
+    O_CREAT     = 4,
+    O_EXCL      = 8,
+    O_TRUNC     = 16,
+    O_APPEND    = 32,
+    O_NONBLOCK  = 64,
+    O_DIRECTORY = 128,
+    O_NOFOLLOW  = 256,
+    O_DIRECT    = 512,
+    O_NOATIME   = 1024,
+    O_CLOEXEC   = 2048,
+    O_DIR       = 4096,
+} open_flags_t; 
+
+
 /* Invoke `system call' number SYSNO, passing it the remaining arguments.
    This is completely system-dependent, and not often useful.
 
@@ -713,10 +644,9 @@ typedef enum mode_t {
    IFDIR = 0x4000,
 } mode_t;
 
+
+
 int open (const char *pathname, int flags, mode_t mode);
-
-
-
 
 
 #endif /* unistd.h  */

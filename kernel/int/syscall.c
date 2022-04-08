@@ -325,14 +325,8 @@ static uint64_t sc_open(process_t* proc, void* args, size_t args_sz) {
 
 
 
-    file_handle_t* h = vfs_open_file(a->path);
-
-    if(h) {
-        proc->fds[fd].file = h;
-        proc->fds[fd].type = FD_FILE;
-    }
-    else {
-        // not a file, try opening as a directory
+    if(a->flags & O_DIR) {
+        // opening as a directory
         struct DIR* dir = vfs_opendir(path);
 
 
@@ -342,10 +336,24 @@ static uint64_t sc_open(process_t* proc, void* args, size_t args_sz) {
             proc->fds[fd].type = FD_DIR;
         }
         else {
-            sc_warn("failed to open", args, args_sz);
-
+            sc_warn("failed to open dir", args, args_sz);
+            
+            free(path);
             return -1;
         }
+    }
+    else {
+        file_handle_t* h = vfs_open_file(a->path);
+
+        if(!h) {
+            sc_warn("failed to open file", args, args_sz);
+
+            free(path);
+            return -1;
+        }
+
+        proc->fds[fd].file = h;
+        proc->fds[fd].type = FD_FILE;
     }
 
 

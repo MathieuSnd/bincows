@@ -22,12 +22,12 @@
 #ifndef	_DIRENT_H
 #define	_DIRENT_H	1
 
-#ifdef ISSOU_CA_DOIT_PAS_ETRE_DEFINI_CA
 
-#include "unistd.h"
+#include <unistd.h>
 
+#include <stddef.h>
+#include <types.h>
 
-typedef unsigned long long ino_t;
 
 struct dirent {
     ino_t d_ino;
@@ -43,27 +43,23 @@ typedef struct DIR DIR;
 
 
 /* File types for `d_type'.  */
-enum
-  {
-    DT_UNKNOWN = 0,
-# define DT_UNKNOWN	DT_UNKNOWN
-    DT_FIFO = 1,
-# define DT_FIFO	DT_FIFO
-    DT_CHR = 2,
-# define DT_CHR		DT_CHR
-    DT_DIR = 4,
-# define DT_DIR		DT_DIR
-    DT_BLK = 6,
-# define DT_BLK		DT_BLK
-    DT_REG = 8,
-# define DT_REG		DT_REG
-    DT_LNK = 10,
-# define DT_LNK		DT_LNK
-    DT_SOCK = 12,
-# define DT_SOCK	DT_SOCK
-    DT_WHT = 14
-# define DT_WHT		DT_WHT
-  };
+// unknown
+#define DT_UNKNOWN	0
+
+// directory 
+#define DT_DIR	3
+
+// block device
+#define DT_BLK	4
+
+// regular file
+#define DT_REG	5
+
+// syb link
+#define DT_LNK	6
+
+// socket
+#define DT_SOCK	7
 
 
 /* Convert between stat structure types and directory types.  */
@@ -108,18 +104,19 @@ extern struct dirent *readdir (DIR *__dirp);
 
 
 /* Rewind DIRP to the beginning of the directory.  */
-extern void rewinddir (DIR *__dirp) __THROW;
+extern void rewinddir (DIR *__dirp);
 
 
 /* Seek to position POS on DIRP.  */
-extern void seekdir (DIR *__dirp, long int __pos) __THROW;
+extern void seekdir (DIR *__dirp, long int __pos);
 
 /* Return the current position of DIRP.  */
-extern long int telldir (DIR *__dirp) __THROW;
+extern long int telldir (DIR *__dirp);
 
 
 /* Return the file descriptor used by DIRP.  */
-extern int dirfd (DIR *__dirp) __THROW;
+extern int dirfd (DIR *__dirp);
+
 
 
 /* `MAXNAMLEN' is the BSD name for what POSIX calls `NAME_MAX'.  */
@@ -129,8 +126,6 @@ extern int dirfd (DIR *__dirp) __THROW;
 # define MAXNAMLEN	255
 #endif
 
-#define __need_size_t
-#include <stddef.h>
 
 /* Scan the directory DIR, calling SELECTOR on each directory entry.
    Entries for which SELECT returns nonzero are individually malloc'd,
@@ -139,37 +134,29 @@ extern int dirfd (DIR *__dirp) __THROW;
 
    This function is a cancellation point and therefore not marked with
    __THROW.  */
-# ifndef __USE_FILE_OFFSET64
+/*
+
+POSIX 2008
+
 extern int scandir (const char *__restrict __dir,
 		    struct dirent ***__restrict __namelist,
 		    int (*__selector) (const struct dirent *),
 		    int (*__cmp) (const struct dirent **,
 				  const struct dirent **));
-
-/* Similar to `scandir' but a relative DIR name is interpreted relative
-   to the directory for which DFD is a descriptor.
-
-   This function is a cancellation point and therefore not marked with
-   __THROW.  */
-extern int scandirat (int __dfd, const char *__restrict __dir,
-		      struct dirent ***__restrict __namelist,
-		      int (*__selector) (const struct dirent *),
-		      int (*__cmp) (const struct dirent **,
-				    const struct dirent **))
-     __nonnull ((2, 3));
-
+*/
 
 /* Read directory entries from FD into BUF, reading at most NBYTES.
    Reading starts at offset *BASEP, and *BASEP is updated with the new
    position after reading.  Returns the number of bytes read; zero when at
    end of directory; or -1 for errors.  */
+
+/*
+
+POSIX.1
 extern __ssize_t getdirentries (int __fd, char *__restrict __buf,
 				size_t __nbytes,
-				__off_t *__restrict __basep)
-     __THROW __nonnull ((2, 4));
+				__off_t *__restrict __basep);
 
+*/
 
-#endif
-
-#endif /* dirent.h  */
 #endif /* dirent.h  */
