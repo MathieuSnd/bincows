@@ -349,6 +349,14 @@ static void emplace_char(driver_t* this, char c) {
     case '\r':
         d->cur_col = 0;
         break;
+    case '\b':
+        if(d->cur_col > 0)
+            d->cur_col--;
+        else if(d->cur_line > 0) {
+            d->cur_line--;
+            d->cur_col = d->ncols-1;
+        }
+        break;
     }
 }
 
