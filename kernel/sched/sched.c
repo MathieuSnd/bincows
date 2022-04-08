@@ -1,6 +1,7 @@
 #include "sched.h"
 #include "process.h"
 #include "../int/idt.h"
+#include "../int/apic.h"
 #include "../lib/logging.h"
 #include "../memory/vmap.h"
 #include "../memory/heap.h"
@@ -46,6 +47,20 @@ static size_t n_threads = 0;
 
 static process_t* processes;
 
+/**
+ * when invoking a syscall,
+ * syscall_stacks[lapic_id] should contain
+ * the stack pointer of the current thread
+ * executing on the CPU with the given lapic_id
+ */
+void** syscall_stacks;
+
+
+void sched_init(void) {
+    // init syscall stacks
+
+    syscall_stacks = malloc(sizeof(void*) * get_smp_count());
+}
 
 /**
  * @brief alloc a process in the processes list
@@ -81,10 +96,12 @@ static
 thread_t* get_thread_by_tid(process_t* process, tid_t tid) {
 
     // sequencial research 
-    for(unsigned i = 0; i < process->n_threads; i++)
+    for(unsigned i = 0; i < process->n_threads; i++) {
+
         if(process->threads[i].tid == tid)
             return &process->threads[i];
 
+    }
     return NULL;
 }
 
@@ -148,6 +165,7 @@ void  sched_save(gp_regs_t* rsp) {
         process_t* p = sched_get_process(current_pid);
         assert(p);
         thread_t* t = get_thread_by_tid(p, current_tid);
+
         assert(t);
         t->rsp = rsp;
     }
@@ -182,6 +200,8 @@ void schedule(void) {
 
     current_pid = p->pid;
     current_tid = t->tid;
+
+    syscall_stacks[get_lapic_id()] = (void*) t->kernel_stack.base + t->kernel_stack.size;
 
     _restore_context(t->rsp);
 }

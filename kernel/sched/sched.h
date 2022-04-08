@@ -9,6 +9,9 @@
 void sched_save(gp_regs_t* context);
 
 
+void sched_init(void);
+
+
 // if this function returns, then a fast context restore 
 // can happen: no need to unmap/map user space memory
 void schedule(void); 

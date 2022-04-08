@@ -64,6 +64,8 @@ struct thread {
 
     tid_t tid;
 
+    stack_t kernel_stack;
+
     stack_t stack;
     gp_regs_t* rsp;
 
@@ -71,7 +73,12 @@ struct thread {
 
 } thread_t;
 
+#define THREAD_KERNEL_STACK_SIZE (1024 * 16)
+
 
 // 0 if the thread cannot be created
 int create_thread(thread_t* thread, pid_t pid, void* stack_base, size_t stacs_size, tid_t);
+
+
+void free_thread(thread_t* thread);
 

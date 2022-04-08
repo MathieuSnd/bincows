@@ -15,7 +15,31 @@ typedef unsigned fd_t;
 
 #define MAX_FDS 32
 
+#define FD_NONE 0
+#define FD_FILE 1
+#define FD_DIR 2
 
+typedef struct file_descriptor {
+    /*
+     either one of these
+        - FD_NONE
+        - FD_FILE 
+        - FD_DIR
+     */
+    int type; 
+
+    union {
+        file_handle_t* file;
+
+        struct {
+            struct DIR* dir;
+            /**
+             * current byte offset of the directory stream
+             */
+            size_t dir_boff;
+        };
+    };  
+} file_descriptor_t;
 
 typedef struct process {
     pid_t pid;
@@ -30,6 +54,10 @@ typedef struct process {
 
     elf_program_t* program;
 
+    // the instant of the creation of the
+    // process
+    uint64_t clock_begin;
+
 
     void* heap_begin;
     void* brk;
@@ -37,8 +65,12 @@ typedef struct process {
     // brk as seen by processes
     void* unaligned_brk;
 
+
+    char* cwd;
+
+    
     // size [MAX_FDS]
-    file_handle_t** files;
+    file_descriptor_t* fds;
 
 } process_t;
 
@@ -72,4 +104,24 @@ int create_process(process_t* process, process_t* pparent, const void* elffile, 
 void free_process(process_t* process);
 
 
+int replace_process(process_t* process, void* elffile, size_t elffile_sz);
 
+
+
+/**
+ * closes the fd
+ * replaces its type with FD_NONE
+ * and calls the right close
+ * function
+ * 
+ * @param fd 
+ */
+void close_fd(file_descriptor_t* fd);
+
+/**
+ * duplicates fd to new_fd
+ * 
+ * sets new_fd's fields
+ * 
+ */
+void dup_fd(file_descriptor_t* fd, file_descriptor_t* new_fd);

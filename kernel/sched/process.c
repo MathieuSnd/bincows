@@ -4,6 +4,7 @@
 #include "../memory/paging.h"
 #include "../lib/logging.h"
 #include "../lib/string.h"
+#include "../int/apic.h"
 
 #include "sched.h"
 
@@ -28,6 +29,40 @@ static void* alloc_stack(process_t* process) {
 }
 
 
+void dup_fd(file_descriptor_t* fd, file_descriptor_t* new_fd) {
+    new_fd->type = fd->type;
+
+    switch(fd->type) {
+        case FD_FILE:
+            new_fd->file = vfs_handle_dup(fd->file);
+            break;
+        case FD_DIR:
+            new_fd->dir = vfs_dir_dup(fd->dir);
+            new_fd->dir_boff = fd->dir_boff;
+            break;
+        default:
+            assert(0);
+    }
+}
+
+
+void close_fd(file_descriptor_t* fd) {
+    switch(fd->type) {
+        case FD_FILE:
+            vfs_close_file(fd->file);
+            break;
+        case FD_DIR:
+            vfs_closedir(fd->dir);
+            break;
+        default:
+            assert(0);
+    }
+
+    fd->type = FD_NONE;
+}
+
+
+
 int create_process(process_t* process, process_t* pparent, const void* elffile, size_t elffile_sz) {
 
     // assert that no userspace is mapped
@@ -46,9 +81,9 @@ int create_process(process_t* process, process_t* pparent, const void* elffile, 
 
     pid_t ppid = KERNEL_PID;
 
-    file_handle_t** files = NULL;
+    file_descriptor_t* fds = NULL;
 
-    files = malloc(sizeof(file_handle_t*) * MAX_FDS);
+    fds = malloc(sizeof(file_descriptor_t*) * MAX_FDS);
 
     if(pparent) {
         // inherit parent file handlers
@@ -56,12 +91,23 @@ int create_process(process_t* process, process_t* pparent, const void* elffile, 
 
 
         for(unsigned i = 0; i < MAX_FDS; i++) {
-            if(pparent->files[i])
-                files[i] = vfs_clone_handle(pparent->files[i]);
+            dup_fd(pparent->fds + i, fds + i);
         }
+
+        // inherit parent directory
+        process->cwd = strdup(pparent->cwd);
     }
-    else
-        memset(files, 0, sizeof(file_handle_t*) * MAX_FDS);
+    else {
+        // empty file handlers
+        for(unsigned i = 0; i < MAX_FDS; i++) {
+            fds[i].type = FD_NONE;
+            fds[i].file = NULL;
+        }
+        //memset(fds, 0, sizeof(file_descriptor_t*) * MAX_FDS);
+
+        // root directory
+        process->cwd = strdup("/");
+    }
 
 
     thread_t* threads = malloc(sizeof(thread_t));
@@ -93,21 +139,21 @@ int create_process(process_t* process, process_t* pparent, const void* elffile, 
             elf_end = segment_end;
     }
 
-    // empty heap
-    process->brk = process->unaligned_brk = process->heap_begin = 
-                        (void *)(((uint64_t)elf_end+0xfff) & ~0x0fffllu);
-    
-
-
     *process = (process_t) {
-        .files   = files,
+        .fds   = fds,
         .n_threads = 1,
         .threads = threads,
         .page_dir_paddr = user_page_map,
         .pid = pid,
         .ppid = ppid,
         .program = program,
+        .clock_begin = clock_ns()
     };
+    
+
+    // empty heap
+    process->brk = process->unaligned_brk = process->heap_begin = 
+                        (void *)(((uint64_t)elf_end+0xfff) & ~0x0fffllu);
     
 
     return 1;
@@ -120,11 +166,10 @@ void free_process(process_t* process) {
     assert(!process->n_threads);
 
     for(unsigned i = 0; i < MAX_FDS; i++) {
-        if(process->files)
-            vfs_close_file(process->files[i]);
+        close_fd(process->fds + i);
     }
 
-    free(process->files);
+    free(process->fds);
 
 
     if(process->threads)
@@ -134,5 +179,53 @@ void free_process(process_t* process) {
     elf_free(process->program);
 
     free(process);
+}
+
+int replace_process(process_t* process, void* elffile, size_t elffile_sz) {
+    // assert that the process is already mapped
+    assert(get_user_page_map() == process->page_dir_paddr);
+
+    unmap_user();
+    free_user_page_map(process->page_dir_paddr);
+
+
+
+    // only one thread
+    process->threads = realloc(process->threads, sizeof(thread_t));
+
+    int r = create_thread(
+        &process->threads[0], 
+        process->pid, 
+        alloc_stack(process), 
+        STACK_SIZE, 
+        FIRST_TID
+    );
+
+    assert(!r);
+
+    // load program
+    elf_program_t* program = elf_load(elffile, elffile_sz);
+
+
+    // choose an emplacement for heap base
+    // choose it above the highest elf 
+    // segment's end
+    void* elf_end = NULL;
+    for(unsigned i = 0; i < program->n_segs; i++) {
+        void* segment_end = program->segs[i].base + program->segs[i].length;
+     
+        if((uint64_t)elf_end < (uint64_t)segment_end)
+            elf_end = segment_end;
+    }
+
+    // empty heap
+    process->brk = process->unaligned_brk = process->heap_begin = 
+                        (void *)(((uint64_t)elf_end+0xfff) & ~0x0fffllu);
+
+    
+
+    process->threads[0].rsp->rip = (uint64_t)program->entry;
+
+    return 0;
 }
 
