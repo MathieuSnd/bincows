@@ -105,8 +105,8 @@ void gpt_remove_drive_parts(driver_t* driver) {
         }
     }
 
-    if(!n_partitions)
-       ;// gpt_cleanup();
+    //if(!n_partitions)
+    //   ;// gpt_cleanup();
 }
 
 void gpt_cleanup(void) {
