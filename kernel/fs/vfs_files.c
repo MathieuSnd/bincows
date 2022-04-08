@@ -9,6 +9,8 @@
 #include "../acpi/power.h"
 
 #include "../memory/heap.h"
+#include "../sync/spinlock.h"
+#include "../lib/time.h"
 
 #include "fat32/fat32.h"
 
@@ -50,8 +52,19 @@ struct file_ent {
         };
     };
 
+    uint64_t id;
+
     char* path;
 
+    // this field is protected by the
+    // vfile table spinlock
+    // it is set to 1 when the file is
+    // currently being read from or 
+    // written to
+    //
+    // posix files writes and reads are
+    // atomic. 
+    int accessed;
 
     // number of distincs file handlers
     // associated with this file
@@ -66,6 +79,8 @@ struct file_ent {
 
 static unsigned n_open_files = 0;
 static struct file_ent* open_files = NULL;
+// spinlock for table open_files
+static fast_spinlock_t vfile_lock = {0};
 
 
 void vfs_files_init(void) {
@@ -74,6 +89,8 @@ void vfs_files_init(void) {
 
 void vfs_files_cleanup(void) {
     // @TODO
+
+    spinlock_acquire(&vfile_lock);
     for(unsigned i = 0; i < n_open_files; i++) {
         if(open_files[i].fhs)
             free(open_files[i].fhs);
@@ -81,7 +98,12 @@ void vfs_files_cleanup(void) {
 
     if(open_files)
         free(open_files);
+
+    
+    spinlock_release(&vfile_lock);
 }
+
+
 
 
 /**
@@ -102,58 +124,96 @@ void vfs_files_cleanup(void) {
  * @return struct file_ent* vfile
  */
 static 
-struct file_ent* search_or_insert_file(
+uint64_t search_or_insert_file(
                 fs_t* fs, 
                 uint64_t addr,
                 uint64_t file_len,
                 const char* path
 ) {
 
+    spinlock_acquire(&vfile_lock);
+
     for(unsigned i = 0; i < n_open_files; i++) {
         struct file_ent* e = &open_files[i];
 
-        if(e->addr == addr && e->fs == fs)
-            return e;
+        if(e->addr == addr && e->fs == fs) {
+            spinlock_release(&vfile_lock);
+            return e->id;
+        }
     }
     
     // not found
     // let's add a record
     n_open_files++;
+
+
     open_files = realloc(open_files, n_open_files * sizeof(struct file_ent));
+    
 
     char* pathbuf = malloc(strlen(path) + 1);
     strcpy(pathbuf, path);
+
+
+    static uint64_t id = 0;
 
     open_files[n_open_files - 1] = (struct file_ent) {
         .addr = addr,
         .fs   = fs,
         .file_size = file_len,
         .path = pathbuf,
+        .id   = ++id,
 
         .fhs = NULL,
         .n_insts = 0,
     };
 
+    spinlock_release(&vfile_lock);
+
     fs->n_open_files++;
 
 
-    return &open_files[n_open_files - 1];
+    return id;
+}
+
+
+
+static struct file_ent* aquire_vfile(uint64_t vfile_id) {
+    spinlock_acquire(&vfile_lock);
+
+    for(unsigned i = 0; i < n_open_files; i++) {
+        struct file_ent* e = &open_files[i];
+        
+        if(e->id == vfile_id) {
+            return e;
+        }
+    }
+
+    panic("vfs_files: file not found");
+}
+
+static void release_vfile(void) {
+    spinlock_release(&vfile_lock);
 }
 
 
 
 static void register_handle_to_vfile(
-                struct file_ent* file_ent, 
+                uint64_t vfile_id,
                 file_handle_t*    handle
 ) { 
-    handle->open_vfile = file_ent;
+    handle->vfile_id = vfile_id;
+
+    struct file_ent* file_ent = aquire_vfile(vfile_id);
 
     // register the handle in the file entry
     file_ent->n_insts++;
     file_ent->fhs = realloc(file_ent->fhs, 
                         file_ent->n_insts * sizeof(file_handle_t *));
 
+
     file_ent->fhs[file_ent->n_insts - 1] = handle;
+
+    release_vfile();
 }
 
 
@@ -208,11 +268,11 @@ file_handle_t* create_handler(
     handle->sector_buff = (void *)handle + sizeof(file_handle_t);
 
 
-    struct file_ent* file_ent = search_or_insert_file(
-                        fs, dirent->ino, dirent->file_size, path);
+    uint64_t vfile_id = search_or_insert_file(
+                            fs, dirent->ino, dirent->file_size, path);
 
 
-    register_handle_to_vfile(file_ent, handle);
+    register_handle_to_vfile(vfile_id, handle);
 
     
     return handle;
@@ -245,7 +305,6 @@ file_handle_t *vfs_open_file(const char *path) {
 
 
     fs_t *restrict fs = vfs_open(path, &dirent);
-
     if (!fs) // dirent not found
         return NULL;
 
@@ -259,12 +318,11 @@ file_handle_t *vfs_open_file(const char *path) {
 }
 
 
-file_handle_t* vfs_clone_handle(file_handle_t* from) {
+file_handle_t* vfs_handle_dup(file_handle_t* from) {
     // see vfs_open_file
 
     fs_t* fs = from->fs;
 
-    struct file_ent* vfile = from->open_vfile;
 
 
     file_handle_t* new = malloc(
@@ -281,7 +339,8 @@ file_handle_t* vfs_clone_handle(file_handle_t* from) {
     new->sector_buff   = new + 1;
 
 
-    register_handle_to_vfile(vfile, new);
+    uint64_t vfile_id = from->vfile_id;
+    register_handle_to_vfile(vfile_id, new);
 
     return new;
 }
@@ -297,7 +356,12 @@ static void flush(struct file_ent* vfile) {
 
 
 void vfs_flush_file(file_handle_t *handle) {
-    flush(handle->open_vfile);
+
+    struct file_ent* vfile = aquire_vfile(handle->vfile_id);
+
+    flush(vfile);
+
+    release_vfile();
 }
 
 
@@ -308,8 +372,8 @@ void vfs_close_file(file_handle_t *handle)
 {
     fs_t *fs = handle->fs;
 
-    struct file_ent* restrict open_file 
-                = handle->open_vfile;
+
+    struct file_ent* restrict open_file = aquire_vfile(handle->vfile_id);
 
 
     open_file->n_insts--;
@@ -326,6 +390,9 @@ void vfs_close_file(file_handle_t *handle)
         n_open_files--;
         int found = 0;
 
+
+        // @todo
+        // c'est de la merde faut tout changer
         for(unsigned i = 0; i < n_open_files + 1; i++) {
             if(&open_files[i] == open_file) {
                 // found it!
@@ -375,15 +442,45 @@ void vfs_close_file(file_handle_t *handle)
         assert(found);
     }
 
+    spinlock_release(&vfile_lock);
+
 
     free(handle);
     fs->n_open_files--;
 }
 
 
+
+// these two functions unsure atomicity of
+// file accesses
+
+static void aquire_file_access(uint64_t vfile_id) {
+    int accessed = 0;
+    
+    do {
+        struct file_ent* vfile = aquire_vfile(vfile_id);
+        accessed = vfile->accessed;
+
+        release_vfile();
+
+        if(accessed)
+            sleep(10);
+    } while(accessed);
+}
+
+static void release_file_access(uint64_t vfile_id) {
+    struct file_ent* vfile = aquire_vfile(vfile_id);
+    vfile->accessed = 0;
+    release_vfile();
+}
+
+
+
 size_t vfs_read_file(void *ptr, size_t size, size_t nmemb,
                      file_handle_t *restrict stream)
 {
+
+    aquire_file_access(stream->vfile_id);
 
     assert(stream);
     assert(ptr);
@@ -391,13 +488,21 @@ size_t vfs_read_file(void *ptr, size_t size, size_t nmemb,
     void *const buf = stream->sector_buff;
 
     fs_t *fs = stream->fs;
-    uint64_t file_size = stream->open_vfile->file_size;
+
+
+
+    uint64_t file_size;
+    {
+        struct file_ent* vfile = aquire_vfile(stream->vfile_id);
+        file_size = vfile->file_size;
+        release_vfile();
+    }
 
     unsigned granularity = fs->file_access_granularity;
 
     unsigned cachable = fs->cacheable;
 
-    unsigned max_read = file_size - stream->file_offset;
+    uint64_t max_read = file_size - stream->file_offset;
 
     unsigned bsize = size * nmemb;
 
@@ -408,9 +513,12 @@ size_t vfs_read_file(void *ptr, size_t size, size_t nmemb,
         nmemb = max_read / size;
         bsize = size * nmemb;
     }
+    
 
-    if(bsize == 0)
+    if(bsize == 0) {
+        release_file_access(stream->vfile_id);
         return 0;
+    }
 
 
     // first read unaligned 
@@ -439,8 +547,10 @@ size_t vfs_read_file(void *ptr, size_t size, size_t nmemb,
         
         bsize -= size;
         
-        if(!bsize)
+        if(!bsize) {
+            release_file_access(stream->vfile_id);
             return nmemb;
+        }
 
         ptr += size;
 
@@ -477,10 +587,17 @@ size_t vfs_read_file(void *ptr, size_t size, size_t nmemb,
         read_buf = malloc(read_buf_size);
     }
 
+    file_t file;
+    {
+        struct file_ent* vfile = aquire_vfile(stream->vfile_id);
+        file = vfile->file;
+        release_vfile();
+    }
+
 
     fs->read_file_sectors(
         fs, 
-        &stream->open_vfile->file, 
+        &file, 
         read_buf, 
         stream->sector_count,
         read_blocks
@@ -510,6 +627,7 @@ size_t vfs_read_file(void *ptr, size_t size, size_t nmemb,
     stream->file_offset += bsize;
     stream->sector_count = stream->file_offset / granularity; 
 
+    release_file_access(stream->vfile_id);
     
     return nmemb;
 }
@@ -520,9 +638,11 @@ size_t vfs_write_file(const void *ptr, size_t size, size_t nmemb,
                       file_handle_t *stream) {
     unsigned bsize = size * nmemb;
 
-
-    if(bsize == 0)
+    if(bsize == 0) {
         return 0;
+    }
+
+    aquire_file_access(stream->vfile_id);
 
     assert(stream);
     assert(ptr);
@@ -547,12 +667,19 @@ size_t vfs_write_file(const void *ptr, size_t size, size_t nmemb,
 
     unsigned write_buf_size = write_blocks * granularity;
 
+
+    // this filed is a copy.
+    // if the file size is to be updated, we have to 
+    // reaquire the vfile.
+    file_t file_copy = aquire_vfile(stream->vfile_id)->file;
+    release_vfile();
+
     // if the selected read is perfectly aligned,
     // the we don't need another buffer
     if(stream->sector_offset == 0 && end_offset == 0) {
         fs->write_file_sectors(
             fs,
-            &stream->open_vfile->file,
+            &file_copy,
             ptr,
             stream->sector_count,
             write_blocks
@@ -602,13 +729,13 @@ size_t vfs_write_file(const void *ptr, size_t size, size_t nmemb,
         // the sector
         if(stream->sector_offset != 0
             && stream->file_offset - stream->sector_offset 
-                < stream->open_vfile->file_size) {
+                < file_copy.file_size) {
             if(!stream->buffer_valid || !cachable) {
                 
                 // must read before writing
                 fs->read_file_sectors(
                         fs,
-                        &stream->open_vfile->file,
+                        &file_copy,
                         write_buf,
                         stream->sector_count,
                         1
@@ -629,14 +756,14 @@ size_t vfs_write_file(const void *ptr, size_t size, size_t nmemb,
             
             if(end_offset != 0 && 
                 stream->file_offset + bsize < 
-                        stream->open_vfile->file_size) {
+                        file_copy.file_size) {
                 // the end is both unaligned and in the file.
                 // if the end is not aligned and the file is 
                 // we need to read the last sector too
 
                 fs->read_file_sectors(
                         fs,
-                        &stream->open_vfile->file,
+                        &file_copy,
                         write_buf + write_buf_size - granularity,
                         last_sector,
                         1
@@ -659,7 +786,7 @@ size_t vfs_write_file(const void *ptr, size_t size, size_t nmemb,
 
         fs->write_file_sectors(
             fs,
-            &stream->open_vfile->file,
+            &file_copy,
             write_buf,
             stream->sector_count,
             write_blocks
@@ -674,16 +801,31 @@ size_t vfs_write_file(const void *ptr, size_t size, size_t nmemb,
     stream->file_offset += bsize;
     stream->sector_count = stream->file_offset / granularity;
     
-    // update file size
-    stream->open_vfile->file_size = MAX(stream->open_vfile->file_size, stream->file_offset);
-    invalidate_handlers_buffer(stream->open_vfile, stream);
+    if(file_copy.file_size < stream->file_offset) {
+        file_copy.file_size = stream->file_offset;
+        // update file size
+        // we need to reaquire the vfile
+        struct file_ent *vfile = aquire_vfile(stream->vfile_id);
+        vfile->file_size = stream->file_offset;
+        invalidate_handlers_buffer(vfile, stream);
+
+        release_vfile();
+    }
+
+
+
+
+    release_file_access(stream->vfile_id);
 
     return nmemb;
 }
 
 
-int vfs_seek_file(file_handle_t *restrict stream, uint64_t offset, int whence)
+uint64_t vfs_seek_file(file_handle_t *restrict stream, uint64_t offset, int whence)
 {    
+    if(!stream->fs->seekable)
+        return -1;
+        
     // real file offset: to be
     // calculated with the whence field
     uint64_t absolute_offset = offset;
@@ -694,7 +836,8 @@ int vfs_seek_file(file_handle_t *restrict stream, uint64_t offset, int whence)
         absolute_offset += stream->file_offset;
         break;
     case SEEK_END:
-        absolute_offset += stream->open_vfile->file_size;
+        absolute_offset += aquire_vfile(stream->vfile_id)->file_size;
+        release_vfile();
         break;
     case SEEK_SET:
         break;
@@ -712,7 +855,7 @@ int vfs_seek_file(file_handle_t *restrict stream, uint64_t offset, int whence)
     stream->buffer_valid  = 0;
 
     // everything is fine: return 0
-    return 0;
+    return absolute_offset;
 }
 
 

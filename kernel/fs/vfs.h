@@ -120,10 +120,10 @@ typedef struct file_handler {
 
 
     // VFS private open file structure
-    // contains the file handler
-    // along with informations about
-    // handlers pointing on it
-    struct file_ent* open_vfile;
+    // id in the table, contains the file 
+    // handler along with informations 
+    // about handlers pointing on it
+    uint64_t vfile_id;
 } file_handle_t;
 
 
@@ -186,6 +186,14 @@ void vfs_closedir(struct DIR*);
 
 
 /**
+ * duplicate a DIR structure
+ * the output one should also
+ * be closed with vfs_closedir
+ */
+struct DIR* vfs_dir_dup(struct DIR* dir);
+
+
+/**
  * @brief read a directory
  * if the dir->children is NULL and dir
  * doesn't represent a virtual directory,
@@ -224,7 +232,7 @@ file_handle_t* vfs_open_file(const char* filename);
  * 
  * @return file_handle_t* 
  */
-file_handle_t* vfs_clone_handle(file_handle_t*);
+file_handle_t* vfs_handle_dup(file_handle_t*);
 
 void vfs_close_file(file_handle_t* handle);
 
@@ -240,7 +248,8 @@ size_t vfs_write_file(const void* ptr, size_t size, size_t nmemb,
 
 // SEEK_SET, SEEK_END, SEEK_CUR are defined in fs.h
 
-// return 0 if successful (see man fseek)
-int vfs_seek_file(file_handle_t* stream, uint64_t offset, int whence);
+// return the resulting offset if successful (see man lseek)
+// -1 if unsucessfull
+uint64_t vfs_seek_file(file_handle_t* stream, uint64_t offset, int whence);
 long vfs_tell_file(file_handle_t* stream);
 
