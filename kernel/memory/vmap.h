@@ -17,12 +17,14 @@
  *                     |                | 
  * 0xffffffff00000000  |----------------|
  *                     |      MMIO      | 
+ * 0xffffffff40000000  |----------------|
+ *                     |   KERNEL TEMP  | 
  * 0xffffffff80000000  |----------------|
  *                     |     KERNEL     |
  *                     |      DATA      |
  * 0xffffffff80300000  |----------------|
  *                     |  KERNEL HEAP   |
- * 0xffffffffffffffff  ------------------
+ * 0xffffffffffffffff  |----------------|
  * 
  * 
  * the allocator and the page table manager
@@ -33,14 +35,22 @@
  * 
  * detailed MMIO address space:
  * 
- * 0xffffffff00000000  | ---- PCIE ---- |
+ * 0xffffffff00000000  |----- PCIE -----|
+ *                     |       ...      |
  *                     |   framebuffer  |
  *                     |       ...      |
- *                     | -------------- |
- * 0xffffffff1fffe000  |      HPET      |
- *                     | -------------- |
- * 0xffffffff1ffff000  |      LAPIC     |
+ * 0xffffffff1fffe000  |----------------|
+ *                     |      HPET      |
+ * 0xffffffff1ffff000  |----------------|
+ *                     |      LAPIC     |
  * 0xffffffff20000000  |----------------|
+ * 
+ * 
+ * the KERNEL TEMP memory region is used 
+ * for temporary allocations
+ * eg: copying data from one process to 
+ * another
+ * 
  * 
  * 
  */
@@ -73,6 +83,7 @@
 #define USER_END            0x0000007fffffffff
 #define TRANSLATED_PHYSICAL_MEMORY_BEGIN 0xffff800000000000llu
 #define MMIO_BEGIN          0xffffffff00000000llu
+#define KERNEL_TEMP_BEGIN   0xffffffff40000000llu
 #define KERNEL_DATA_BEGIN   0xffffffff80000000llu
 #define KERNEL_HEAP_BEGIN   0xffffffff80300000llu
 
@@ -84,6 +95,7 @@
 
 #define USER_CS 0x23
 #define USER_DS 0x1b
+#define USER_RF 0x202
 
 
 
@@ -91,7 +103,7 @@
 /**
  *  user memory map for Bincows:
  * 
- * 0                   ------------------
+ * 0                   |----------------|
  *                     |      USER      |
  *                     |     MEMORY     | 
  * 0x0000007fffffffff  |----------------|   
@@ -116,8 +128,9 @@ static inline int is_kernel_memory(uint64_t vaddr) {
 }
 
 static inline int is_mmio(uint64_t vaddr) {
-    // between -4 GB and -2 GB
-    return (vaddr & KERNEL_DATA_BEGIN) == MMIO_BEGIN;
+    // between -4 GB and -3 GB
+    return (vaddr & (KERNEL_DATA_BEGIN | KERNEL_TEMP_BEGIN)) 
+                == MMIO_BEGIN;
 }
 
 static inline int is_higher_half(uint64_t vaddr) {
