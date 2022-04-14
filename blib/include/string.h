@@ -11,7 +11,7 @@
 
 
 void * memccpy (void * __restrict__, const void * __restrict__, int, size_t);
-const void * memchr (const void *, int, size_t) __ATTR_PURE__;
+const void * __ATTR_PURE__ memchr (const void *, int, size_t) __ATTR_PURE__;
 int memcmp (const void *, const void *, size_t) __ATTR_PURE__;
 void * memcpy (void * __restrict__, const void * __restrict__, size_t);
 void * memset (void *, int, size_t);
@@ -19,6 +19,9 @@ void * memset (void *, int, size_t);
 void * memmove (void *, const void *, size_t);
 //void * memrchr (const void *, int, size_t) __ATTR_PURE__;
 
+
+char *strdup(const char *s);
+char *strndup(const char *s, size_t n);
 
 
 size_t strlen (const char* str)  __ATTR_PURE__;
@@ -38,14 +41,6 @@ char*  strncat(char * __restrict__ dest, const char * __restrict__ src, size_t n
 char* strtok(char* __restrict__ str, const char* __restrict__ delim);
 
 char* strtok_r(char* __restrict__ str, const char* __restrict__ delim, char** __restrict__ saveptr);
-
-
-// return 0 if the check sum is 0
-// this is equivalent to memsum(table, size) == 0
-int checksum(const void* table, size_t size);
-
-
-int memsum(const void* ptr, size_t size);
 
 
 #endif//KSTRING_H

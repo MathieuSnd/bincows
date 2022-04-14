@@ -1,10 +1,10 @@
 #include <stdarg.h>
-#include <alloc.h>
-#include "unistd.h"
-#include "string.h"
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
 
 // for system call numbers
-#include "../../kernel/int/syscall.h"
+#include "../../kernel/int/syscall_interface.h"
 
 
 
@@ -38,11 +38,6 @@ void *sbrk (uint64_t delta) {
     brk_addr += delta;
     
     return ret;
-}
-
-
-void exit (int status) {
-    syscall(SC_EXIT, &status, sizeof(status));
 }
 
 
@@ -120,62 +115,100 @@ size_t pread (int fd, void* buf, size_t nbytes, off_t offset) {
 size_t pwrite (int fd, const void* buf, size_t n, off_t offset);
 
 
-int execv (const char* path, char *const argv[]) {
-    if(strcmp(path, argv[0]) != 0) {
-        return -1;
-    };
 
-    size_t size = 0;
+/**
+ * @brief create a string list:
+ * strings separated by '\0'
+ * with double '\0' at the end
+ * 
+ * @param len number of null-terminated strings in arr
+ * @param arr null terminated array of null terminated
+ *            strings
+ * @param size (output) size of the resulting string 
+ *            list buffer
+ * @return mallocated string list
+ */
+static char* create_string_list(char* const* arr, size_t* size) {
 
-    for(int i = 0; argv[i] != NULL; i++) {
-        size += strlen(argv[i]) + 1;
+    // first compute the needed buffer size
+    // and the number of strings
+    size_t len = 0;
+    size_t bufsize = 1; // for the last '\0'
+
+    while(arr[len])
+        bufsize += strlen(arr[len++]);
+
+
+    bufsize += len; // for the '\0' between each string
+
+
+    *size = bufsize;
+
+    // allocate the buffer
+    char* list = malloc(bufsize);
+
+    
+
+    // fill the buffer
+    char* p = list;
+    for(size_t i = 0; i < len; i++) {
+        int slen = strlen(arr[i]);
+        memcpy(p, arr[i], slen);
+        p += slen;
+        *p++ = '\0';
     }
 
-    char* prog_args = malloc(size);
+    *p++ = '\0';
+    return list;
+}
 
-    char* ptr = prog_args;
+// base function for all exec* functions
+static
+int exec(const char* file, char* const argv[], char* const envp[], int new_process) {
+    size_t args_sz = 0, env_sz = 0;
 
-    for(int i = 0; argv[i] != NULL; i++) {
-        strcpy(ptr, argv[i]);
-        ptr += strlen(argv[i]) + 1;
-    }
+    char* args = create_string_list(argv, &args_sz);
+    char* env  = create_string_list(envp, &env_sz);
 
 
-
-    struct sc_exec_args args = {
-        .args = prog_args,
-        .args_sz = 0,
-        .new_process = 0,
+    struct sc_exec_args sc_args = {
+        .args = args,
+        .args_sz = args_sz,
+        .env = env,
+        .env_sz = env_sz,
+        .new_process = new_process,
     };
 
-    syscall(SC_EXEC, &args, sizeof(args));
+    int r = syscall(SC_EXEC, &sc_args, sizeof(sc_args));
 
+    free(args);
+    free(env);
 
-    free(prog_args);
+    return r;
 }
 
 
-int forkexec(const char* cmdline) {
-
-    char* cmdline_cpy = malloc(strlen(cmdline) + 1);
-    strcpy(cmdline_cpy, cmdline);
-
-    struct sc_exec_args args = {
-        .args = cmdline_cpy,
-        .args_sz = strlen(cmdline)+1,
-        .new_process = 1,
+int execvpe(const char* file, char* const argv[], char* const envp[]) {
+    if(strcmp(file, argv[0]) != 0) {
+        return -1;
     };
 
-    
-    while(strrchr(cmdline_cpy, ' ') != NULL) {
-        *(char *)strrchr(cmdline_cpy, ' ') = '\0';
-    }
+    exec(file, argv, envp, 0);
+}
 
-    
-    syscall(SC_EXEC, &args, sizeof(args));
-    free(cmdline_cpy);
 
-    return 0;
+int execv (const char* path, char* const argv[]) {
+    // @todo search in $PATH
+    return execvp(path, argv);
+}
+
+int execvp (const char *le, char *const argv[]) {
+    return exec(le, argv, __environ, 0);
+}
+
+
+int forkexec(char* const cmdline[]) {
+    return exec(cmdline[0], cmdline, __environ, 1);
 }
 
 
@@ -195,6 +228,20 @@ char *getcwd (char *buf, size_t size) {
         .buf = buf,
         .buf_sz = size,
     };
+
+    if(size == 0 &&  buf == NULL) {
+        // reaquest cwd size first
+        size = syscall(SC_GETCWD, &args, sizeof(args)); 
+
+        if(size == -1) {
+            return NULL;
+        }
+
+        args.buf    = malloc(size);
+        args.buf_sz = size;
+    }
+
+
 
     return (char *)syscall(SC_GETCWD, &args, sizeof(args));
 }
@@ -242,21 +289,4 @@ int __attribute__ ((__const__)) getpagesize (void)  {
 void __attribute__ ((__noreturn__)) _exit (int status) {
     syscall(SC_EXIT, &status, sizeof(status));
     __builtin_unreachable();
-}
-
-
-
-int fopen(const char* path, const char* mode) {
-    int flags = 0;
-    if(strcmp(mode, "r") == 0) {
-        flags = O_RDONLY;
-    } else if(strcmp(mode, "w") == 0) {
-        flags = O_WRONLY;
-    } else if(strcmp(mode, "rw") == 0) {
-        flags = O_RDWR;
-    } else {
-        return -1;
-    }
-
-    return open(path, flags, 0);
 }

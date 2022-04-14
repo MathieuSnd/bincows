@@ -1,8 +1,7 @@
-#include "alloc.h"
-
 #include <unistd.h>
 #include <stdint.h>
 #include <string.h>
+#include <stdlib.h>
 
 
 #define MIN_EXPAND_SIZE 4096

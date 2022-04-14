@@ -1,6 +1,6 @@
 #include <dirent.h>
-#include <alloc.h>
-#include <stdio.h>
+#include <stdlib.h>
+
 
 typedef struct DIR {
     int fd;

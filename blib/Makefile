@@ -1,6 +1,6 @@
 
 
-.PHONY: all clean
+.PHONY: all clean debug release
 
 BIN_FILE:=blib.a
 
@@ -11,7 +11,7 @@ ASM:=nasm
 
 
 
-CFLAGS := -O3 -mgeneral-regs-only \
+CFLAGS := -O3 -mgeneral-regs-only -Wall -Wextra \
 		  -ffreestanding -Iinclude/ -fno-pie -fno-stack-protector
 
 LDFLAGS := -shared -fno-pie
@@ -28,6 +28,13 @@ SFILES :=$(shell find src -name "*.s")
 OBJ :=  $(SFILES:.s=.s.o) \
 		$(CFILES:.c=.c.o)
 
+
+
+
+debug: CFLAGS += -g
+debug: LDFLAGS += -g
+debug: all
+release: all
 
 all: $(BIN_FILE)
 

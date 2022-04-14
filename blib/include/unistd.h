@@ -82,41 +82,10 @@ extern int pause (void);
 extern int fchdir (int __fd) __THROW __wur;
 
 
-/* Replace the current process, executing PATH with arguments ARGV and
-   environment ENVP.  ARGV and ENVP are terminated by NULL pointers.  */
-extern int execve (const char *__path, char *const __argv[],
-		   char *const __envp[]) __THROW __nonnull ((1, 2));
-
 /* Execute the file FD refers to, overlaying the running program image.
    ARGV and ENVP are passed to the new program, as for `execve'.  */
 extern int fexecve (int __fd, char *const __argv[], char *const __envp[])
      __THROW __nonnull ((2));
-
-
-/* Execute PATH with arguments ARGV and environment from `environ'.  */
-extern int execv (const char *__path, char *const __argv[])
-     __THROW __nonnull ((1, 2));
-
-/* Execute PATH with all arguments after PATH until a NULL pointer,
-   and the argument after that for environment.  */
-extern int execle (const char *__path, const char *__arg, ...)
-     __THROW __nonnull ((1, 2));
-
-/* Execute PATH with all arguments after PATH until
-   a NULL pointer and environment from `environ'.  */
-extern int execl (const char *__path, const char *__arg, ...)
-     __THROW __nonnull ((1, 2));
-
-/* Execute FILE, searching in the `PATH' environment variable if it contains
-   no slashes, with arguments ARGV and environment from `environ'.  */
-extern int execvp (const char *__file, char *const __argv[])
-     __THROW __nonnull ((1, 2));
-
-/* Execute FILE, searching in the `PATH' environment variable if
-   it contains no slashes, with all arguments after FILE until a
-   NULL pointer and environment from `environ'.  */
-extern int execlp (const char *__file, const char *__arg, ...)
-     __THROW __nonnull ((1, 2));
 
 
 /* Get file-specific configuration information about PATH.  */
@@ -574,11 +543,39 @@ extern void *sbrk (uint64_t __delta);
 /*
 return 0 if successfull, -1 if error
 */
-extern int forkexec(const char* cmdline);
+extern int forkexec(char* const cmdline[]);
 
 
 /* Execute PATH with arguments ARGV and environment from `environ'.  */
 extern int execv (const char *__path, char *const __argv[]);
+
+/* Replace the current process, executing PATH with arguments ARGV and
+   environment ENVP.  ARGV and ENVP are terminated by NULL pointers.  */
+extern int execve (const char *__path, char *const __argv[],
+		   char *const __envp[]);
+
+/* Execute PATH with all arguments after PATH until a NULL pointer,
+   and the argument after that for environment.  */
+extern int execle (const char *__path, const char *__arg, ...);
+
+/* Execute PATH with all arguments after PATH until
+   a NULL pointer and environment from `environ'.  */
+extern int execl (const char *__path, const char *__arg, ...);
+
+/* Execute FILE, searching in the `PATH' environment variable if it contains
+   no slashes, with arguments ARGV and environment from `environ'.  */
+extern int execvp (const char *__file, char *const __argv[]);
+
+extern int execvpe(const char *file, char *const argv[],
+                       char *const envp[]);
+
+
+/* Execute FILE, searching in the `PATH' environment variable if
+   it contains no slashes, with all arguments after FILE until a
+   NULL pointer and environment from `environ'.  */
+extern int execlp (const char *__file, const char *__arg, ...);
+
+
 
 
 /* Change the process's working directory to PATH.  */
@@ -591,6 +588,9 @@ extern int chdir (const char *__path);
    an array is allocated with `malloc'; the array is SIZE
    bytes long, unless SIZE == 0, in which case it is as
    big as necessary.  */
+// Bincows implementation of getcwd is similar to GNU:
+// if buf == 0 && size == 0, return a malloced buffer
+// with the right size.
 extern char *getcwd (char *__buf, size_t __size);
 
 
@@ -616,7 +616,7 @@ typedef enum open_flags {
     O_NOATIME   = 1024,
     O_CLOEXEC   = 2048,
     O_DIR       = 4096,
-} open_flags_t; 
+} open_flags_t;
 
 
 /* Invoke `system call' number SYSNO, passing it the remaining arguments.
@@ -647,6 +647,8 @@ typedef enum mode_t {
 
 
 int open (const char *pathname, int flags, mode_t mode);
+
+
 
 
 #endif /* unistd.h  */

@@ -1,7 +1,6 @@
+#include <string.h>
 #include "sprintf.h"
-#include "math.h"
-#include "string.h"
-#include "../drivers/terminal/terminal.h"
+
 
 #define SIGN(X) X > 0 ? 1 : -1
 #define ARG(TYPE) (TYPE)va_arg(ap, TYPE)

@@ -71,7 +71,7 @@ extern FILE *stdout;		/* Standard output stream.  */
 extern FILE *stderr;		/* Standard error output stream.  */
 
 /* C89/C99 say they're macros.  Make them happy.  */
-#define stdin stdin
+#define stdin  stdin
 #define stdout stdout
 #define stderr stderr
 
@@ -245,7 +245,6 @@ extern void setbuf (FILE *__restrict __stream, char *__restrict __buf);
 extern int setvbuf (FILE *__restrict __stream, char *__restrict __buf,
 		    int __modes, size_t __n);
 
-#ifdef	__USE_MISC
 /* If BUF is NULL, make STREAM unbuffered.
    Else make it use SIZE bytes of BUF for buffering.  */
 extern void setbuffer (FILE *__restrict __stream, char *__restrict __buf,
@@ -253,7 +252,6 @@ extern void setbuffer (FILE *__restrict __stream, char *__restrict __buf,
 
 /* Make STREAM line-buffered.  */
 extern void setlinebuf (FILE *__stream);
-#endif
 
 #include <stdio_printf.h>
 
@@ -261,7 +259,8 @@ extern void setlinebuf (FILE *__stream);
    These functions are possible cancellation points and therefore not
    marked with __THROW.  */
 extern int fgetc (FILE *__stream);
-extern int getc (FILE *__stream);
+
+#define getc fgetc
 
 
 

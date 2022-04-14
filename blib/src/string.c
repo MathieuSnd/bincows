@@ -1,5 +1,7 @@
-#include "string.h"
+#include <string.h>
 #include <stdint.h>
+#include <stdlib.h>
+
 
 size_t  strlen(const char* str) {
     const char* ptr = str;
@@ -334,20 +336,23 @@ char* strtok(char* restrict str, const char* restrict delim) {
 }
 
 
-int memsum(const void* ptr, size_t size) {
-    uint8_t sum = 0;
-    const uint8_t* raw = ptr;
+char *strdup(const char *s) {
+    size_t len = strlen(s);
+    char* ret = malloc(len+1);
+    if(!ret)
+        return NULL;
 
-    for(size_t i = 0;size > 0; --size) {
-        sum += raw[i++];
-    }
-    return sum;
+    memcpy(ret, s, len+1);
+    return ret;
 }
 
-int checksum(const void* table, size_t size) {
-    return ~memsum(table,size);
+char *strndup(const char *s, size_t n) {
+    size_t len = strnlen(s, n);
+    char* ret = malloc(len+1);
+    if(!ret)
+        return NULL;
+
+    memcpy(ret, s, len+1);
+    return ret;
 }
-
-
-
 
