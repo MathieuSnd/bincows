@@ -1,7 +1,10 @@
+// for initializing std streams
 #include <unistd.h>
-
 #include <string.h>
-#include <alloc.h>
+
+#include <stdio.h>
+#include <stdlib.h>
+
 
 int x = 8;
 const char* rodata = " zefgrbefvzegr ";
@@ -51,15 +54,10 @@ void init_stream(void) {
 }
 
 
-void print(const char* str) {
-    write(STDOUT_FILENO, str, strlen(str));
-}
-
-
 void print_cow(void) {
     int file = open("/boot/boot_message.txt", 0,0);
     if(file < 0) {
-        print("/boot/cow not found\n");
+        printf("/boot/cow not found\n");
         return;
     }
 
@@ -71,77 +69,119 @@ void print_cow(void) {
     char* buf = malloc(file_size);
 
     if(!buf) {
-        print("malloc failed\n");
+        printf("malloc failed\n");
         return;
     }
 
     size_t n = read(file, buf, file_size);
 
-    write(STDOUT_FILENO, buf, n);
-
+    printf("%s", buf);
 
     free(buf);
 
     close(file);
 }
 
-int list_dirs(void) {
-    int fd = open("/", 0, 0);
-    if(fd < 0) {
-        print("fopen failed\n");
-        return -1;
-    }
-
-    size_t size = lseek(fd, 0, SEEK_END);
-
-    lseek(fd, 0, SEEK_SET);
-
-    
-    char* buf = malloc(size);
-
-    if(!buf) {
-        print("malloc failed\n");
-        return -1;
-    }
-
-    size_t n = read(fd, buf, size);
-
-typedef uint64_t ino_t;
-typedef struct dirent {
-        struct {
-            ino_t         ino;       /* Inode number */
-            size_t        file_size; /* Length of this record */
-            unsigned char type;      /* Type of file; not supported
-                                        by all filesystem types */
-        };
-    char name[256];   /* Null-terminated filename */
-} dirent_t;
-
-
-    struct dirent* dirs = (struct dirent *)buf;
-
-
-    for(int i =  0; i < n / sizeof(struct dirent); i++) {
-        print(dirs[i].name);
-        print("'\n'");
-    }
-
-
-    free(buf);
+/**
+ * execute the builtin command
+ * if it is one,
+ * else return 0
+ */
+static int builtin_cmd(const char* cmd) {
+    if(strcmp(cmd, "help") == 0)
+        printf("\n"
+               "help\n"
+               "\tlist all commands\n"
+               "\n"
+               "version\n"
+               "\tprint version\n"
+               "\n"
+               "exit\n"
+               "\tquit the shell\n"
+               "\n"
+               "cow\n"
+               "\tprint a cow\n"
+               "\n"
+               "\n");
+    else if(strcmp(cmd, "version") == 0)
+        printf(version_string);
+    else if(strcmp(cmd, "cow") == 0)
+        print_cow();
+    else if(strcmp(cmd, "exit") == 0)
+        exit(0);
+    else
+        return 0;        
+    return 1;
 }
 
 
-int _start() {
+static char** convert_cmdline(char* cmdline) {   
+    char** argv = malloc(sizeof(char*));
+    argv[0] = NULL;
+
+    char* cmd = strtok(cmdline, " ");
+
+    int i = 0;
+    while(cmd) {
+        argv = realloc(argv, sizeof(char*) * (i + 2));
+        argv[i++] = cmd;
+        argv[i] = NULL;
+        cmd = strtok(NULL, " ");
+    }
+
+    return argv;
+}
+
+
+static void execute(char* cmd) {
+    if(builtin_cmd(cmd))
+        return;
+    
+    // convert to argv
+    char** argv = convert_cmdline(cmd);
+
+    // execute
+    int ret = forkexec(argv);
+
+    if(ret) 
+    {
+        // an error occured.
+        FILE* f = fopen(argv[0], "r");
+        if(f) {
+            // the file exists, but we can't execute it
+            fclose(f);
+
+            printf("can't execute '%s'\n", argv[0]);
+        }
+        else
+            printf("command not found: %s\n", argv[0]);
+    }
+
+    free(argv);
+}
+
+
+static char* cwd = NULL;
+
+void print_prompt(void) {
+    printf("%s > _\b", cwd);
+}
+
+int main(int argc, char** argv) {
     init_stream();
 
     print_cow();
-    list_dirs();
 
-    write(STDOUT_FILENO, version_string, strlen(version_string));
+    printf("%s\n", version_string);
 
-    const char* prompt = "> _\b";
+    // current working directory
+    cwd = getcwd(NULL, 0);
 
-    write(STDOUT_FILENO, prompt, strlen(prompt));
+
+    print_prompt();
+
+    int cur = 0;
+    char line[1024];
 
     while(1) {
         char ch;
@@ -151,11 +191,21 @@ int _start() {
 
         switch(ch) {
             default:
-                write(STDOUT_FILENO, &ch, 1);
-                write(STDOUT_FILENO, "_\b", 2);
+                line[cur++] = ch;
+                printf("%c_\b", ch);
                 break;
             case '\b':
-                write(STDOUT_FILENO, " \b\b_\b", 5);
+                if(cur > 0) {
+                    printf(" \b\b_\b");
+                    cur--;
+                }
+                break;
+            case '\n':
+                printf("\n");
+                line[cur] = 0;
+                execute(line);
+                print_prompt();
+                cur = 0;
                 break;
         }
     }
@@ -163,6 +213,8 @@ int _start() {
     close(STDIN_FILENO);
     close(STDOUT_FILENO);
     close(STDERR_FILENO);
+
+    free(cwd);
 
 
     for(;;);

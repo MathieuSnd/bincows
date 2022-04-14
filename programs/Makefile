@@ -1,23 +1,28 @@
 
 
-.PHONY: all clean
+.PHONY: all clean release debug
 
 
 CC := x86_64-elf-gcc
 LD := x86_64-elf-ld
 
 CFLAGS := -O3 -fno-inline -mno-red-zone -mgeneral-regs-only \
-		  -ffreestanding -I../blib/include -fno-omit-frame-pointer -fno-pie
+		  -I../blib/include -fno-omit-frame-pointer -fno-pie
 
 
 
 CFILES :=$(shell find -name "*.c")
 EFILES := $(CFILES:.c=.elf)
 
+
+debug: CFLAGS += -g
+debug: LDFLAGS += -g
+debug: all
+
+release: all 
+
 all: $(EFILES)
 	cp *.elf ../disk_root/bin/
-
-
 
 
 %.elf: %.c ../blib/blib.a
