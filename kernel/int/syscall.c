@@ -21,19 +21,14 @@ typedef uint64_t(*sc_fun_t)(process_t*, void*, size_t);
 static sc_fun_t sc_funcs[SC_END];
 
 static inline void sc_warn(const char* msg, void* args, size_t args_sz) {
-    log_warn("syscall process %u, thread %u: %s,    \targs_sz=%u, args:", 
+/*
+    log_debug("syscall process %u, thread %u: %s", 
              sched_current_pid(), 
              sched_current_tid(),
              msg,
              args_sz
     );   
-
-    dump(
-        args, 
-        args_sz,
-        16,
-        DUMP_HEX8
-    );
+*/
 }
 
 
@@ -78,6 +73,26 @@ static int check_args(const process_t* proc, const void* args, size_t args_sz) {
 
     return 1;
 }
+
+
+static char* get_absolute_path(const char* cwd, const char* path) {
+    if(path[0] == '/') {
+        // absolute path
+        return strdup(path);
+    }
+
+    size_t cwd_sz = strlen(cwd);
+    size_t path_sz = strlen(path);
+
+    char* abs_path = malloc(cwd_sz + path_sz + 2);
+
+    memcpy(abs_path, cwd, cwd_sz);
+    abs_path[cwd_sz] = '/';
+    memcpy(abs_path + cwd_sz + 1, path, path_sz + 1);
+
+    return abs_path;
+}
+
 
 
 
@@ -173,29 +188,59 @@ char* parse_cmdline(const char* cmdline, size_t cmdline_sz) {
 }
 */
 
-uint64_t sc_exec(process_t* proc, void* args, size_t args_sz) {
+static uint64_t sc_exec(process_t* proc, void* args, size_t args_sz) {
     if(args_sz != sizeof(struct sc_exec_args)) {
         sc_warn("bad args_sz", args, args_sz);
         return -1;
     }
 
+    ////////////////////////////////////////////
+    /////       checking arguments         /////
+    ////////////////////////////////////////////
+
     struct sc_exec_args* exec_args = (struct sc_exec_args*)args;
 
-    if(check_args(proc, exec_args->args, exec_args->args_sz)) {
-        sc_warn("bad cmdline", args, args_sz);
+    if(exec_args->args_sz < 1 || 
+        check_args(proc, exec_args->args, exec_args->args_sz)) 
+    {
+        log_warn("issou %u", exec_args->args_sz);
+        sc_warn("bad cmdline size", args, args_sz);
         return -1;
     }
 
     // this unsures that strlen won't generate a page fault
-    if(exec_args->args[args_sz - 1] != '\0') {
+    if(exec_args->args[exec_args->args_sz - 1] != '\0'
+    ) {
         sc_warn("bad cmdline", args, args_sz);
         return -1;
     }
 
 
-    const char* path = exec_args->args;
+    if(exec_args->env_sz < 1 || 
+        check_args(proc, exec_args->env, exec_args->env_sz)) 
+    {
+        sc_warn("bad env vars", args, args_sz);
+        return -1;
+    }
+
+    // this unsures that strlen won't generate a page fault
+    if(exec_args->env[exec_args->env_sz - 1] != '\0'
+    ) {
+        sc_warn("bad environment vars", args, args_sz);
+        return -1;
+    }
+
+
+    ////////////////////////////////////////////
+    /////       open executable file       /////
+    ////////////////////////////////////////////
+
+    // first element of args is the program name
+    char* path = get_absolute_path(proc->cwd, exec_args->args);
 
     file_handle_t* elf_file = vfs_open_file(path);
+
+    free(path);
     
     if(!elf_file) {
         sc_warn("failed to open file", args, args_sz);
@@ -212,25 +257,93 @@ uint64_t sc_exec(process_t* proc, void* args, size_t args_sz) {
 
     size_t rd = vfs_read_file(elf_data, file_sz, 1, elf_file);
 
-    assert(rd != file_sz);
+    assert(rd == file_sz);
     
     vfs_close_file(elf_file);
 
 
+    // as we might to map another process
+    // we won't be able to access args and env
+    // so we copy them in kernel heap
+    char* args_copy = (char*)malloc(exec_args->args_sz);
+    char* env_copy  = (char*)malloc(exec_args->env_sz);
+
+    memcpy(args_copy, exec_args->args, exec_args->args_sz);
+    memcpy(env_copy,  exec_args->env,  exec_args->env_sz);
+
+    // very bad naming....
+    size_t cmd_args_sz = exec_args->args_sz;
+    size_t env_sz = exec_args->env_sz;
+
+
+
+    ////////////////////////////////////////////
+    /////          create process          /////
+    ////////////////////////////////////////////
+
+    // resulting process
+    // either the current process or a new one
+    process_t* new_proc;
+
 
     if(!exec_args->new_process) {
+        assert(0);
         // regular UNIX exec
         replace_process(proc, elf_data, file_sz);
+        new_proc = proc;
     }
     else {
-        sched_create_process(proc->pid, elf_data, file_sz);
+        unmap_user();
+
+        // sched_create_process needs the user to be unmaped
+
+        pid_t p = sched_create_process(proc->pid, elf_data, file_sz);
+
+        if(p == -1) {
+            sc_warn("failed to create process", args, args_sz);
+
+            // even if the process creation failed, we 
+            // still need to remap the process
+            set_user_page_map(proc->page_dir_paddr);
+
+            return -1;
+        }
+
+        new_proc = sched_get_process(p);
     }
 
+    // here, new_proc is currently mapped in memory
+
+    assert(new_proc);
+
+
+    ////////////////////////////////////////////
+    //// set process arguments and env vars ////
+    ////////////////////////////////////////////
+    
+    if(set_process_entry_arguments(new_proc, 
+        args_copy, cmd_args_sz, env_copy, env_sz
+    )) {
+        sc_warn("failed to set process arguments", args, args_sz);
+        
+        // even if the process creation failed, we 
+        // still need to remap the process
+        set_user_page_map(proc->page_dir_paddr);
+        return -1;
+    }
+
+    // done :)
+    // now we must restore the current process 
+    // memory map before returning
+    
+    set_user_page_map(proc->page_dir_paddr);
+
+    
     return 0;
 }
 
 
-static fd_t find_free_fd(process_t* proc) {
+static fd_t find_available_fd(process_t* proc) {
     for(fd_t i = 0; i < MAX_FDS; i++) {
         if(proc->fds[i].type == FD_NONE)
             return i;
@@ -270,26 +383,6 @@ static fd_t insert_process_dir(process_t* proc, struct DIR* dir) {
 }
 
 
-static char* get_absolute_path(const char* cwd, const char* path) {
-    if(path[0] == '/') {
-        // absolute path
-        return strdup(path);
-    }
-
-    size_t cwd_sz = strlen(cwd);
-    size_t path_sz = strlen(path);
-
-    char* abs_path = malloc(cwd_sz + path_sz + 2);
-
-    memcpy(abs_path, cwd, cwd_sz);
-    abs_path[cwd_sz] = '/';
-    memcpy(abs_path + cwd_sz + 1, path, path_sz + 1);
-
-    return abs_path;
-}
-
-
-
 static uint64_t sc_open(process_t* proc, void* args, size_t args_sz) {
     if(args_sz != sizeof(struct sc_open_args)) {
         sc_warn("bad args_sz", args, args_sz);
@@ -313,7 +406,7 @@ static uint64_t sc_open(process_t* proc, void* args, size_t args_sz) {
     }
 
 
-    fd_t fd = find_free_fd(proc);
+    fd_t fd = find_available_fd(proc);
 
 
     if(fd == (fd_t)-1) {
@@ -384,9 +477,7 @@ static uint64_t sc_close(process_t* proc, void* args, size_t args_sz) {
     }
 
 
-    close_fd(&proc->fds[fd]);
-
-    return 0;
+    return close_fd(&proc->fds[fd]);
 }
 
 
@@ -590,6 +681,9 @@ static uint64_t sc_getcwd(process_t* proc, void* args, size_t args_sz) {
 
     struct sc_getcwd_args* a = args;
 
+    if(a->buf_sz == 0 && a->buf == NULL)
+        return strlen(proc->cwd) + 1;
+
     check_args(proc, a->buf, a->buf_sz);
 
     if(a->buf_sz < strlen(proc->cwd) + 1) {
@@ -659,7 +753,7 @@ static uint64_t sc_dup(process_t* proc, void* args, size_t args_sz) {
         }
     }
     else {
-        fd2 = find_free_fd(proc);
+        fd2 = find_available_fd(proc);
 
         if(fd2 == (fd_t)-1) {
             sc_warn("too many fds", args, args_sz);
@@ -673,7 +767,7 @@ static uint64_t sc_dup(process_t* proc, void* args, size_t args_sz) {
 }
 
 
-uint64_t sc_clock(process_t* proc, void* args, size_t args_sz) {
+static uint64_t sc_clock(process_t* proc, void* args, size_t args_sz) {
     if(args_sz != 0) {
         sc_warn("bad args_sz", args, args_sz);
         return -1;
@@ -704,6 +798,7 @@ void syscall_init(void) {
     sc_funcs[SC_SEEK]   = sc_seek;
     sc_funcs[SC_READ]   = sc_read;
     sc_funcs[SC_WRITE]  = sc_write;
+    sc_funcs[SC_EXEC]   = sc_exec;
     sc_funcs[SC_CHDIR]  = sc_chdir;
     sc_funcs[SC_GETCWD] = sc_getcwd;
     sc_funcs[SC_CLOCK]  = sc_clock;

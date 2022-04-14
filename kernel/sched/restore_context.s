@@ -25,14 +25,6 @@ _restore_context:
 ; set segments
     mov rax, [rsp + 152] ; gp_regs_t.ss
 
-; we set every segment but the stack one
-; iretq will take care of it
-    mov ds, ax
-    mov fs, ax
-    mov gs, ax
-    mov es, ax
-
-
     pop r15
     pop r14
     pop r13

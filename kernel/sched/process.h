@@ -96,6 +96,16 @@ int create_process(process_t* process, process_t* pparent, const void* elffile, 
 
 
 /**
+ * @brief Set the process entry arguments object
+ * 
+ * argv and envp are null terminated strings with 
+ * NULL last element
+ * 
+ */
+int set_process_entry_arguments(process_t* process, 
+        char* argv, size_t argv_sz, char* envp, size_t envp_sz);
+
+/**
  * @brief free an exited process
  * (no remainng thread)
  * 
@@ -103,7 +113,12 @@ int create_process(process_t* process, process_t* pparent, const void* elffile, 
  */
 void free_process(process_t* process);
 
-
+/**
+ * In order to replace the process,
+ * the current process must already
+ * be mapped.
+ * The process stays mapped
+ */
 int replace_process(process_t* process, void* elffile, size_t elffile_sz);
 
 
@@ -114,9 +129,9 @@ int replace_process(process_t* process, void* elffile, size_t elffile_sz);
  * and calls the right close
  * function
  * 
- * @param fd 
+ * @return int 0 if success, non-0 otherwise
  */
-void close_fd(file_descriptor_t* fd);
+int close_fd(file_descriptor_t* fd);
 
 /**
  * duplicates fd to new_fd

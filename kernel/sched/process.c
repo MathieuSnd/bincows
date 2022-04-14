@@ -46,7 +46,11 @@ void dup_fd(file_descriptor_t* fd, file_descriptor_t* new_fd) {
 }
 
 
-void close_fd(file_descriptor_t* fd) {
+int close_fd(file_descriptor_t* fd) {
+    if(fd->file == NULL) {
+        return -1;
+    }
+
     switch(fd->type) {
         case FD_FILE:
             vfs_close_file(fd->file);
@@ -59,11 +63,18 @@ void close_fd(file_descriptor_t* fd) {
     }
 
     fd->type = FD_NONE;
+
+    return 0;
 }
 
 
 
-int create_process(process_t* process, process_t* pparent, const void* elffile, size_t elffile_sz) {
+int create_process(
+        process_t*  process, 
+        process_t*  pparent, 
+        const void* elffile, 
+        size_t      elffile_sz
+) {
 
     // assert that no userspace is mapped
     assert(get_user_page_map() == 0);
@@ -85,6 +96,8 @@ int create_process(process_t* process, process_t* pparent, const void* elffile, 
 
     fds = malloc(sizeof(file_descriptor_t*) * MAX_FDS);
 
+    char* cwd;
+
     if(pparent) {
         // inherit parent file handlers
         ppid = pparent->pid;
@@ -95,7 +108,7 @@ int create_process(process_t* process, process_t* pparent, const void* elffile, 
         }
 
         // inherit parent directory
-        process->cwd = strdup(pparent->cwd);
+        cwd = strdup(pparent->cwd);
     }
     else {
         // empty file handlers
@@ -106,7 +119,7 @@ int create_process(process_t* process, process_t* pparent, const void* elffile, 
         //memset(fds, 0, sizeof(file_descriptor_t*) * MAX_FDS);
 
         // root directory
-        process->cwd = strdup("/");
+        cwd = strdup("/");
     }
 
 
@@ -125,6 +138,7 @@ int create_process(process_t* process, process_t* pparent, const void* elffile, 
         FIRST_TID
     );
 
+    // set PC
     threads[0].rsp->rip = (uint64_t)program->entry;
 
 
@@ -146,6 +160,7 @@ int create_process(process_t* process, process_t* pparent, const void* elffile, 
         .page_dir_paddr = user_page_map,
         .pid = pid,
         .ppid = ppid,
+        .cwd  = cwd,
         .program = program,
         .clock_begin = clock_ns()
     };
@@ -155,7 +170,6 @@ int create_process(process_t* process, process_t* pparent, const void* elffile, 
     process->brk = process->unaligned_brk = process->heap_begin = 
                         (void *)(((uint64_t)elf_end+0xfff) & ~0x0fffllu);
     
-
     return 1;
 }
 
@@ -188,6 +202,9 @@ int replace_process(process_t* process, void* elffile, size_t elffile_sz) {
     unmap_user();
     free_user_page_map(process->page_dir_paddr);
 
+    // recreate page directory
+    process->page_dir_paddr = alloc_user_page_map();
+    set_user_page_map(process->page_dir_paddr);
 
 
     // only one thread
@@ -225,6 +242,98 @@ int replace_process(process_t* process, void* elffile, size_t elffile_sz) {
     
 
     process->threads[0].rsp->rip = (uint64_t)program->entry;
+
+
+
+    return 0;
+}
+
+
+static size_t string_list_len(char* list) {
+    size_t len = 0;
+
+    while(*list) {
+        list += strlen(list) + 1;
+        len++;
+    }
+
+    return len;
+}
+
+
+int set_process_entry_arguments(process_t* process, 
+    char* argv, size_t argv_sz, char* envp, size_t envp_sz
+) {
+
+    assert(process);
+    //setup stack
+
+    uint64_t rsp = (uint64_t)process->threads[0].stack.base
+                 + process->threads[0].stack.size;
+
+
+    // align sizes to 16 bytes
+    // because we are copying it in
+    // a stack
+    argv_sz = (argv_sz + 15) & ~0x0f;
+    envp_sz = (envp_sz + 15) & ~0x0f;
+
+    // put the arguments and env vars in the stack
+    uint64_t user_argv = (rsp -= argv_sz);
+    uint64_t user_envp = (rsp -= envp_sz);
+
+    log_warn("user_argv=%lx, user_envp=%lx", user_argv, user_envp);
+
+    // frame begin
+    uint64_t* user_frame_begin = (uint64_t*)(rsp -= sizeof(uint64_t));
+
+    *user_frame_begin = 0;
+
+
+    process->threads[0].rsp = (uint64_t*)(rsp -= sizeof(gp_regs_t));
+
+
+
+    // stack.base < rsp < user_envp < user_argv
+    if(process->threads[0].rsp <= process->threads[0].stack.base) {
+        // not enough space
+        return -1;
+    }
+
+    // copy argv and envp
+    memcpy((void*)user_argv, argv, argv_sz);
+    memcpy((void*)user_envp, envp, envp_sz);
+
+    // compute argc and envc
+    int argc;
+    int envc;
+
+    if(argv)
+        argc = string_list_len(argv);
+    else 
+        argc = 0;
+
+    if(envp)
+        envc = string_list_len(envp);
+    else 
+        envc = 0;
+
+    // fill registers initial values
+
+    // entry arguments:
+    // _start(int argc, char* args, int envrionc, char* environ)
+    process->threads[0].rsp->rdi = argc;
+    process->threads[0].rsp->rsi = user_argv;
+    process->threads[0].rsp->rdx = envc;
+    process->threads[0].rsp->rcx = user_envp;
+
+
+    process->threads[0].rsp->rsp = rsp;
+    process->threads[0].rsp->rbp = user_frame_begin;
+    process->threads[0].rsp->rip = process->program->entry;
+    process->threads[0].rsp->cs  = USER_CS;
+    process->threads[0].rsp->ss  = USER_DS;
+    process->threads[0].rsp->rflags = USER_RF;
 
     return 0;
 }

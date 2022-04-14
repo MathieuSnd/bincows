@@ -132,12 +132,12 @@ pid_t sched_create_process(pid_t ppid, const void* elffile, size_t elffile_sz) {
 
         if(!parent) {
             // no such ppid
-            return 0;
+            return -1;
         }
     }
     
     if(!create_process(&new, parent, elffile, elffile_sz))
-        return 0;
+        return -1;
     
     _cli();
 

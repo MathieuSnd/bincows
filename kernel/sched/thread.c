@@ -28,8 +28,8 @@ int create_thread(
 
     thread->rsp->cs  = USER_CS;
     thread->rsp->ss  = USER_DS;
-
-    thread->rsp->rflags = get_rflags();
+    thread->rsp->rflags = USER_RF;
+    
     thread->rsp->rbp = (uint64_t)(stack_base - 8);
 
     thread->rsp->rsp = (uint64_t)stack_base + stack_size;

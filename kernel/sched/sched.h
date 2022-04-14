@@ -26,7 +26,10 @@ pid_t alloc_pid(void);
 
 
 // create process and return its pid
-// or 0 if unsuccessful
+// or -1 if unsuccessful
+// in order to create a process, no process should
+// initially mapped in memory.
+// the created process is mapped and is not unmapped
 pid_t sched_create_process(pid_t ppid, const void* elffile, size_t elffile_sz);
 
 
