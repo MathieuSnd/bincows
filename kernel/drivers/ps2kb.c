@@ -114,7 +114,7 @@ static int process_leds(uint8_t b) {
     if(b == 0xba) {// caps lock
         // flush data buffer
         inb(0x60);
-        leds_state = 0xff;
+        leds_state ^= 4;
         command_byte(0xED);
         
         // io wait
@@ -143,16 +143,16 @@ static void process_byte(uint8_t b) {
         .scancode  = b&0x7f,
     };
 
-    if(ev.keycode == 0x2A) {
+    if(ev.scancode == 0x2A) {
         lshift_state = ev.type;
         return;
     }
-    else if(ev.keycode == 0x36) {
+    else if(ev.scancode == 0x36) {
         rshift_state = ev.type;
         return;
     }
-    else if(ev.keycode == 56) {
-        altgr_state = ev.type;
+    else if(ev.scancode == 56) {
+        altgr_state =  ev.type;
     }
 
     if(altgr_state)
