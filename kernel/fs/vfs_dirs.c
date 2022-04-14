@@ -719,7 +719,7 @@ fs_t *vfs_open(const char *path, fast_dirent_t *dir)
         free(pathbuf);
         // there is no way the dir could
         // exist
-        return NULL;
+        return FS_NO;
     }
 
     fs_t *fs = vdir->fs;
@@ -736,7 +736,6 @@ fs_t *vfs_open(const char *path, fast_dirent_t *dir)
         .type = DT_DIR,
     };
 
-
     // in case vdir is the root
     // the parent path is '/'
     // and therefore finishes with a 
@@ -745,7 +744,8 @@ fs_t *vfs_open(const char *path, fast_dirent_t *dir)
     // mendatory for the following code
     if(*parent_path != '/') {
         parent_path--;
-        if(parent_path[2] == 0) {
+
+        if(parent_path[1] == 0) {
             *dir = cur;
             return fs;
         }
@@ -806,7 +806,7 @@ fs_t *vfs_open(const char *path, fast_dirent_t *dir)
             // the child does not exist
             free(pathbuf);
         
-            return NULL;
+            return FS_NO;
         }
 
         // restore the path buffer
@@ -979,9 +979,10 @@ int vfs_create(const char* path, int type) {
     // if the parent directory
     // is not a directory, or does not
     // exist
-    if(!fs || parentdir.type != DT_DIR)
+    if(fs == FS_NO || parentdir.type != DT_DIR)
         return 1;
     
+    // handle the virtual case
 
     // actually add the entry
 
@@ -1005,13 +1006,19 @@ struct DIR *vfs_opendir(const char *path)
 
     size_t n = 0;
 
+    struct DIR *dir = NULL;
     fast_dirent_t fdir;
     fs_t *fs = vfs_open(pathbuff, &fdir);
 
 
-    struct DIR *dir = NULL;
 
-    if (fs)
+    if(fs == FS_NO) {
+        // the path does not exist
+        free(pathbuff);
+        return NULL;
+    }
+
+    else if(fs)
     { // dir does exist
         if(fdir.type != DT_DIR) {
             free(pathbuff);
@@ -1026,6 +1033,7 @@ struct DIR *vfs_opendir(const char *path)
 
         fs->free_dirents(list);
     }
+    // else, the path is virtual
 
     ////////////////////////////////////////
     // now search for virtual entries
@@ -1119,21 +1127,38 @@ int vfs_update_metadata(
 
     // now update disk
 
-    // first open the parent
+    // first open the parent and compute
+    // the file name
+    char* parent_path = pathbuf;
 
     char* file_name = strrchr(pathbuf, '/');
     assert(file_name);
-    *file_name = 0;
+
+
+    if(file_name == pathbuf) {
+        // root
+        parent_path = "/";
+    }
+    else 
+        *file_name = 0;
+    
     file_name++;
 
     // here, pathbuf = '/a/b/parent'
     // and file_name = 'name'
 
     fast_dirent_t parent_dirent;
-    fs_t* fs = vfs_open(pathbuf, &parent_dirent);
-    
+    fs_t* fs = vfs_open(parent_path, &parent_dirent);
 
-    assert(fs); // assert that the parent exists
+    log_warn("updating metadata for %s, p=%s", pathbuf, parent_path);
+
+    assert(fs != FS_NO);
+
+    if(!fs) {
+        // parent is a virtual directory
+        free(pathbuf);
+        return 0;
+    }
 
     assert(parent_dirent.type == DT_DIR);
     assert(parent_dirent.file_size == 0);

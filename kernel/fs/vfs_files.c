@@ -305,8 +305,11 @@ file_handle_t *vfs_open_file(const char *path) {
 
 
     fs_t *restrict fs = vfs_open(path, &dirent);
-    if (!fs) // dirent not found
+    
+    if (!fs || fs == FS_NO) 
         return NULL;
+    // dirent not found or associated to a 
+    // virtual directory
 
     // file does not exist or isn't a file
     if (dirent.type != DT_REG) {

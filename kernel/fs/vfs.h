@@ -21,7 +21,8 @@ int vfs_mount(disk_part_t* part, const char* path);
 int vfs_mount_devfs(void);
 
 
-
+// for vfs_open
+#define FS_NO ((fs_t*)0)
 /**
  * @brief open a directory entry
  * 
@@ -31,7 +32,7 @@ int vfs_mount_devfs(void);
  *
  * @param path the directory path
  * @param dir (output) directory entry descriptor
- * @return fs_t NULL if the directory does
+ * @return fs_t FS_NO if the directory does
  * not exist. the file system associated with the dir
  * otherwise
  */
