@@ -154,11 +154,15 @@ static inline uint64_t early_virtual_to_physical(
 }
 
 
-// translated virtual address 
+// translated virtual address that is in 
+// the TRANSLATED region to a physical address:
 // (phys + TRANSLATED_PHYSICAL_MEMORY_BEGIN)
-// to physical address
 static inline uint64_t trv2p(void* trvaddr) {
     return ((uint64_t)trvaddr & ~TRANSLATED_PHYSICAL_MEMORY_BEGIN);
+}
+
+static inline uint64_t trk2p(void* trkaddr) {
+    return ((uint64_t)trkaddr & ~KERNEL_DATA_BEGIN);
 }
 
 // translate a physical memory address
