@@ -12,6 +12,7 @@
 [global get_cr0]
 [global _cr2]
 [global _cr3]
+[global get_cr3]
 [global set_cr4]
 [global get_cr4]
 [global _ltr]
@@ -75,6 +76,10 @@ _cr3:
     mov cr3, rdi
     ret
 
+; set_cr3(uint64_t cr3)
+get_cr3:
+    mov rax, cr3
+    ret
     
 ; void get_cr4(uint64_t cr3)
 get_cr4:
