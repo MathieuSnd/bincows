@@ -1150,8 +1150,6 @@ int vfs_update_metadata(
     fast_dirent_t parent_dirent;
     fs_t* fs = vfs_open(parent_path, &parent_dirent);
 
-    log_warn("updating metadata for %s, p=%s", pathbuf, parent_path);
-
     assert(fs != FS_NO);
 
     if(!fs) {
