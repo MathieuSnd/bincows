@@ -35,7 +35,7 @@ void stio_init(void) {
     *stdin = (FILE){
         .fd = STDIN_FILENO,
         .flags = 0,
-        .mode = 0,
+        .mode = _IONBF,
         .ungetc = -1,
         .error = 0,
         .eof = 0,
@@ -50,7 +50,7 @@ void stio_init(void) {
     *stdout = (FILE){
         .fd = STDOUT_FILENO,
         .flags = 0,
-        .mode = 0,
+        .mode = _IONBF,
         .ungetc = -1,
         .error = 0,
         .eof = 0,
@@ -65,7 +65,7 @@ void stio_init(void) {
     *stderr = (FILE){
         .fd = STDERR_FILENO,
         .flags = 0,
-        .mode = 0,
+        .mode = _IONBF,
         .ungetc = -1,
         .error = 0,
         .eof = 0,
@@ -86,6 +86,8 @@ void stio_init(void) {
 FILE *fopen (const char *restrict filename,
 		     const char *restrict modes
 ) {
+
+    (void) modes;
 
     int fd = open(filename, 0, 0);
     if(fd < 0) {
@@ -134,6 +136,8 @@ int fclose (FILE* stream) {
     close(stream->fd);
     free(stream->buffer);
     free(stream);
+
+    return 0;
 }
 
 
@@ -141,6 +145,8 @@ int fclose (FILE* stream) {
                 const char* restrict modes,
                 FILE* restrict stream
 ) { 
+    (void) modes;
+
     fflush(stream);
     close(stream->fd);
     stream->fd = open(filename, 0, 0);
@@ -192,10 +198,10 @@ int putchar(int c) {
 }
 
 int puts (const char *s) {
-    if(write(STDOUT_FILENO, s, strlen(s)) < 0) {
+    if(write(STDOUT_FILENO, s, strlen(s)) == 0) {
         return EOF;
     }
-    else if(write(STDOUT_FILENO, "\n", 1) < 0) {
+    else if(write(STDOUT_FILENO, "\n", 1) == 0) {
         return EOF;
     }
     return 0;
@@ -217,7 +223,7 @@ size_t fread (void *restrict ptr, size_t size,
     }
 
 
-    if(rd != size * n)
+    if(rd != (int64_t)(size * n))
         stream->eof = 1;
 
     stream->pos += n;
@@ -242,7 +248,7 @@ size_t fwrite (const void *restrict ptr, size_t size,
         return 0;
     }
 
-    if(n != size * n)
+    if(n != (int64_t)size * n)
         stream->eof = 1;
 
     stream->pos += n;
@@ -294,7 +300,7 @@ int fputs(const char* restrict s, FILE* restrict stream) {
             return EOF;
         }
         case _IONBF: {
-            int n = write(stream->fd, s, strlen(s));
+            size_t n = write(stream->fd, s, strlen(s));
             if(n == strlen(s)) {
                 return 0;
             }

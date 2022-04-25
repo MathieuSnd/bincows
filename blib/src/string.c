@@ -339,6 +339,7 @@ char* strtok(char* restrict str, const char* restrict delim) {
 char *strdup(const char *s) {
     size_t len = strlen(s);
     char* ret = malloc(len+1);
+    
     if(!ret)
         return NULL;
 

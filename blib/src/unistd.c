@@ -16,7 +16,7 @@ static void* brk_addr = NULL;
 
 
 int usleep (uint64_t __useconds) {
-    syscall(SC_SLEEP, &__useconds, sizeof(__useconds));
+    return syscall(SC_SLEEP, &__useconds, sizeof(__useconds));
 }
 
 
@@ -95,7 +95,7 @@ size_t pread (int fd, void* buf, size_t nbytes, off_t offset) {
 
     off_t off = lseek(fd, 0, SEEK_CUR);
 
-    if(lseek(fd, offset, SEEK_SET) == -1) {
+    if(lseek(fd, offset, SEEK_SET) == (uint64_t)-1) {
         return -1;
     }
 
@@ -128,7 +128,7 @@ size_t pwrite (int fd, const void* buf, size_t n, off_t offset);
  *            list buffer
  * @return mallocated string list
  */
-static char* create_string_list(char* const* arr, size_t* size) {
+static char* create_string_list(char const* const* arr, size_t* size) {
 
     // first compute the needed buffer size
     // and the number of strings
@@ -164,7 +164,14 @@ static char* create_string_list(char* const* arr, size_t* size) {
 
 // base function for all exec* functions
 static
-int exec(const char* file, char* const argv[], char* const envp[], int new_process) {
+int exec(const char* file, 
+         char const* const argv[], 
+         char const* const envp[], 
+         int new_process
+) {
+    // file is equal to argv[0]
+    (void) file;
+
     size_t args_sz = 0, env_sz = 0;
 
     char* args = create_string_list(argv, &args_sz);
@@ -188,27 +195,30 @@ int exec(const char* file, char* const argv[], char* const envp[], int new_proce
 }
 
 
-int execvpe(const char* file, char* const argv[], char* const envp[]) {
+int execvpe(const char* file, 
+            char const* const argv[], 
+            char const* const envp[]
+) {
     if(strcmp(file, argv[0]) != 0) {
         return -1;
     };
 
-    exec(file, argv, envp, 0);
+    return exec(file, argv, envp, 0);
 }
 
 
-int execv (const char* path, char* const argv[]) {
+int execv (const char* path, char const* const argv[]) {
     // @todo search in $PATH
     return execvp(path, argv);
 }
 
-int execvp (const char *le, char *const argv[]) {
-    return exec(le, argv, __environ, 0);
+int execvp (const char *le, char const* const argv[]) {
+    return exec(le, argv, (char const* const*)__environ, 0);
 }
 
 
-int forkexec(char* const cmdline[]) {
-    return exec(cmdline[0], cmdline, __environ, 1);
+int forkexec(char const* const cmdline[]) {
+    return exec(cmdline[0], cmdline, (char const* const*)__environ, 1);
 }
 
 
@@ -233,7 +243,7 @@ char *getcwd (char *buf, size_t size) {
         // reaquest cwd size first
         size = syscall(SC_GETCWD, &args, sizeof(args)); 
 
-        if(size == -1) {
+        if(size == (uint64_t)-1) {
             return NULL;
         }
 
@@ -262,7 +272,7 @@ int dup2 (int fd, int fd2) {
         .fd  = fd,
         .fd2 = fd2,
     };
-    return syscall(SC_DUP, &fd, sizeof(fd));
+    return syscall(SC_DUP, &args, sizeof(args));
 }
 
 

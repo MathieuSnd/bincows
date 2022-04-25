@@ -543,15 +543,15 @@ extern void *sbrk (uint64_t __delta);
 /*
 return 0 if successfull, -1 if error
 */
-extern int forkexec(char* const cmdline[]);
+extern int forkexec(char const * const cmdline[]);
 
 
 /* Execute PATH with arguments ARGV and environment from `environ'.  */
-extern int execv (const char *__path, char *const __argv[]);
+extern int execv (const char *__path, char const *const __argv[]);
 
 /* Replace the current process, executing PATH with arguments ARGV and
    environment ENVP.  ARGV and ENVP are terminated by NULL pointers.  */
-extern int execve (const char *__path, char *const __argv[],
+extern int execve (const char *__path, char const *const __argv[],
 		   char *const __envp[]);
 
 /* Execute PATH with all arguments after PATH until a NULL pointer,
@@ -564,10 +564,10 @@ extern int execl (const char *__path, const char *__arg, ...);
 
 /* Execute FILE, searching in the `PATH' environment variable if it contains
    no slashes, with arguments ARGV and environment from `environ'.  */
-extern int execvp (const char *__file, char *const __argv[]);
+extern int execvp (const char *__file, char const *const __argv[]);
 
-extern int execvpe(const char *file, char *const argv[],
-                       char *const envp[]);
+extern int execvpe(const char *file, char const *const argv[],
+                       char const *const envp[]);
 
 
 /* Execute FILE, searching in the `PATH' environment variable if

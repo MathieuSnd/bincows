@@ -105,7 +105,7 @@ char* getenv(const char *name) {
 
 
 int system(const char *command) {
-    return forkexec((char*[]){"/bin/sh", "-c", command, NULL});
+    return forkexec((char const*const[]){"/bin/sh", "-c", command, NULL});
 }
 
 

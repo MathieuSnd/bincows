@@ -47,7 +47,7 @@ _start(int argc, char* args, int envrionc, char* input_environ) {
     char** p = environ;
 
     while(p) {
-        for(unsigned i = 0; i < envrionc; i++) {
+        for(int i = 0; i < envrionc; i++) {
             *p++ = strdup(input_environ);
 
             input_environ += strlen(input_environ) + 1;
