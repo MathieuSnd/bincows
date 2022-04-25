@@ -9,6 +9,7 @@
 
 [section .text]
 syscall_entry:
+
     ; here, the stack pointer is the user one.
     ; irqs are disabled, so it's not a problem.
     ; we shouldn't forget to enable them when
@@ -95,6 +96,6 @@ syscall_entry:
     mov rsp, r9
 
     ; x86_64 version of sysret 
-    ; without the p64 it would enter
+    ; without the o64 prefix, it would enter
     ; x86 32bit compatibility mode
     o64 sysret
