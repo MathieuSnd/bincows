@@ -779,6 +779,11 @@ uint64_t get_user_page_map(void) {
     return (uint64_t)extract_pointer((void*)pml4[0]);
 }
 
+
+static void flush_tlb(void) {
+    _cr3(trk2p(pml4));
+}
+
 /**
  * @brief set the highest level 
  * map table physical base address
@@ -790,6 +795,8 @@ void set_user_page_map(uint64_t paddr) {
             | PL_RW               // write for all the lower half
                                   // and accessible from userspace
     );
+
+    flush_tlb();
 }
 
 
