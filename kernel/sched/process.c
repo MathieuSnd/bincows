@@ -40,6 +40,8 @@ void dup_fd(file_descriptor_t* fd, file_descriptor_t* new_fd) {
             new_fd->dir = vfs_dir_dup(fd->dir);
             new_fd->dir_boff = fd->dir_boff;
             break;
+        case FD_NONE:
+            break;
         default:
             assert(0);
     }
@@ -86,6 +88,7 @@ int create_process(
     // we have to have the userspace map ready
     // before calling this
     elf_program_t* program = elf_load(elffile, elffile_sz);
+
     
     if(!program)
         return 0;
@@ -94,7 +97,7 @@ int create_process(
 
     file_descriptor_t* fds = NULL;
 
-    fds = malloc(sizeof(file_descriptor_t*) * MAX_FDS);
+    fds = malloc(sizeof(file_descriptor_t) * MAX_FDS);
 
     char* cwd;
 
@@ -102,10 +105,10 @@ int create_process(
         // inherit parent file handlers
         ppid = pparent->pid;
 
-
         for(unsigned i = 0; i < MAX_FDS; i++) {
             dup_fd(pparent->fds + i, fds + i);
         }
+
 
         // inherit parent directory
         cwd = strdup(pparent->cwd);
@@ -116,7 +119,7 @@ int create_process(
             fds[i].type = FD_NONE;
             fds[i].file = NULL;
         }
-        //memset(fds, 0, sizeof(file_descriptor_t*) * MAX_FDS);
+        //memset(fds, 0, sizeof(file_descriptor_t) * MAX_FDS);
 
         // root directory
         cwd = strdup("/");
@@ -158,6 +161,7 @@ int create_process(
         .n_threads = 1,
         .threads = threads,
         .page_dir_paddr = user_page_map,
+        .saved_page_dir_paddr = user_page_map,
         .pid = pid,
         .ppid = ppid,
         .cwd  = cwd,
@@ -180,7 +184,9 @@ void free_process(process_t* process) {
     assert(!process->n_threads);
 
     for(unsigned i = 0; i < MAX_FDS; i++) {
-        close_fd(process->fds + i);
+        if(process->fds[i].type != FD_NONE) {
+            close_fd(&process->fds[i]);
+        }
     }
 
     free(process->fds);
@@ -191,8 +197,6 @@ void free_process(process_t* process) {
         free(process->threads);
 
     elf_free(process->program);
-
-    free(process);
 }
 
 int replace_process(process_t* process, void* elffile, size_t elffile_sz) {
@@ -203,7 +207,9 @@ int replace_process(process_t* process, void* elffile, size_t elffile_sz) {
     free_user_page_map(process->page_dir_paddr);
 
     // recreate page directory
+    process->saved_page_dir_paddr =
     process->page_dir_paddr = alloc_user_page_map();
+
     set_user_page_map(process->page_dir_paddr);
 
 
@@ -282,20 +288,18 @@ int set_process_entry_arguments(process_t* process,
     uint64_t user_argv = (rsp -= argv_sz);
     uint64_t user_envp = (rsp -= envp_sz);
 
-    log_warn("user_argv=%lx, user_envp=%lx", user_argv, user_envp);
-
     // frame begin
     uint64_t* user_frame_begin = (uint64_t*)(rsp -= sizeof(uint64_t));
 
     *user_frame_begin = 0;
 
 
-    process->threads[0].rsp = (uint64_t*)(rsp -= sizeof(gp_regs_t));
+    process->threads[0].rsp = (void*)(rsp -= sizeof(gp_regs_t));
 
 
 
     // stack.base < rsp < user_envp < user_argv
-    if(process->threads[0].rsp <= process->threads[0].stack.base) {
+    if((void*)process->threads[0].rsp <= process->threads[0].stack.base) {
         // not enough space
         return -1;
     }
@@ -329,11 +333,15 @@ int set_process_entry_arguments(process_t* process,
 
 
     process->threads[0].rsp->rsp = rsp;
-    process->threads[0].rsp->rbp = user_frame_begin;
-    process->threads[0].rsp->rip = process->program->entry;
+    process->threads[0].rsp->rbp = (uint64_t)user_frame_begin;
+    process->threads[0].rsp->rip = (uint64_t)process->program->entry;
     process->threads[0].rsp->cs  = USER_CS;
     process->threads[0].rsp->ss  = USER_DS;
     process->threads[0].rsp->rflags = USER_RF;
+
+
+    // the process is ready to be run
+    process->threads[0].state = READY;
 
     return 0;
 }

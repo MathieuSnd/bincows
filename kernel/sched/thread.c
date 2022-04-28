@@ -3,6 +3,10 @@
 #include "../memory/vmap.h"
 #include "../memory/heap.h"
 
+// for freeing a thread stack
+#include "../memory/paging.h"
+#include "../memory/physical_allocator.h"
+
 int create_thread(
             thread_t* thread, 
             pid_t  pid, 
@@ -17,8 +21,9 @@ int create_thread(
             .size = stack_size,
         },
         .tid   = tid,
+        .state = BLOCKED,
+        .lock = 0,
     };
-
 
     // set the stack frame
     *(uint64_t*)stack_base = 0;
@@ -39,12 +44,35 @@ int create_thread(
         .size = THREAD_KERNEL_STACK_SIZE,
     };
 
-    thread->type = READY;
-
     return 0;
 }
 
 
-void free_thread(thread_t* thread) {
+void thread_add_exit_hook(thread_t* thread, exit_hook_fun_t hook) {
+
+    thread->exit_hooks = realloc(
+        thread->exit_hooks, 
+        sizeof(exit_hook_fun_t) * (thread->n_exit_hooks + 1)
+    );
+    thread->exit_hooks[thread->n_exit_hooks] = hook;
+    thread->n_exit_hooks++;
+}
+
+
+void thread_terminate(thread_t* thread, int status) {
+    // call exit hooks
+    for (size_t i = 0; i < thread->n_exit_hooks; i++)
+        thread->exit_hooks[i](thread, status);
+
+    
     free(thread->kernel_stack.base);
+
+    if(thread->exit_hooks)
+        free(thread->exit_hooks);
+
+
+    // @todo free the thread stack
+
+    //unmap_pages(thread->stack.base, thread->stack.size << 12);
+
 }

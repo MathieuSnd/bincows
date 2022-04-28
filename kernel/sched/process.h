@@ -48,8 +48,23 @@ typedef struct process {
 
     uint64_t page_dir_paddr;
 
+    // might be different from
+    // page_dir_paddr if the 
+    // kernel was doing stuf
+    // with another process
+    // when it got interrupted
+    uint64_t saved_page_dir_paddr;
+
     size_t n_threads;
     struct thread* threads;
+
+    // lock for the process and
+    // threads
+    // The lock does not have to be taken
+    // to access fields in the process
+    // in a kernel task associated with
+    // a subsequent thread that is running
+    spinlock_t lock;
 
 
     elf_program_t* program;
