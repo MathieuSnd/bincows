@@ -19,7 +19,7 @@ ps2_azerty_table_uppercase:
     db     9, "AZERTYUIOP^$", 10
     db     0, "QSDFGHJKLM%", 0, 0, "*"
     db     "WXCVBN?./!", 0,0
-    db     0,0, ' '
+    db     0, ' '
     TIMES 80-53 db 0
     db ">"
 
