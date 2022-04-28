@@ -122,7 +122,8 @@ void init_gdt_table() {
     _lgdt(&gdt_descriptor);
 
 
-
+    // later on, the early kernel stack will be used as
+    // IRS stack for the BSP
     tss.RSP[0] = (uint64_t)stack_base + stack_size;
 
 
