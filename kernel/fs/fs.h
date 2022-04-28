@@ -92,6 +92,7 @@ typedef struct dirent {
     char name[MAX_FILENAME_LEN+1];   /* Null-terminated filename */
 } dirent_t;
 
+//static_assert(sizeof(dirent_t) == 0x10a, "dirent_t is not the correct size");
 
 /**
  * @brief generic filesystem interface
