@@ -3,6 +3,7 @@
 #include "../lib/dump.h"
 #include "../lib/logging.h"
 #include "../sched/sched.h"
+#include "../sched/thread.h"
 #include "../memory/vmap.h"
 #include "../memory/physical_allocator.h"
 #include "../memory/paging.h"
@@ -21,14 +22,15 @@ typedef uint64_t(*sc_fun_t)(process_t*, void*, size_t);
 static sc_fun_t sc_funcs[SC_END];
 
 static inline void sc_warn(const char* msg, void* args, size_t args_sz) {
-/*
+
     log_debug("syscall process %u, thread %u: %s", 
              sched_current_pid(), 
              sched_current_tid(),
              msg,
              args_sz
     );   
-*/
+    stacktrace_print();
+
 }
 
 
@@ -127,7 +129,6 @@ static uint64_t sc_sbrk(process_t* proc, void* args, size_t args_sz) {
 
     int64_t delta = *(int64_t*)args;
     // align delta on 
-    log_warn("sbrk %ld", delta);
 
     void* old_brk = proc->brk;
     void* unaligned_new_brk = proc->unaligned_brk + delta;
@@ -176,6 +177,33 @@ static uint64_t sc_sbrk(process_t* proc, void* args, size_t args_sz) {
     return (uint64_t)old_brk;
 }
 
+
+static uint64_t sc_exit(process_t* proc, void* args, size_t args_sz) {
+    if(args_sz != 8) {
+        sc_warn("bad args_sz", args, args_sz);
+    }
+
+    (void) proc;
+
+    uint64_t status = *(uint64_t*)args;
+
+    sched_kill_process(sched_current_pid(), status);
+    // every thread (including the current one)
+    // is marked as exited.
+    // the process will is killed by the scheduler
+
+    // atomically mark the current thread as ready
+    spinlock_acquire(&proc->lock);
+    proc->threads[sched_current_tid()].state = READY;
+    spinlock_release(&proc->lock);
+
+
+
+    sched_yield();
+
+    //schedule();
+}
+
 /*
 char* parse_cmdline(const char* cmdline, size_t cmdline_sz) {
     char* cmdline_copy = (char*)malloc(cmdline_sz);
@@ -203,7 +231,6 @@ static uint64_t sc_exec(process_t* proc, void* args, size_t args_sz) {
     if(exec_args->args_sz < 1 || 
         check_args(proc, exec_args->args, exec_args->args_sz)) 
     {
-        log_warn("issou %u", exec_args->args_sz);
         sc_warn("bad cmdline size", args, args_sz);
         return -1;
     }
@@ -243,7 +270,7 @@ static uint64_t sc_exec(process_t* proc, void* args, size_t args_sz) {
     free(path);
     
     if(!elf_file) {
-        sc_warn("failed to open file", args, args_sz);
+        sc_warn("failed to open elf file", args, args_sz);
         return -1;
     }
 
@@ -255,11 +282,12 @@ static uint64_t sc_exec(process_t* proc, void* args, size_t args_sz) {
 
     void* elf_data = malloc(file_sz);
 
-    size_t rd = vfs_read_file(elf_data, file_sz, 1, elf_file);
+    size_t rd = vfs_read_file(elf_data, 1, file_sz, elf_file);
+
+    vfs_close_file(elf_file);
 
     assert(rd == file_sz);
     
-    vfs_close_file(elf_file);
 
 
     // as we might to map another process
@@ -281,10 +309,17 @@ static uint64_t sc_exec(process_t* proc, void* args, size_t args_sz) {
     /////          create process          /////
     ////////////////////////////////////////////
 
+
     // resulting process
     // either the current process or a new one
     process_t* new_proc;
 
+
+    // critical section: we can't be interrupted
+    // the process is in the process table
+    // but not fully initialized
+
+    _cli();
 
     if(!exec_args->new_process) {
         assert(0);
@@ -297,7 +332,9 @@ static uint64_t sc_exec(process_t* proc, void* args, size_t args_sz) {
 
         // sched_create_process needs the user to be unmaped
 
-        pid_t p = sched_create_process(proc->pid, elf_data, file_sz);
+        pid_t p = sched_create_process(
+                        proc->pid, // PPID
+                        elf_data, file_sz);
 
         if(p == -1) {
             sc_warn("failed to create process", args, args_sz);
@@ -308,23 +345,30 @@ static uint64_t sc_exec(process_t* proc, void* args, size_t args_sz) {
 
             return -1;
         }
+    
+
 
         new_proc = sched_get_process(p);
     }
 
     // here, new_proc is currently mapped in memory
-
     assert(new_proc);
 
 
     ////////////////////////////////////////////
     //// set process arguments and env vars ////
     ////////////////////////////////////////////
+
+    set_user_page_map(new_proc->page_dir_paddr);
+
     
     if(set_process_entry_arguments(new_proc, 
         args_copy, cmd_args_sz, env_copy, env_sz
     )) {
         sc_warn("failed to set process arguments", args, args_sz);
+
+        // release process lock
+        spinlock_release(&new_proc->lock);
         
         // even if the process creation failed, we 
         // still need to remap the process
@@ -332,15 +376,37 @@ static uint64_t sc_exec(process_t* proc, void* args, size_t args_sz) {
         return -1;
     }
 
+    spinlock_release(&new_proc->lock);
+
     // done :)
     // now we must restore the current process 
     // memory map before returning
+
+    _sti();
+    
+
+//   unmap_user();
+//   launch_shell();
     
     set_user_page_map(proc->page_dir_paddr);
+/*
+    dump(
+        ((uint64_t)new_proc->threads[0].rsp & ~16llu),
+        
+        new_proc->threads[0].stack.base 
+        + new_proc->threads[0].stack.size 
+        - (void*)new_proc->threads[0].rsp,
 
-    
+        16,
+
+        DUMP_HEX8
+    );
+*/
+
+    // @todo: yield to the new process
+
     return 0;
-}
+}   
 
 
 static fd_t find_available_fd(process_t* proc) {
@@ -348,7 +414,6 @@ static fd_t find_available_fd(process_t* proc) {
         if(proc->fds[i].type == FD_NONE)
             return i;
     }
-    log_warn("issou");
 
     return -1;
 }
@@ -436,7 +501,7 @@ static uint64_t sc_open(process_t* proc, void* args, size_t args_sz) {
         }
     }
     else {
-        file_handle_t* h = vfs_open_file(a->path);
+        file_handle_t* h = vfs_open_file(path);
 
         if(!h) {
             sc_warn("failed to open file", args, args_sz);
@@ -508,6 +573,7 @@ static uint64_t sc_seek(process_t* proc, void* args, size_t args_sz) {
         return -1;
     }
 
+
     struct sc_seek_args* a = args;
 
     if(a->fd >= MAX_FDS) {
@@ -528,7 +594,7 @@ static uint64_t sc_seek(process_t* proc, void* args, size_t args_sz) {
             return seek_dir(&proc->fds[a->fd], a->offset, a->whence);
             break;
         default:
-            sc_warn("bad fd", args, args_sz);
+            assert(0);
             return -1;
     }
 }
@@ -549,6 +615,7 @@ uint64_t read_dir(file_descriptor_t* dird, void* buf, size_t buf_sz) {
 
     memcpy(buf, dird->dir->children + dird->dir_boff, bytes_to_read);
 
+
     dird->dir_boff += bytes_to_read;
 
     return bytes_to_read;
@@ -564,12 +631,12 @@ static uint64_t sc_read(process_t* proc, void* args, size_t args_sz) {
     struct sc_read_args* a = args;
 
     if(a->fd >= MAX_FDS) {
-        sc_warn("bad fd", args, args_sz);
+        sc_warn("read: bad fd", args, args_sz);
         return -1;
     }
 
     if(proc->fds[a->fd].type == FD_NONE) {
-        sc_warn("bad fd", args, args_sz);
+        sc_warn("read: bad fd", args, args_sz);
         return -1;
     }
 
@@ -584,7 +651,7 @@ static uint64_t sc_read(process_t* proc, void* args, size_t args_sz) {
             return read_dir(&proc->fds[a->fd], a->buf, a->count);
             break;
         default:
-            sc_warn("bad fd", args, args_sz);
+            assert(0);
             return -1;
     }
 }
@@ -599,12 +666,12 @@ static uint64_t sc_write(process_t* proc, void* args, size_t args_sz) {
     struct sc_write_args* a = args;
 
     if(a->fd >= MAX_FDS) {
-        sc_warn("bad fd", args, args_sz);
+        sc_warn("write: bad fd", args, args_sz);
         return -1;
     }
 
     if(proc->fds[a->fd].type == FD_NONE) {
-        sc_warn("bad fd", args, args_sz);
+        sc_warn("write: bad fd", args, args_sz);
         return -1;
     }
 
@@ -657,6 +724,7 @@ static uint64_t sc_chdir(process_t* proc, void* args, size_t args_sz) {
     struct DIR* dir = vfs_opendir(path);
 
 
+
     free(path);
 
 
@@ -664,7 +732,8 @@ static uint64_t sc_chdir(process_t* proc, void* args, size_t args_sz) {
         vfs_closedir(dir);  
 
         free(proc->cwd);
-        proc->cwd = strdup(path);
+        proc->cwd = malloc(strlen(a->path) + 1);
+        simplify_path(proc->cwd, a->path);
     }
     else
         return -1;
@@ -793,6 +862,7 @@ void syscall_init(void) {
 
     sc_funcs[SC_SLEEP]  = sc_sleep;
     sc_funcs[SC_SBRK]   = sc_sbrk;
+    sc_funcs[SC_EXIT]   = sc_exit;
     sc_funcs[SC_OPEN]   = sc_open;
     sc_funcs[SC_CLOSE]  = sc_close;
     sc_funcs[SC_SEEK]   = sc_seek;
@@ -845,19 +915,24 @@ void syscall_init(void) {
 // called from syscall_entry
 uint64_t syscall_main(uint8_t scid, void* args, size_t args_sz) {
 
-    //log_warn("SYSCALL %u", scid);
-
     process_t* process = sched_current_process();
 
     assert(process);
 
-    //log_warn("SYSCALL %u, brk=%lx", scid, process->brk);
+    // Though we might take the lock again,
+    // we don't need  to hold it here
+    // because it the process structure
+    // cannot change while we are in the syscall
+    // as we are in the kernel stack 
+    spinlock_release(&process->lock);
+    _sti();
+
 
     if(scid >= SC_END) {
         log_warn("process %u, thread %u: bad syscall", sched_current_pid(), sched_current_tid());
         for(;;)
             asm ("hlt");
     }
-    else
-        return sc_funcs[scid](process, args, args_sz);
+    else 
+    return sc_funcs[scid](process, args, args_sz);
 }
