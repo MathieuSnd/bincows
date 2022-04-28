@@ -227,7 +227,7 @@ int forkexec(char const* const cmdline[]) {
 int chdir (const char *__path) {
     struct sc_chdir_args args = {
         .path = __path,
-        .path_len = strlen(__path),
+        .path_len = strlen(__path) + 1,
     };
 
     return syscall(SC_CHDIR, &args, sizeof(args));
@@ -297,6 +297,7 @@ int __attribute__ ((__const__)) getpagesize (void)  {
 
 
 void __attribute__ ((__noreturn__)) _exit (int status) {
-    syscall(SC_EXIT, &status, sizeof(status));
+    uint64_t sc_args = status;
+    syscall(SC_EXIT, &status, sizeof(sc_args));
     __builtin_unreachable();
 }

@@ -16,13 +16,14 @@ typedef struct DIR {
 } DIR;
 
 DIR *opendir (const char* name) {
-    int fd = open(name, 0, 0);
+    int fd = open(name, O_DIR, 0);
+
 
     if(fd < 0) {
         return NULL;
     }
 
-    // read the dir
+    // compute dir size
     size_t size = lseek(fd, 0, SEEK_END);
     
     lseek(fd, 0, SEEK_SET);
@@ -47,10 +48,9 @@ DIR *opendir (const char* name) {
         return NULL;
     }
 
-
     // fill the other fields
     dir->fd = fd;
-    dir->len = size;
+    dir->len = size / sizeof(struct dirent);
     dir->cur = 0;
 
     return dir;

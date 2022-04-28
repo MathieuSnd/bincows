@@ -30,12 +30,14 @@
 
 
 struct dirent {
-    ino_t d_ino;
-    off_t d_off;
+   ino_t         ino;       /* Inode number */
+   size_t        d_reclen;  /* Length of this record */
+   unsigned char d_type;    /* Type of file; not supported
+                                by all filesystem types */
 
-    unsigned short int d_reclen;
-    unsigned char d_type;
-    char d_name[256];		/* We must not include limits.h! */
+   uint8_t reserved[7];
+
+    char d_name[256];   /* Null-terminated filename */
 };
 
 
