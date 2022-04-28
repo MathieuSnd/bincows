@@ -232,11 +232,9 @@ void flush_fat_cache(disk_part_t* part, block_cache_t* cache) {
                 cache->buf + (i << cache->sector_size_shift), 
                 1
             );
-            //log_warn("WRITE!!!!!!!!");
         }
         //cache->entries[i].tag = 0;
     }
-    log_warn("%u writes", s);
 }
 
 
@@ -263,7 +261,6 @@ void* add_cache_entry(
     if(e->modified) {
         write(part, e->tag, buf, 1);
         e->modified = 0;
-        log_warn("WRITE!!!!!!!!");
 
     }
 
@@ -431,8 +428,6 @@ void linkFAT(
     // save
     //write(part, lba, sector, 1);
     mark_modified(&pr->fat_cache, lba);
-
-    //log_warn("link %lu -> %lu", from, to);
 }
 
 
@@ -651,10 +646,6 @@ dirent_t* fat32_read_dir(
 
         read(part, cluster_begin(cluster, pr), buf, pr->cluster_size);
 
-        //log_warn("bufsize=%u", bufsize);
-
-        //dump(buf, 512, 32, DUMP_HEX8);
-    
 
         for(unsigned i = 0; i < entries_per_cluster; i++) {
             fat_dir_t* dir = (fat_dir_t*)buf + i;
@@ -1220,9 +1211,7 @@ int fat32_read_file_sectors(
         
             }
         }
-        //log_warn("READ AT CLUSTER=%u", cluster);
         async_read(fs->part, lba, buf, read_size);
-        //read(fs->part, lba, buf, read_size);
 
         buf += bsize * read_size;
     }
