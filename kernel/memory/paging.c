@@ -808,13 +808,28 @@ uint64_t alloc_user_page_map(void) {
 // deep free the page map:
 // recursively free all the page tables 
 // that it references
-static void deep_free_map(uint64_t page_table) {
+// page_table: physical address of the page structure.
+// the page structure is, in funciton of the level 
+// argument:
+// level: 4: pml4, 3: pdpt, 2: pd, 1: pt
+// level: 0: page
+static void deep_free_map(uint64_t page_table, int level) {
+    if(!level) {
+        physfree((void*)page_table);
+        return;
+    }
+
     void** translated = (void**)translate_address((void*)page_table);
 
     for(unsigned i = 0; i < 512; i++) {
         if(present_entry(translated[i])) {
             uint64_t page_table_addr = (uint64_t)extract_pointer(translated[i]);
-            deep_free_map(page_table_addr);
+
+            if(level == 1) {
+                // shortcut the last level
+                physfree((void*)page_table_addr);
+            }
+            deep_free_map(page_table_addr, level - 1);
         }
     }
 
@@ -825,7 +840,7 @@ static void deep_free_map(uint64_t page_table) {
 void free_user_page_map(uint64_t user_page_map) {
 
     // deep free the page map
-    deep_free_map(user_page_map);
+    deep_free_map(user_page_map, 3);
 }
 
 
