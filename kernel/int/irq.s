@@ -18,7 +18,7 @@ _irq_handler%1:
     ; save stack pointer
     
     ; save frame pointer and enter stack frame
-;    mov rbp, rsp
+    mov rbp, rsp
     
     ; save rax
     push rax
@@ -78,8 +78,6 @@ common_stub:
     ; load kernel data segment
     mov di, 0x10
     mov ss, di
-    mov ds, di
-    mov es, di
 
 
     ; put the irq handler number in dil: the 
@@ -87,7 +85,7 @@ common_stub:
     mov dil, al
 
     ; beginning of the interrupt stack = beginning of
-    ; the context structure 
+    ; the context structure
     mov rsi, rsp
 
 
