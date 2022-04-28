@@ -33,6 +33,8 @@ const char* version_string =
         "type help to list commands\n\n"
 ;
 
+static char* cwd = NULL;
+
 /*
 int print_input_end() {
     
@@ -82,13 +84,29 @@ void print_cow(void) {
     close(file);
 }
 
+static void cd(const char* path) {
+    chdir(path);
+    free(cwd);
+    cwd = getcwd(NULL, 0);
+}
+
 /**
  * execute the builtin command
  * if it is one,
  * else return 0
  */
-static int builtin_cmd(const char* cmd) {
-    if(strcmp(cmd, "help") == 0)
+static int builtin_cmd(const char** argv) {
+
+    if(strcmp(argv[0], "cd") == 0) {
+
+        if(!argv[1]) {
+            printf("cd: missing argument\n");
+            return 1;
+        }
+
+        cd(argv[1]);
+    }
+    else if(strcmp(argv[0], "help") == 0)
         printf("\n"
                "help\n"
                "\tlist all commands\n"
@@ -103,11 +121,11 @@ static int builtin_cmd(const char* cmd) {
                "\tprint a cow\n"
                "\n"
                "\n");
-    else if(strcmp(cmd, "version") == 0)
+    else if(strcmp(argv[0], "version") == 0)
         printf(version_string);
-    else if(strcmp(cmd, "cow") == 0)
+    else if(strcmp(argv[0], "cow") == 0)
         print_cow();
-    else if(strcmp(cmd, "exit") == 0)
+    else if(strcmp(argv[0], "exit") == 0)
         exit(0);
     else
         return 0;        
@@ -134,14 +152,20 @@ static char** convert_cmdline(char* cmdline) {
 
 
 static void execute(char* cmd) {
-    if(builtin_cmd(cmd))
-        return;
-    
     // convert to argv
     char** argv = convert_cmdline(cmd);
 
+    if(!argv[0])
+        return;
+    
+    if(builtin_cmd(argv))
+        return;
+
+
     // execute
     int ret = forkexec(argv);
+
+
 
     if(ret) 
     {
@@ -161,7 +185,6 @@ static void execute(char* cmd) {
 }
 
 
-static char* cwd = NULL;
 
 void print_prompt(void) {
     printf("%s > _\b", cwd);

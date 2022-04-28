@@ -13,7 +13,7 @@ CFLAGS := -O3 -fno-inline -mno-red-zone -mgeneral-regs-only \
 
 CFILES :=$(shell find -name "*.c")
 EFILES := $(CFILES:.c=.elf)
-
+BIN_DIR := ../disk_root/bin/
 
 debug: CFLAGS += -g
 debug: LDFLAGS += -g
@@ -22,7 +22,8 @@ debug: all
 release: all 
 
 all: $(EFILES)
-	cp *.elf ../disk_root/bin/
+	cp shell.elf $(BIN_DIR)/sh
+	cp ls.elf $(BIN_DIR)/ls
 
 
 %.elf: %.c ../blib/blib.a
