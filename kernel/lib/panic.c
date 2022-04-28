@@ -5,6 +5,7 @@
 #include "../acpi/power.h"
 #include "../memory/vmap.h"
 #include "../memory/heap.h"
+#include "../sched/sched.h"
 #include "stacktrace.h"
 
 
@@ -33,6 +34,9 @@ __attribute__((noreturn)) void panic(const char* panic_string) {
     
     stacktrace_print();
 
+
+    printf("current pid: %d ; tid: %d\n", sched_current_pid(), sched_current_tid());
+
     printf("heap:  %lx -> %lx (size: %6lx B, %5u KB, %u allocations)\n", 
             KERNEL_HEAP_BEGIN, 
             heap_get_brk(), 
@@ -56,7 +60,6 @@ __attribute__((noreturn)) void panic(const char* panic_string) {
     ps2kb_poll_wait_for_key(PS2KB_ESCAPE);
     shutdown();
 
-    asm volatile("cli");
     asm volatile("hlt");
     
     __builtin_unreachable();
