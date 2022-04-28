@@ -147,7 +147,6 @@ static void devfs_unmount(struct fs* fs) {
     struct devfs_priv* priv = (void *)(fs + 1);
 
 
-    log_warn("bah bah bah %lx", priv->files);
     if(priv->n_files) {
         free(priv->files);
     }
@@ -176,7 +175,6 @@ int devfs_map_device(devfs_file_interface_t fi, const char* name) {
     priv->files = realloc(priv->files, sizeof(struct devfs_file) * (priv->n_files + 1));
 
 
-    log_warn("created file"); 
 
     struct devfs_file* file = &priv->files[priv->n_files];
 
