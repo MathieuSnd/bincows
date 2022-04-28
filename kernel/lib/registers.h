@@ -14,6 +14,8 @@ uint64_t get_rflags(void);
 uint64_t get_cr0(void);
 uint64_t _cr2(void);
 void     _cr3(uint64_t cr3);
+uint64_t get_cr3(void);
+
 uint64_t get_cr4(void);
 
 
