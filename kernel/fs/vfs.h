@@ -238,6 +238,17 @@ file_handle_t* vfs_handle_dup(file_handle_t*);
 void vfs_close_file(file_handle_t* handle);
 
 
+/**
+ * @brief replaces /////// with /
+ *  replaces /a/b/.. with /a
+ *
+ * the output path does not contain a final '/'
+ * and no '.' or '..'
+ *
+ * @param dst
+ * @param src
+ */
+void simplify_path(char *dst, const char *src);
 
 
 size_t vfs_read_file(void* ptr, size_t size, size_t nmemb, 

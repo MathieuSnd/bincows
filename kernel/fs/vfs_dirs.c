@@ -48,17 +48,8 @@ static int is_absolute(const char *path)
     return path[0] == '/';
 }
 
-/**
- * @brief replaces /////// with /
- *  replaces /a/b/.. with /a
- *
- * the output path does not contain a final '/'
- * and no '.' or '..'
- *
- * @param dst
- * @param src
- */
-static void simplify_path(char *dst, const char *src)
+
+void simplify_path(char *dst, const char *src)
 {
 
     char *buf = malloc(strlen(src) + 1);
@@ -132,7 +123,6 @@ static void free_vtree(vdir_t *root)
     for (unsigned i = 0; i < root->n_children; i++)
     {
         vdir_t *child = &root->children[i];
-        log_warn("free_vtree");
         log_warn("unmounting %s", child->path);
         // unmount mounted entries
         if (child->fs)
@@ -150,7 +140,6 @@ static void free_vtree(vdir_t *root)
     // don't free the root path:
     // the vfs root path is static
 
-    log_warn("free_vtree end");
 }
 
 
