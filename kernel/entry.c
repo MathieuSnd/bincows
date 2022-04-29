@@ -8,6 +8,7 @@
 #include "int/apic.h"
 #include "int/idt.h"
 #include "int/pic.h"
+#include "int/syscall.h"
 
 #include "drivers/terminal/video.h"
 #include "drivers/terminal/terminal.h"
@@ -32,7 +33,10 @@
 #include "lib/dump.h"
 #include "lib/stacktrace.h"
 #include "lib/panic.h"
-#include "lib/elf/elf.h"
+
+#include "sched/sched.h"
+
+#include "sync/spinlock.h"
 
 #include "early_video.h"
  
@@ -46,9 +50,6 @@ const size_t stack_size = KERNEL_STACK_SIZE;
 uint8_t stack_base[KERNEL_STACK_SIZE] __attribute__((section(".stack"))) __attribute__((aligned(16)));
 
 #define INITIAL_STACK_PTR ((uintptr_t)(stack_base + KERNEL_STACK_SIZE))
-
-// initial stack pointer 
-const uintptr_t kernel_stack = INITIAL_STACK_PTR;
 
 static struct stivale2_header_tag_terminal terminal_hdr_tag = {
     .tag = {
@@ -125,7 +126,7 @@ static void init_memory(
         early_virtual_to_physical((void *)fb->framebuffer_addr), 
         MMIO_BEGIN,
         (fb->framebuffer_height * fb->framebuffer_pitch+0x0fff) / 0x1000,
-        PRESENT_ENTRY
+        PRESENT_ENTRY | PL_RW  | PL_XD
     );
 
 // map lapic & hpet registers
@@ -137,16 +138,6 @@ static void empty_terminal_handler(const char* s, size_t l) {
 // empty handler by default,
 // make sure not to execute the address 0 :)
 }
-
-void kbhandler(const struct kbevent* ev) {
-    if(ev->type == KEYRELEASED && ev->scancode == PS2KB_ESCAPE) {
-        shutdown();
-        __builtin_unreachable();
-    }
-    if(ev->type == KEYPRESSED && ev->keycode != 0) {
-        printf("%c", ev->keycode);
-    }
-};
 
 
 static void print_fun(const char* s, size_t len) {
@@ -167,7 +158,7 @@ static void print_fun(const char* s, size_t len) {
  * @return disk_part_t* NULL if not found
  */
 static 
-disk_part_t* find_main_part(struct stivale2_guid* part_guid) {
+disk_part_t* find_main_part(const struct stivale2_guid* part_guid) {
     disk_part_t* part = NULL;//search_partition("Bincows2");//find_partition(*(GUID*)part_guid);
     if(part)
         log_info("main partition found");
@@ -213,11 +204,11 @@ void test_disk_overflow(void) {
     for(int i = 0; i < bsize; i++)
         buf[i] = i;
 
-    uint64_t time = clock();
+    uint64_t time = clock_ns();
 
-    for(int i = 0; i < size / bsize; i++) {
-        log_info("write %u (%u)", i * bsize, clock() - time);
-        time = clock();
+    for(unsigned i = 0; i < size / bsize; i++) {
+        log_info("write %u (%u)", i * bsize, clock_ns() - time);
+        time = clock_ns();
         
         size_t r = vfs_write_file(buf, bsize, 1, f);
         assert(r == 1); 
@@ -229,13 +220,13 @@ void test_disk_overflow(void) {
     
     f = vfs_open_file("/////fs/boot/bg.bmp//");
 
-    time = clock();
+    time = clock_ns();
     int rsize = bsize;
     int i = 0;
     while(vfs_read_file(buf, rsize, 1, f) == 1) {
         int begin = i++ * rsize;
-        log_info("read %u (%u)", begin, clock() - time);
-        time = clock();
+        log_info("read %u (%u)", begin, clock_ns() - time);
+        time = clock_ns();
 
         for(int j = begin; j < begin + rsize; j++)
             assert(buf[j - begin] == (j & 0xff));
@@ -243,6 +234,57 @@ void test_disk_overflow(void) {
     }
     vfs_close_file(f);
     free(buf);
+}
+
+
+
+void launch_shell(void) {
+    // argv and envp for the initial shell
+    char argv[] = "/bin/sh\0";
+    char envp[] = "\0";
+
+
+    void* elf_file;
+    // open load and run elf file
+    file_handle_t* f = vfs_open_file(argv);
+
+    assert(f);
+
+    vfs_seek_file(f, 0, SEEK_END);
+    size_t file_size = vfs_tell_file(f);
+
+    elf_file = malloc(file_size); 
+
+    vfs_seek_file(f, 0, SEEK_SET);
+
+    size_t rd = vfs_read_file(elf_file, 1, file_size, f);
+    //sleep(10);
+    assert(rd == file_size);
+
+    vfs_close_file(f);
+    
+
+    terminal_clear(get_active_terminal());
+
+    pid_t pid= sched_create_process(0, elf_file, file_size);
+
+
+    // proc lock is taked by sched_create_process
+    process_t* proc = sched_get_process(pid);
+
+    set_process_entry_arguments(
+        proc, 
+        argv, sizeof(argv), envp, sizeof(envp)
+    );
+
+    // release process lock
+    spinlock_release(&proc->lock);
+
+    assert(pid);
+
+
+
+    free(elf_file);
 }
 
 
@@ -305,7 +347,8 @@ void _start(struct stivale2_struct *stivale2_struct) {
     atshutdown(gpt_cleanup);
 
 
-    video_init(framebuffer_tag);
+    driver_t* terminal = video_init(framebuffer_tag);
+
 
 
     set_backend_print_fun(print_fun);
@@ -325,6 +368,7 @@ void _start(struct stivale2_struct *stivale2_struct) {
     apic_setup_clock();
 
 
+
     vfs_init();
     pcie_init();
 
@@ -332,63 +376,38 @@ void _start(struct stivale2_struct *stivale2_struct) {
     pic_init();
     ps2kb_init();
 
-    ps2kb_set_event_callback(kbhandler);
+    //ps2kb_set_event_callback(early_kbhandler);
     
 
-    disk_part_t* part = find_main_part((GUID*)&boot_volume_tag->part_guid);
+    disk_part_t* part = find_main_part(&boot_volume_tag->part_guid);
     assert(part);
-    int r = vfs_mount(part, "/fs/");
+    int r = vfs_mount(part, "/");
+    assert(r != 0);
+
+    r = vfs_mount_devfs();
+
     assert(r);
-    
 
-    void* elf_file;
+    // /dev/term
+    terminal_register_dev_file("term", terminal);
 
-    // open load and run elf file
-    file_handle_t* f = vfs_open_file("/fs/bin/prog0.elf");
+    // /dev/ps2kb
+    ps2kb_register_dev_file("ps2kb");
 
-    assert(f);
+    sched_init();
+    syscall_init();
 
-    vfs_seek_file(f, 0, SEEK_END);
-    size_t file_size = vfs_tell_file(f);
-
-    elf_file = malloc(file_size); 
-
-    vfs_seek_file(f, 0, SEEK_SET);
-
-    int rd = vfs_read_file(elf_file, 1, file_size, f);
-    //sleep(10);
-    assert(rd == file_size);
-    vfs_close_file(f);
-    log_warn("fgr");
+    // everything should be correctly initialized
+    // now we can start the shell
+    launch_shell();
 
     
-    dump(
-        elf_file,
-        512,//file_size,
-        32,
-        DUMP_8
-    );
+    // start the scheduler
+    schedule();
 
-
-    
-    //test_disk_overflow();
-    elf_program_t* program = elf_load(elf_file, file_size);
-
-    assert(program);
-
-    int (*prog_entry)(int,char**) = program->main;
-
-    log_warn("main()=%u", prog_entry(0,NULL));
-
-
-
-
-    log_info("%x allocated heap blocks", heap_get_n_allocation());
-
-    for(;;) {
+    // should never reach here
+    for(;;)
         asm volatile("hlt");
-        //log_info("clock()=%lu", clock());
-    }
 
     __builtin_unreachable();
 }
