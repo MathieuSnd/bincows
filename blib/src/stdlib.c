@@ -96,7 +96,7 @@ int unsetenv(const char *name) {
 char* getenv(const char *name) {
     for(char** p = __environ; *p; p++) {
         if(strncmp(name, *p, strlen(name)) == 0) {
-            return *p;
+            return *p + strlen(name) + 1;
         }
     }
 

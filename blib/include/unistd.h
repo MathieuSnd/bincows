@@ -452,6 +452,8 @@ int getentropy (void *__buffer, size_t __length) __wur
 #endif
 
 
+#define PATH_MAX 4096
+
 
 
 /* Values for the WHENCE argument to lseek.  */

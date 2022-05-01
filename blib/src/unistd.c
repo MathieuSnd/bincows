@@ -169,14 +169,24 @@ int exec(const char* file,
          char const* const envp[], 
          int new_process
 ) {
-    // file is equal to argv[0]
-    (void) file;
+
+    // replace argv[0] by file
+    int size = 0;
+    
+    for(unsigned i = 0; argv[i]; i++)
+        size ++;
+    
+
+    const char** _argv = malloc(sizeof(char*) * (size + 1));
+
+    memcpy(_argv + 1, argv + 1, sizeof(char*) * size);
+
+    _argv[0] = file;
 
     size_t args_sz = 0, env_sz = 0;
 
-    char* args = create_string_list(argv, &args_sz);
+    char* args = create_string_list(_argv, &args_sz);
     char* env  = create_string_list(envp, &env_sz);
-
 
     struct sc_exec_args sc_args = {
         .args = args,
@@ -191,8 +201,12 @@ int exec(const char* file,
     free(args);
     free(env);
 
+    free(_argv);
+
     return r;
 }
+
+
 
 
 int execvpe(const char* file, 
@@ -207,18 +221,87 @@ int execvpe(const char* file,
 }
 
 
-int execv (const char* path, char const* const argv[]) {
-    // @todo search in $PATH
-    return execvp(path, argv);
+static int try_access(const char* file, int mode) {
+    int fd = open(file, mode, 0);
+    if(fd == -1) {
+        return -1;
+    }
+
+    close(fd);
+    return 0;
 }
+
+
+static char* search_path(const char* file) {
+    if(file[0] == '/' || try_access(file, O_RDONLY) == 0) {
+        return strdup(file);
+    }
+    
+    // search for file in path
+    // path is a null terminated string
+    // path_sz is the size of the path buffer
+    // file is a null terminated string
+
+    char* buf = malloc(PATH_MAX);
+
+    char* path = getenv("PATH");
+
+    char* p = strtok(path, ":");
+
+    while(p) {
+        if(strlen(p) + strlen(file) + 2 > PATH_MAX)
+            continue;
+
+        sprintf(buf, "%s/%s", p, file);
+
+        if(try_access(buf, O_RDONLY) == 0) {
+            // found
+            return buf;
+        }
+
+        p = strtok(NULL, ":");
+    }
+
+    free(buf);
+    return NULL;
+}
+
+
+
+int execv (const char* path, char const* const argv[]) {
+    char* path_buf = search_path(path);
+    
+    if(!path_buf) {
+        return -1;
+    }
+    
+    int res = exec(path_buf, argv, 
+                (char const* const*)__environ, 0);
+
+    free(path_buf);
+
+    return res;
+}
+
 
 int execvp (const char *le, char const* const argv[]) {
     return exec(le, argv, (char const* const*)__environ, 0);
 }
 
 
-int forkexec(char const* const cmdline[]) {
-    return exec(cmdline[0], cmdline, (char const* const*)__environ, 1);
+int forkexec(char const* const argv[]) {
+    char* path_buf = search_path(argv[0]);
+    
+    if(!path_buf) {
+        return -1;
+    }
+    
+    int res = exec(path_buf, argv, (char const* const*)__environ, 1);
+
+
+    free(path_buf);
+
+    return res;
 }
 
 
