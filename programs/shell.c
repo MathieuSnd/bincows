@@ -28,8 +28,8 @@ int f(int x) {
 const char* version_string = 
         "Welcome in the Bincows Shell!\n"
         "Version: " VERSION "\n"
-        "Copyright (c) 2020-2021 by Mathieu Serandour\n"
-        "see https://git.rezel.net/jambonoeuf/Bincows/\n"
+//        "Copyright (c) 2020-2021 \n"
+        "see https://github.com/MathieuSnd/bincows\n"
         "type help to list commands\n\n"
 ;
 
@@ -85,9 +85,22 @@ void print_cow(void) {
 }
 
 static void cd(const char* path) {
-    chdir(path);
+    int r = chdir(path);
+
+    if(r != 0)
+        printf("cd: no such file or directory\n");
+
     free(cwd);
     cwd = getcwd(NULL, 0);
+}
+
+static void export(const char** argv) {
+    if(argv[1] == NULL) {
+        printf("export: missing argument\n");
+        return;
+    }
+
+    putenv(strdup(argv[1]));
 }
 
 /**
@@ -98,7 +111,6 @@ static void cd(const char* path) {
 static int builtin_cmd(const char** argv) {
 
     if(strcmp(argv[0], "cd") == 0) {
-
         if(!argv[1]) {
             printf("cd: missing argument\n");
             return 1;
@@ -106,6 +118,10 @@ static int builtin_cmd(const char** argv) {
 
         cd(argv[1]);
     }
+    else if(strcmp(argv[0], "export") == 0) {
+        export(argv);
+    }
+    
     else if(strcmp(argv[0], "help") == 0)
         printf("\n"
                "help\n"
@@ -166,7 +182,6 @@ static void execute(char* cmd) {
     int ret = forkexec(argv);
 
 
-
     if(ret) 
     {
         // an error occured.
@@ -197,8 +212,16 @@ int main(int argc, char** argv) {
 
     printf("%s\n", version_string);
 
+    //for(;;);
+
+
     // current working directory
     cwd = getcwd(NULL, 0);
+
+    export((const char*[]){NULL,"PATH=/bin",0});
+
+    // @todo debug cat /dev/ps2kb
+    // and cat /dev/term
 
 
     print_prompt();
@@ -239,6 +262,4 @@ int main(int argc, char** argv) {
 
     free(cwd);
 
-
-    for(;;);
 }

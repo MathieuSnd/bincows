@@ -24,7 +24,7 @@ release: all
 all: $(EFILES)
 	cp shell.elf $(BIN_DIR)/sh
 	cp ls.elf $(BIN_DIR)/ls
-
+	cp cat.elf $(BIN_DIR)/cat
 
 %.elf: %.c ../blib/blib.a
 	$(CC) $(CFLAGS) -c $< -o $@.o
