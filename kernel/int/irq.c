@@ -8,7 +8,6 @@
 #include "irq.h"
 
 
-
 typedef struct {
     struct driver* driver;
     irq_handler_t handler;
@@ -65,6 +64,7 @@ void release_irq(unsigned n) {
     irqs[n - IRQ_BEGIN].handler = NULL;
 }
 
+
 // called from irq.s
 void irq_common_handler(uint8_t irq_n, gp_regs_t* context) {
     assert(irq_n <= IRQ_END);
@@ -84,6 +84,6 @@ void irq_common_handler(uint8_t irq_n, gp_regs_t* context) {
 
     handler(driver);
 
-    schedule();
+    sched_irq_ack();
 }
 
