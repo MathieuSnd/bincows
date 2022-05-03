@@ -113,12 +113,6 @@ common_stub:
     pop rdx
     pop rcx
 
-    ; load target ss into rax
-    mov rax, [rsp + 40]
-    mov ds, ax
-    mov es, ax
-
-    
     pop rax
     pop rbp
 
