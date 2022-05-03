@@ -64,6 +64,7 @@ int   strcmp(const char* str1, const char* str2) {
     while(1) {
         char c1 = *(str1++);
         char c2 = *(str2++);
+
         
         d = c1-c2;
 

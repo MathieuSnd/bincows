@@ -50,6 +50,8 @@ _start(int argc, char* args, int envrionc, char* input_environ) {
         input_environ += strlen(input_environ) + 1;
     }
 
+    *p = 0;
+
 
     stio_init();
 
