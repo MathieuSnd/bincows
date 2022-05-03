@@ -60,7 +60,9 @@ void NAME(struct IFrame* ifr) {\
 
 #define DECLARE_CODE_EXCEPTION_HANDLER(NAME) \
 static __attribute__((interrupt))\
-void NAME(struct IFrame* ifr, uint64_t code) {\
+void NAME(struct IFrame* ifr, uint64_t _code) {\
+    register volatile uint64_t code = _code; \
+    *(volatile uint64_t*)(__builtin_frame_address(0) + 8) = ifr->RIP; \
     panic_handler_code(#NAME, ifr, code);\
     __builtin_unreachable();\
 }
@@ -126,8 +128,9 @@ void ISR_page_fault_handler(struct IFrame* interrupt_frame,
                             uint64_t       _error_code
 ) {
     // trick to fix the stack
-    volatile register uint64_t error_code = _error_code;    
-    //*(volatile uint64_t*)(__builtin_frame_address(0) + 8) = interrupt_frame->RIP;
+    register volatile uint64_t error_code = _error_code;    
+    
+    *(volatile uint64_t*)(__builtin_frame_address(0) + 8) = interrupt_frame->RIP;
     
     char buff[128];
 
