@@ -11,6 +11,8 @@
 #include "../drivers/driver.h"
 #include "../lib/sprintf.h"
 #include "../lib/string.h"
+#include "../fs/vfs.h"
+#include "../acpi/power.h"
 
 #include "logging.h"
 
@@ -18,6 +20,8 @@
 #define TEXT_COLOR 0xfff0a0
 
 #define BUFFER_SIZE 4096
+
+static file_handle_t* logfile = NULL;
 
 static char logs_buffer[BUFFER_SIZE];
 static unsigned current_level;
@@ -62,29 +66,32 @@ void log(unsigned level, const char* string) {
 
     const char* level_name = get_level_names_and_set_terminal_color(level);
 
-    driver_t* terminal = get_active_terminal();
+    if(level >= current_level) {
+        driver_t* terminal = get_active_terminal();
 
-// print on the screen
-// with fancy colors
-    printf(level_name);
+    // print on the screen
+    // with fancy colors
+        printf(level_name);
 
-    if(terminal)
-        terminal_set_fgcolor(terminal, TEXT_COLOR);
-    
-    printf(string);
-    printf("\n");
+        if(terminal)
+            terminal_set_fgcolor(terminal, TEXT_COLOR);
+        
+        printf(string);
+        printf("\n");
+    }
 
 // append to the buffer
     append_string(level_name);
     append_string(string);
     append_string("\n");
+
+    if(logfile)
+        log_flush();
 }
 
 
     
 void logf(unsigned level, const char* fmt, ...) {
-    if(level < current_level)
-        return;
 
     char string[1024];
     
@@ -109,7 +116,29 @@ const char* log_get(void) {
 }
 
 void log_flush(void) {
+
+    if(logfile)
+        vfs_write_file(logs_buffer, i, 1, logfile);
+
     i = 0;
+}
+
+
+void log_cleanup(void) {
+    if(logfile) {
+        vfs_close_file(logfile);
+        logfile = NULL;
+    }
+}
+
+void log_init_file(const char* filename) {
+    logfile = vfs_open_file(filename, VFS_WRITE | VFS_APPEND);
+
+    assert(logfile);
+
+    log_flush();
+
+    atshutdown(log_cleanup);
 }
 
 

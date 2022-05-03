@@ -42,7 +42,7 @@
  
 
 // 8K stack
-#define KERNEL_STACK_SIZE 8192 * 2
+#define KERNEL_STACK_SIZE 8192 * 4
 
 // accessible by other compilation units
 // like panic.c
@@ -194,7 +194,7 @@ disk_part_t* find_main_part(const struct stivale2_guid* part_guid) {
 
 static inline
 void test_disk_overflow(void) {
-    file_handle_t* f = vfs_open_file("/////fs/boot/bg.bmp//");
+    file_handle_t* f = vfs_open_file("/////fs/boot/bg.bmp//", VFS_READ);
 
     const int bsize = 1024 * 1024 * 8;
 
@@ -218,7 +218,7 @@ void test_disk_overflow(void) {
     //read
     vfs_close_file(f);
     
-    f = vfs_open_file("/////fs/boot/bg.bmp//");
+    f = vfs_open_file("/////fs/boot/bg.bmp//", VFS_READ);
 
     time = clock_ns();
     int rsize = bsize;
@@ -237,6 +237,67 @@ void test_disk_overflow(void) {
 }
 
 
+static inline 
+void test_disk_read(void) {
+    file_handle_t* fd = vfs_open_file("//////bin/sh//", VFS_READ);
+    
+    const int size = vfs_seek_file(fd, 0, SEEK_END);
+
+    assert(size > 0);
+    vfs_seek_file(fd, 0, SEEK_SET);
+
+
+    vfs_close_file(fd);
+
+    _cli();
+
+    for(int i = 0; i < 10000; i++) {
+
+        // alloc user memory
+        uint64_t pm = alloc_user_page_map();
+
+        // map user memory
+        set_user_page_map(pm);
+
+        uint8_t* buf = malloc(size);
+        memset(buf, 0, size);        
+
+        no = 0;
+        _sti();
+        fd = vfs_open_file("/////bin/sh//", VFS_READ);
+        int r = vfs_read_file(buf, 1, size, fd);
+
+        for(int i = 0; i < 10; i++)
+            asm("hlt");
+
+        no = 1;
+
+
+        vfs_close_file(fd);
+
+
+        assert(r == size);
+
+        // load elf
+        //elf_program_t* prog = elf_load(buf, size);
+
+
+        log_info("checksum: %u", memsum(buf, size));
+
+        //assert(prog != NULL);
+
+        //elf_free(prog);
+
+        free_user_page_map(pm);
+        free(buf);
+
+    }
+
+
+
+}
+
+
 
 void launch_shell(void) {
     // argv and envp for the initial shell
@@ -246,7 +307,7 @@ void launch_shell(void) {
 
     void* elf_file;
     // open load and run elf file
-    file_handle_t* f = vfs_open_file(argv);
+    file_handle_t* f = vfs_open_file(argv, VFS_READ);
 
     assert(f);
 
@@ -264,13 +325,18 @@ void launch_shell(void) {
     vfs_close_file(f);
     
 
-    terminal_clear(get_active_terminal());
+    //terminal_clear(get_active_terminal());
 
-    pid_t pid= sched_create_process(0, elf_file, file_size);
+    _cli();
 
+    pid_t pid= sched_create_process(KERNEL_PID, elf_file, file_size);
+
+    assert(pid != -1);
 
     // proc lock is taked by sched_create_process
     process_t* proc = sched_get_process(pid);
+
+    assert(proc);
 
     set_process_entry_arguments(
         proc, 
@@ -279,6 +345,8 @@ void launch_shell(void) {
 
     // release process lock
     spinlock_release(&proc->lock);
+
+    _sti();
 
     assert(pid);
 
@@ -290,6 +358,9 @@ void launch_shell(void) {
 
 // The following will be our kernel's entry point.
 void _start(struct stivale2_struct *stivale2_struct) {
+
+    // initialize the kernel
+    log_info("starting boot sequence");
 
 
     // Let's get the terminal structure tag from the bootloader.
@@ -357,12 +428,7 @@ void _start(struct stivale2_struct *stivale2_struct) {
 // terminal is successfully installed 
     init_gdt_table();
     
-
-    puts(&_binary_bootmessage_txt);
-
-    printf("boot logs:\n");
     puts(log_get());
-    log_flush();
 
     hpet_init();
     apic_setup_clock();
@@ -384,6 +450,9 @@ void _start(struct stivale2_struct *stivale2_struct) {
     int r = vfs_mount(part, "/");
     assert(r != 0);
 
+    // init log file
+    log_init_file("/var/log/sys.log");
+
     r = vfs_mount_devfs();
 
     assert(r);
@@ -394,20 +463,27 @@ void _start(struct stivale2_struct *stivale2_struct) {
     // /dev/ps2kb
     ps2kb_register_dev_file("ps2kb");
 
+
+    log_debug("init sched");
     sched_init();
+    log_debug("init syscalls");
     syscall_init();
 
+    //log_warn("test disk read");
+    //test_disk_read();
+
+
+    log_debug("launch shell");
     // everything should be correctly initialized
     // now we can start the shell
     launch_shell();
 
+    log_debug("start scheduling");
+
+    // clear the terminal
+    printf("\xff");
     
     // start the scheduler
     schedule();
-
-    // should never reach here
-    for(;;)
-        asm volatile("hlt");
-
-    __builtin_unreachable();
+    panic("unreachable");
 }

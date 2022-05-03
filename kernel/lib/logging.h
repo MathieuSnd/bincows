@@ -33,3 +33,8 @@ void set_logging_level(unsigned level);
 const char* log_get(void);
 
 void log_flush(void);
+
+
+// after this call, every log call will write to the file.
+// the function also writes the registered logs to the file.
+void log_init_file(const char* filename);
