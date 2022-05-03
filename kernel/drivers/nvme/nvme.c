@@ -34,13 +34,28 @@
 // for apic_eoi()
 #include "../../int/apic.h"
 
+#include <stdatomic.h>
+
 static void remove(driver_t* this);
 
 #define HANDLED_NAMESPACES 1
 #define ADMIN_QUEUE_SIZE 2
 #define IO_QUEUE_SIZE    64
 
-#define CMD_ID_ASYNC_READ 0xf00f
+#define TASK_ID_ASYNC_READ 0x1000
+#define TASK_ID_SYNC_READ 0x2000
+#define TASK_ID_ASYNC_WRITE 0x3000
+#define CMD_TASK_ID_MASK 0xf000
+
+static atomic_int cmd_counter = 0;
+
+static make_cmdid(int task_id) {
+    int cmdid = task_id | (cmd_counter % IO_QUEUE_SIZE);
+
+    cmd_counter = cmd_counter + 1;
+
+    return cmdid;
+}
 
 struct namespace {
     uint32_t id;
@@ -107,7 +122,8 @@ void perform_write_command(
     struct regs* regs,
     uint64_t lba,
     const void* _buf,
-    size_t   count
+    size_t   count,
+    int cmdid
 );
 
 
@@ -258,6 +274,8 @@ void doorbell_completion(driver_t* this,
     *doorbell = cq->head;
 }
 
+int no;
+
 
 // update queue structure and doorbells
 // and panics if an error occured
@@ -276,16 +294,6 @@ static void handle_queue(
         volatile
         struct compqueuee* entry = queue_head_ptr(cq);
 
-        if(entry->cmd_id == CMD_ID_ASYNC_READ) {
-            // we need to perform async task
-            uint16_t head = cq->head;
-
-            memcpy(
-                data->read_queue[head].target_buffer,
-                translate_address((void*)data->prps[head]),
-                data->read_queue[head].size
-            );
-        }
 
         if(entry->status) {
             // error 
@@ -296,7 +304,22 @@ static void handle_queue(
             );
         }
 
-        queue_consume(cq);
+        if((entry->cmd_id & CMD_TASK_ID_MASK) == TASK_ID_ASYNC_READ) {
+            // we need to perform async task
+
+            // index in the prp list & read queue
+            unsigned i = entry->cmd_id & ~CMD_TASK_ID_MASK;
+
+            assert(data->read_queue[i].size != 0);
+
+            memcpy(
+                data->read_queue[i].target_buffer,
+                translate_address((void*)data->prps[i]),
+                data->read_queue[i].size
+            );
+        }
+
+        queue_consume(cq);        
     }
 
 
@@ -307,9 +330,12 @@ static void handle_queue(
     );
 }
 
+
+
 static void irq_handler(driver_t* this) {
     // check if an admin command is completed
     struct data* data = this->data;
+    //log_warn("irq");
 
     handle_queue(
             this, 
@@ -885,8 +911,14 @@ void perform_read_command(
       ==( buf_vaddr                 & ~0x0fff)
     );
 
+/*
+    int i = 0;
 
     while(count != 0) {
+        if(i++) {
+            log_warn("bordel ");
+        }
+  */      
 
         uint64_t paddr = trv2p((void*)buf_vaddr);
         
@@ -901,6 +933,7 @@ void perform_read_command(
         assert(c != 0);
 
 
+        _cli();
 
         async_command( // read command
             data->doorbell_stride,
@@ -916,9 +949,11 @@ void perform_read_command(
             c - 1                    // cdw12 low part: count-1
         );
 
+/*
         lba += c;
         count -= c;
     }
+*/
 }
 
 
@@ -935,7 +970,8 @@ void perform_write_command(
     struct regs* regs,
     uint64_t lba,
     const void* _buf,
-    size_t   count
+    size_t   count,
+    int cmdid
 ) {
     // general assert protection
     assert(lba         < data->namespaces[0].capacity);
@@ -948,45 +984,53 @@ void perform_write_command(
 
     uint64_t buf_vaddr = (uint64_t)_buf;
 
+
     
     unsigned shift = data->namespaces[0].block_size_shift;
 
+    assert(count <= (0x1000 >> shift) && count);
 
     // must not cross a 4K page boudary
     assert(
         ((buf_vaddr + (1 << shift)) & ~0x0fff)
       ==( buf_vaddr                 & ~0x0fff)
     );
-
+/*
+    int i = 0;
 
     while(count != 0) {
+        if(i++) {
+            log_warn("bordel ");
+        }
+*/
         uint64_t paddr = trv2p((void*)buf_vaddr);
 
-        uint16_t c = get_max_count_and_advance(&buf_vaddr, shift);
-
-        if(c > count)
-            c = count;
-
-        // c == 0 if the buffer is not well aligned
-        assert(c != 0);
-
-
-        async_command( // read command
+        _cli();
+        async_command( // write command
             data->doorbell_stride,
             regs,                    // NVMe register space
             &data->io_queues.sq,     // admin submission queue
             OPCODE_IO_WRITE,
-            0,                       // cmdid - unused
+            cmdid,                   // cmdid
             1,                       // nsid
             paddr,                   // prp0
             0,                       // prp1
             lba&0xffffffff,          // cdw10: low lba part
             lba>>32,                 // cdw11: high lba part
-            c - 1                    // cdw12 low part: count-1
+            count - 1                    // cdw12 low part: count-1
         );
-        count -= c;
-        lba   += c;
+        _sti();
+/*
     }
+    /*
+    while(
+        //data->io_queues.sq.head != data->io_queues.sq.tail
+        !queue_empty(&data->io_queues.sq) 
+        || !queue_empty(&data->io_queues.cq)
+    )
+        sleep(1);
+
+    */
 }
 
 
@@ -1023,15 +1067,17 @@ void nvme_sync_read(struct driver* this,
 
         uint64_t prp_paddr = data->prps[data->io_queues.sq.tail];
 
-
+        _cli();
         perform_read_command(
             data, 
             data->registers,
             lba,
             translate_address((void*)prp_paddr),
             c,
-            0 // not async
+            make_cmdid(TASK_ID_SYNC_READ) // not async
         );
+
+        _sti();
 
         while(!queue_empty(&data->io_queues.sq))
              asm volatile("pause");
@@ -1059,16 +1105,12 @@ void nvme_async_read(struct driver* this,
     struct data* data = this->data;
     assert(data->nns);
 
-
-
     unsigned shift = data->namespaces[0].block_size_shift;
 
     unsigned max_count = 0x1000 >> shift;
 
-
-
     while(count != 0) {
-        // busy wait for a submission entry to be 
+        // wait for a submission entry to be 
         // available
 
         unsigned c;
@@ -1085,12 +1127,14 @@ void nvme_async_read(struct driver* this,
 
         // mutual exclusion with the irq handler
         _cli();
-        unsigned tailid = data->io_queues.sq.tail;
+        
+        int cmdid = make_cmdid(TASK_ID_ASYNC_READ);
 
-        uint64_t prp_paddr = data->prps[tailid];
+        int index = cmdid & ~CMD_TASK_ID_MASK;
+        uint64_t prp_paddr = data->prps[index];
 
 
-        data->read_queue[tailid] = (struct async_read) {
+        data->read_queue[index] = (struct async_read) {
             .target_buffer = buf,
             .size = c << shift,
         };
@@ -1101,8 +1145,9 @@ void nvme_async_read(struct driver* this,
             lba,
             translate_address((void*)prp_paddr),
             c,
-            CMD_ID_ASYNC_READ // async
+            cmdid // async
         );
+
         _sti();
         // the copy from prp to buf will occur 
         // in the irq
@@ -1112,15 +1157,23 @@ void nvme_async_read(struct driver* this,
         lba   += c;
         count -= c;
     }
-
 }
+
+
 
 void nvme_sync(driver_t* this) {
     struct data* data = this->data;
+
     while(
-        !queue_empty(&data->io_queues.sq)
+        //data->io_queues.sq.head != data->io_queues.sq.tail
+        !queue_empty(&data->io_queues.sq) 
+        || !queue_empty(&data->io_queues.cq)
     )
         sleep(1);
+
+    _cli();
+    no = 1;
+    _sti();
 }
 
 
@@ -1154,12 +1207,15 @@ void nvme_sync_write(struct driver* this,
             c = count;
         else
             c = max_count;
+
         
 
         while(queue_full(&data->io_queues.sq))
             sleep(25);
             
 
+        _cli();
+        int cmdid = make_cmdid(TASK_ID_ASYNC_WRITE);
         uint64_t prp_paddr = data->prps[data->io_queues.sq.tail];
 
         // copy one block
@@ -1169,13 +1225,13 @@ void nvme_sync_write(struct driver* this,
             c << shift
         );
 
-        _cli();
         perform_write_command(
             data,
             data->registers,
             lba,
             translate_address((void*)prp_paddr),
-            c
+            c,
+            cmdid
         );
         _sti();
 

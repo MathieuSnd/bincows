@@ -85,6 +85,8 @@ void update_queues(struct queue_pair* queues) {
         // queue
         queue_consume(&queues->sq);
 
+
+
         // increase the counter to keep predicting 
         // the old phase bit state
         queues->completion_counter++;
