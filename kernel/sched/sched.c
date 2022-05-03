@@ -13,6 +13,7 @@
 
 // for the yield interrupt handler
 #include "../int/irq.h"
+//#include "../"
 
 #define XSTR(s) STR(s)
 #define STR(x) #x
@@ -76,10 +77,9 @@ void** syscall_stacks;
 
 
 static void yield_irq_handler(struct driver* unused) {
-    // nothing to do,
-    // everything is done by the
-    // common interrupt handler
     (void) unused;
+
+    schedule();
 }
 
 
@@ -97,7 +97,7 @@ void sched_init(void) {
  * and return a pointer on it.
  * The caller should have the interrupts disabled
  * 
- * the scheduler lock is held and not released
+ * the scheduler lock is aquired and not released
  * the caller is responsible for releasing the lock
  * after inserting the process in the list
  * 
@@ -109,6 +109,7 @@ static process_t* add_process(void) {
     unsigned id = n_processes++;
     processes = realloc(processes, sizeof(process_t) * n_processes);
 
+    //log_debug("add_process: %u", id);
 
     return processes + id;
 }
@@ -120,16 +121,18 @@ static void remove_process(process_t* process) {
 
     // remove it from the list
 
+    spinlock_acquire(&process->lock);
+
     unsigned id = (process - processes);
-
-
     processes[id] = processes[--n_processes];
+
+    spinlock_release(&processes[n_processes].lock);
 
     // unlock the sched lock
     spinlock_release(&sched_lock);
 
 
-    log_warn("process %d removed", id);
+    //log_warn("process %d removed", id);
 }
 
 
@@ -151,9 +154,15 @@ void __attribute__((noreturn)) _restore_context(struct gp_regs* rsp);
  * the process lock should be taken before 
  * calling this function
  * 
+ * if process == NULL or the tid is not found, 
+ * then return NULL
+ * 
  */
 static 
 thread_t* get_thread_by_tid(process_t* process, tid_t tid) {
+
+    if(!process)
+        return NULL;
 
     // sequencial research 
     for(unsigned i = 0; i < process->n_threads; i++) {
@@ -174,6 +183,8 @@ process_t* sched_get_process(pid_t pid) {
     // not found
     process_t* process = NULL;
 
+    uint64_t rf = get_rflags();
+
     _cli();
 
 
@@ -186,6 +197,16 @@ process_t* sched_get_process(pid_t pid) {
             process = &processes[i];
     }
 
+    if(!process) {
+        // unlock the process table
+        spinlock_release(&sched_lock);
+
+        log_debug("process %d not found, over %d processes", pid, n_processes);
+        // restore rflags
+        set_rflags(rf);
+
+        return NULL;
+    }
 
     // lock the process to make sure it won't be freed
     spinlock_acquire(&process->lock);
@@ -220,6 +241,7 @@ pid_t sched_create_process(pid_t ppid, const void* elffile, size_t elffile_sz) {
             // unlock process
 
             set_rflags(rf);
+            log_debug("no such ppid %d", ppid);
             return -1;
         }
     }
@@ -232,6 +254,7 @@ pid_t sched_create_process(pid_t ppid, const void* elffile, size_t elffile_sz) {
         spinlock_release(&parent->lock);
 
     if(!ret) {
+        log_debug("create_process failed");
         // error
         set_rflags(rf);
         return -1;
@@ -278,12 +301,14 @@ int sched_kill_process(pid_t pid, int status) {
             
             thread->should_exit = 1;
             running = 1;
+            log_debug("lazy kill: %d", thread->tid);
         }
         else if(thread->state == READY) {
             // remove it from the ready queue
             // and free the thread
 
             thread_terminate(thread, status);
+            log_debug("thread %d terminated", thread->tid);
         }
     }
 
@@ -310,7 +335,8 @@ int sched_kill_process(pid_t pid, int status) {
         // the process has been successfully removed
         // from the list. Thus, noone can fetch it.
         // though it is still be taken
-        spinlock_acquire(&sched_lock);
+        //spinlock_acquire(&sched_lock);
+
 
 
     }
@@ -385,8 +411,6 @@ void sched_yield(void) {
     spinlock_release(&p->lock);
 
     asm volatile("int $" XSTR(YIELD_IRQ));
-
-    __builtin_unreachable();
 }
 
 
@@ -418,7 +442,47 @@ static process_t* choose_next(void) {
     return NULL;
 }
 
+#define RR_TIME_SLICE_MS 20
+
+
+int timer_irq_should_schedule(void) {
+    // round robin
+    static uint64_t c = 0;
+
+    // LAPIC_IRQ_FREQ is in Hz
+    if(c++ == RR_TIME_SLICE_MS * LAPIC_IRQ_FREQ / 1000) {
+        c = 0;
+        return 1;
+    }
+    return 0;
+}
+
+void sched_irq_ack(void) {
+    assert(currenly_in_irq);
+    
+    _cli();
+
+    process_t* p = sched_current_process();
+    thread_t* t = get_thread_by_tid(p, current_tid);
+
+    if(!t) {
+        // no process or no thread
+        schedule();
+    }
+    currenly_in_irq = 0;
+
+    t->state = RUNNING;
+
+    
+    // release process lock
+    spinlock_release(&p->lock);
+}
+
 void schedule(void) {
+
+    // disable interrupts
+    _cli();
+
     if(currenly_in_irq && current_pid == KERNEL_PID) {
         // do not schedule if the interrupted task
         // was the kernel
@@ -428,14 +492,12 @@ void schedule(void) {
         _restore_context(kernel_saved_rsp);
     }
 
-    // disable interrupts
-    _cli();
-
     // next process
     process_t* p;
 
     // next thread
     thread_t* t;
+
     
     // select one process
     while(1) {
@@ -490,7 +552,6 @@ void schedule(void) {
     
     current_pid = p->pid;
     current_tid = t->tid;
-
 
 
     // unlock the process

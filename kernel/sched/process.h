@@ -112,7 +112,8 @@ int create_process(process_t* process, process_t* pparent, const void* elffile, 
 
 /**
  * @brief Set the process entry arguments object
- * 
+ * interrupts should be disabled before 
+ * calling this function
  * argv and envp are null terminated strings with 
  * NULL last element
  * 

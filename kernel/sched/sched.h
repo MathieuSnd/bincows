@@ -13,9 +13,15 @@ void sched_save(gp_regs_t* context);
 void sched_init(void);
 
 
-// if this function returns, then a fast context restore 
-// can happen: no need to unmap/map user space memory
-void schedule(void); 
+
+// every interrupt handler should call
+// either sched_irq_ack() or schedule()
+void sched_irq_ack(void);
+
+
+int timer_irq_should_schedule(void);
+
+void __attribute__((noreturn)) schedule(void); 
 
 
 /**
@@ -36,6 +42,7 @@ pid_t sched_create_process(pid_t ppid, const void* elffile, size_t elffile_sz);
 
 // kill and remove the process with pid pid
 // and return its exit status
+// this function disables interrupts
 int sched_kill_process(pid_t pid, int status);
 
 
@@ -76,10 +83,8 @@ tid_t sched_current_tid(void);
  * yield the scheduler from the current thread
  * this function invokes an interrupt 
  * 
- * the function panics if the current thread
- * does not exist
  */
-void __attribute__((noreturn)) sched_yield(void);
+void sched_yield(void);
 
 // return the current task's kernel stack
 // this function is to call in the syscall

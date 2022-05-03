@@ -20,10 +20,13 @@
 ;
 ;} __attribute__((packed)) gp_regs_t;
 _restore_context:
+    push rbp
+    mov rbp, rsp
+    
     mov rsp, rdi
 
 ; set segments
-    mov rax, [rsp + 152] ; gp_regs_t.ss
+;    mov rax, [rsp + 152] ; gp_regs_t.ss
 
     pop r15
     pop r14

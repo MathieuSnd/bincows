@@ -90,8 +90,10 @@ int create_process(
     elf_program_t* program = elf_load(elffile, elffile_sz);
 
     
-    if(!program)
+    if(!program) {
+        log_debug("create_process: elf_load failed");
         return 0;
+    }
 
     pid_t ppid = KERNEL_PID;
 
@@ -338,6 +340,15 @@ int set_process_entry_arguments(process_t* process,
     process->threads[0].rsp->cs  = USER_CS;
     process->threads[0].rsp->ss  = USER_DS;
     process->threads[0].rsp->rflags = USER_RF;
+
+
+    for(int i = 0; i < 8; i++)
+        process->threads[0].rsp->ext[i] = 0;
+    
+    // zero the other registers
+    process->threads[0].rsp->rax = 0;
+    process->threads[0].rsp->rbx = 0;
+    
 
 
     // the process is ready to be run
