@@ -32,8 +32,6 @@ static void flush_screen    (driver_t* this);
 
 
 struct data {
-    terminal_handler_t terminal_handler;
-
     // single char buffering,
     struct Char* char_buffer;
 
@@ -131,18 +129,18 @@ char terminal_install(driver_t* this) {
     
 // dynamicly create the terminal
 // with right size
-    unsigned console_w = (dev->width * 9 ) / 10,
-             console_h = (dev->height * 95 ) / 100;
+    unsigned console_w = (dev->width  ),//* 9 ) / 10,
+             console_h = (dev->height );//* 95 ) / 100;
 #ifdef BIGGER_FONT
     d->ncols       = console_w / TERMINAL_FONTWIDTH / 2 - 1;
     d->term_nlines = console_h / TERMINAL_LINE_HEIGHT / 2 - 1;
 #else
-    d->ncols       = console_w / TERMINAL_FONTWIDTH - 1;
-    d->term_nlines = console_h / TERMINAL_LINE_HEIGHT - 1;
+    d->ncols       = console_w / TERMINAL_FONTWIDTH  ;//- 1;
+    d->term_nlines = console_h / TERMINAL_LINE_HEIGHT;// - 1;
 #endif
 
     // align width on 16 pixels
-    d->ncols &= ~0x0f;
+    //d->ncols &= ~0x0f;
 
     d->nlines      = TERMINAL_N_PAGES * d->term_nlines;
 
@@ -187,8 +185,6 @@ char terminal_install(driver_t* this) {
     if(terminals++ == 0)
         loadBMP_24b_1b(&_binary_charmap_bmp, &charmap);
     
-
-    //set_terminal_handler(this, write_string);
 
     terminal_set_colors(this, 0xfff0a0, 0x212121);
     terminal_clear(this);
@@ -256,19 +252,19 @@ static void move_buffer(driver_t* this, int lines) {
     d->need_refresh = true;
 
     if(lines > 0) {// scroll backward
-        size_t bytes = d->ncols * lines;
-        size_t buff_size = d->nlines * d->ncols;
+        size_t px = d->ncols * lines;
+        size_t buff_px = d->nlines * d->ncols;
 
         memmove(
             d->char_buffer, 
-            d->char_buffer + bytes,
-            sizeof(struct Char)*(buff_size - bytes)
+            d->char_buffer + px,
+            sizeof(struct Char)*(buff_px - px)
         );
 
+
         // cannot touch the first one: it is already written
-        for(unsigned i = 1; i < bytes; i++) {
-            d->char_buffer[i+buff_size-bytes] = make_Char(this,0);
-        }
+        for(unsigned i = 1; i < px; i++)
+            d->char_buffer[i+buff_px - px] = make_Char(this,0);
     }
 }
 
@@ -277,8 +273,8 @@ static void next_line(driver_t* this) {
     d->cur_col = 0;
     d->cur_line++;
     if(d->cur_line >= d->nlines) {
+        d->first_line = d->nlines - d->term_nlines;
         d->cur_line = d->nlines-4;
-
         move_buffer(this, 4);
     }  
     else if(d->cur_line >= d->first_line + d->term_nlines) {
@@ -341,6 +337,8 @@ static void emplace_char(driver_t* this, char c) {
     case '\t':
     {
         unsigned new_col = ((d->cur_col + TAB_SPACE) / TAB_SPACE) * TAB_SPACE;
+        if(new_col > d->ncols)
+            new_col = 0;
         while(d->cur_col < new_col)
             emplace_char(this, ' ');
 
@@ -374,7 +372,7 @@ static void print_char(driver_t* this,
 
     void* px_buffer = d->px_buffers[d->cur_px_buffer];
 #ifdef BIGGER_FONT
-    blitcharX2((struct framebuffer_dev *)this->device, 
+    blitcharX2(px, pitch,
                 &charmap, c->c, c->fg_color, c->bg_color,
                 d->margin_left + 2 * col  * TERMINAL_FONTWIDTH, 
                 d->margin_top  + 2 * line * TERMINAL_LINE_HEIGHT);
@@ -406,7 +404,7 @@ static void buff_print_char(driver_t* this,
     unsigned pitch = dev->pitch;
 
 #ifdef BIGGER_FONT
-    blitcharX2((struct framebuffer_dev *)this->device, 
+    blitcharX2(px, pitch, 
                 &charmap, c->c, c->fg_color, c->bg_color,
                 d->margin_left + 2 * col  * TERMINAL_FONTWIDTH, 
                 d->margin_top  + 2 * line * TERMINAL_LINE_HEIGHT);
@@ -513,28 +511,21 @@ static void append_string(const char *string, size_t length) {
 */
 
 void write_string(driver_t* this, const char *string, size_t length) {
-
-    //for(;;);
     struct data* restrict d = this->data;
     d->need_refresh = false;
 
     for(;length>0;--length) {
         char c = *string++;
-        
+
         if(!c)
             break;
-        emplace_char(this, c);
 
+        emplace_char(this, c);
     }
     if(d->need_refresh)
         flush_screen(this);
 }
 
-
-void set_terminal_handler(driver_t* this, terminal_handler_t h) {
-    struct data* restrict d = this->data;
-    d->terminal_handler = h;
-}
 
 void terminal_set_colors(driver_t* this, 
                          uint32_t foreground, 
@@ -565,7 +556,7 @@ static int terminal_devfile_read(
     (void)count;
     
     // unreadable
-    return 0;
+    return -1;
 }
 
 
