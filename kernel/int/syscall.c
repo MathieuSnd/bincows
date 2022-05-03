@@ -189,18 +189,20 @@ static uint64_t sc_exit(process_t* proc, void* args, size_t args_sz) {
 
     sched_kill_process(sched_current_pid(), status);
     // every thread (including the current one)
-    // is marked as exited.
+    // is marked as exited.d
     // the process will is killed by the scheduler
 
     // atomically mark the current thread as ready
     spinlock_acquire(&proc->lock);
     proc->threads[sched_current_tid()].state = READY;
     spinlock_release(&proc->lock);
-
+    
+    _sti();
 
 
     sched_yield();
 
+    panic("reached unreachable code");
     //schedule();
 }
 
@@ -265,7 +267,7 @@ static uint64_t sc_exec(process_t* proc, void* args, size_t args_sz) {
     // first element of args is the program name
     char* path = get_absolute_path(proc->cwd, exec_args->args);
 
-    file_handle_t* elf_file = vfs_open_file(path);
+    file_handle_t* elf_file = vfs_open_file(path, VFS_READ);
 
     free(path);
     
@@ -282,13 +284,20 @@ static uint64_t sc_exec(process_t* proc, void* args, size_t args_sz) {
 
     void* elf_data = malloc(file_sz);
 
+    memset(elf_data, 0, file_sz);
+
     size_t rd = vfs_read_file(elf_data, 1, file_sz, elf_file);
 
     vfs_close_file(elf_file);
 
     assert(rd == file_sz);
-    
 
+/*    
+    // checksum
+    int s = memsum(elf_data, file_sz);
+
+    printf("checksum: %d\n", s);
+*/
 
     // as we might to map another process
     // we won't be able to access args and env
@@ -403,7 +412,8 @@ static uint64_t sc_exec(process_t* proc, void* args, size_t args_sz) {
     );
 */
 
-    // @todo: yield to the new process
+    // @todo: yield to the new process maybe
+    sched_yield();
 
     return 0;
 }   
@@ -462,7 +472,6 @@ static uint64_t sc_open(process_t* proc, void* args, size_t args_sz) {
     char* path = get_absolute_path(proc->cwd, a->path);
 
 
-
     if(strlen(path) > MAX_PATH) {
         sc_warn("path too long", args, args_sz);
 
@@ -485,6 +494,15 @@ static uint64_t sc_open(process_t* proc, void* args, size_t args_sz) {
 
     if(a->flags & O_DIR) {
         // opening as a directory
+
+        // for now, we only support opening directories
+        // with O_RDONLY
+        if(a->flags & O_WRONLY) {
+            sc_warn("writing to directory", args, args_sz);
+
+            free(path);
+            return -1;
+        }
         struct DIR* dir = vfs_opendir(path);
 
 
@@ -501,7 +519,8 @@ static uint64_t sc_open(process_t* proc, void* args, size_t args_sz) {
         }
     }
     else {
-        file_handle_t* h = vfs_open_file(path);
+        
+        file_handle_t* h = vfs_open_file(path, a->flags);
 
         if(!h) {
             sc_warn("failed to open file", args, args_sz);
@@ -911,6 +930,28 @@ void syscall_init(void) {
 }
 
 
+char* scname[] = {
+    "NULL",
+    "SLEEP", 
+    "CLOCK", 
+    "EXIT", 
+    "OPEN", 
+    "CLOSE", 
+    "READ", 
+    "WRITE", 
+    "SEEK", 
+    "DUP", 
+    "CREATE_THREAD", 
+    "JOIN_THREAD", 
+    "EXIT_THREAD", 
+    "SBRK", 
+    "FORK", 
+    "EXEC", 
+    "CHDIR", 
+    "GETCWD", 
+    "GETPID", 
+    "GETPPID", 
+};
 
 // called from syscall_entry
 uint64_t syscall_main(uint8_t scid, void* args, size_t args_sz) {
@@ -928,11 +969,13 @@ uint64_t syscall_main(uint8_t scid, void* args, size_t args_sz) {
     _sti();
 
 
-    if(scid >= SC_END) {
+    if(!scid && scid >= SC_END) {
         log_warn("process %u, thread %u: bad syscall", sched_current_pid(), sched_current_tid());
         for(;;)
             asm ("hlt");
     }
-    else 
-    return sc_funcs[scid](process, args, args_sz);
+    else {
+        log_debug("%u.%u: %s", sched_current_pid(), sched_current_tid(), scname[scid]);
+        return sc_funcs[scid](process, args, args_sz);
+    }
 }

@@ -9,9 +9,9 @@
 void syscall_init(void);
 
 typedef enum open_flags {
-    O_RDONLY    = 0,
-    O_WRONLY    = 1,
-    O_RDWR      = 2,
+    O_RDONLY    = 1,
+    O_WRONLY    = 2,
+    O_RDWR      = 3, // O_RDONLY | O_WRONLY
     O_CREAT     = 4,
     O_EXCL      = 8,
     O_TRUNC     = 16,
