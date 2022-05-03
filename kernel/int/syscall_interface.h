@@ -18,18 +18,19 @@ typedef unsigned fd_t;
 #define SC_READ          6 
 #define SC_WRITE         7 
 #define SC_SEEK          8 
-#define SC_DUP           9 
-#define SC_CREATE_THREAD 10
-#define SC_JOIN_THREAD   11
-#define SC_EXIT_THREAD   12
-#define SC_SBRK          13
-#define SC_FORK          14
-#define SC_EXEC          15
-#define SC_CHDIR         16
-#define SC_GETCWD        17
-#define SC_GETPID        18
-#define SC_GETPPID       19
-#define SC_END           20
+#define SC_ACCESS        9  
+#define SC_DUP           10
+#define SC_CREATE_THREAD 11
+#define SC_JOIN_THREAD   12
+#define SC_EXIT_THREAD   13
+#define SC_SBRK          14
+#define SC_FORK          15
+#define SC_EXEC          16
+#define SC_CHDIR         17
+#define SC_GETCWD        18
+#define SC_GETPID        19
+#define SC_GETPPID       20
+#define SC_END           21
 
 
 
@@ -48,6 +49,13 @@ struct sc_open_args {
     open_mode_t mode;
 
     char chs[3];
+};
+
+struct sc_access_args {
+    const char* path;
+    size_t path_len;
+
+    int type;
 };
 
 

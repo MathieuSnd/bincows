@@ -492,7 +492,7 @@ static uint64_t sc_open(process_t* proc, void* args, size_t args_sz) {
 
 
 
-    if(a->flags & O_DIR) {
+    if(a->flags & O_DIRECTORY) {
         // opening as a directory
 
         // for now, we only support opening directories
@@ -616,6 +616,47 @@ static uint64_t sc_seek(process_t* proc, void* args, size_t args_sz) {
             assert(0);
             return -1;
     }
+}
+
+#define	R_OK	4		/* Test for read permission.  */
+#define	W_OK	2		/* Test for write permission.  */
+#define	X_OK	1		/* Test for execute permission.  */
+#define	F_OK	0		/* Test for existence.  */
+
+static uint64_t sc_access(process_t* proc, void* args, size_t args_sz) {
+    if(args_sz != sizeof(struct sc_access_args)) {
+        sc_warn("bad args_sz", args, args_sz);
+        return -1;
+    }
+
+    struct sc_access_args* a = args;
+
+    check_args(proc, a->path, a->path_len);
+
+    char* path = get_absolute_path(proc->cwd, a->path);
+
+    if(strlen(path) > MAX_PATH) {
+        sc_warn("path too long", args, args_sz);
+
+        free(path);
+        return -1;
+    }
+    
+    fast_dirent_t d;
+    fs_t* fs = vfs_open(path, &d);
+    
+    int ret = 0;
+
+    if(fs == FS_NO)
+        ret = -1;
+    else if(d.type == DT_DIR && a->type & (R_OK|W_OK|X_OK) != 0) 
+        ret = -1;
+    else if(a->type & W_OK && (!fs || fs->read_only))
+        ret = -1;
+
+    free(path);
+
+    return ret;
 }
 
 
@@ -885,6 +926,7 @@ void syscall_init(void) {
     sc_funcs[SC_OPEN]   = sc_open;
     sc_funcs[SC_CLOSE]  = sc_close;
     sc_funcs[SC_SEEK]   = sc_seek;
+    sc_funcs[SC_ACCESS] = sc_access;
     sc_funcs[SC_READ]   = sc_read;
     sc_funcs[SC_WRITE]  = sc_write;
     sc_funcs[SC_EXEC]   = sc_exec;
@@ -940,6 +982,7 @@ char* scname[] = {
     "READ", 
     "WRITE", 
     "SEEK", 
+    "ACCESS",
     "DUP", 
     "CREATE_THREAD", 
     "JOIN_THREAD", 
@@ -975,7 +1018,7 @@ uint64_t syscall_main(uint8_t scid, void* args, size_t args_sz) {
             asm ("hlt");
     }
     else {
-        log_debug("%u.%u: %s", sched_current_pid(), sched_current_tid(), scname[scid]);
+        //log_debug("%u.%u: %s", sched_current_pid(), sched_current_tid(), scname[scid]);
         return sc_funcs[scid](process, args, args_sz);
     }
 }
