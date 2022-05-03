@@ -23,7 +23,6 @@ void _spinlock_release(void *lock);
 
 static inline void spinlock_acquire(void* lock) { 
     
-    //log_warn("spinlock_acquire(%lx)", (uint64_t)lock);
     //stacktrace_print();
     //log_warn("---------------------------");
     

@@ -10,11 +10,17 @@ spin_wait:
     jnz spin_wait           ;no, wait
  
 _spinlock_acquire:
+    push rbp
+    mov rbp, rsp
     lock bts dword [rdi],0  ;Attempt to acquire the lock (in case lock is uncontended)
     jc spin_wait            ;Spin if locked ( organize code such that conditional jumps are typically not taken ) 
+    leave
     ret                     ;Lock obtained
 
 
 _spinlock_release:
+    push rbp
+    mov rbp, rsp
     mov dword [rdi], 0
+    leave
     ret
