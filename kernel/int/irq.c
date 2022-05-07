@@ -82,6 +82,21 @@ void irq_common_handler(uint8_t irq_n, gp_regs_t* context) {
 
     sched_save(context);
 
+    // debug thing
+    process_t* p = sched_current_process();
+
+    if(p) {
+        assert(p->pid == sched_current_pid());
+        
+        // single thread
+        assert(p->threads[0].tid == sched_current_tid());
+        assert(p->threads[0].pid == sched_current_pid());
+        assert(p->threads[0].state == READY);
+
+        spinlock_release(&p->lock);
+    }
+
+
     handler(driver);
 
     sched_irq_ack();

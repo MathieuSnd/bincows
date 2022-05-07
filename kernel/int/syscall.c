@@ -22,7 +22,7 @@ typedef uint64_t(*sc_fun_t)(process_t*, void*, size_t);
 static sc_fun_t sc_funcs[SC_END];
 
 static inline void sc_warn(const char* msg, void* args, size_t args_sz) {
-
+/*
     log_debug("syscall process %u, thread %u: %s", 
              sched_current_pid(), 
              sched_current_tid(),
@@ -30,7 +30,7 @@ static inline void sc_warn(const char* msg, void* args, size_t args_sz) {
              args_sz
     );   
     stacktrace_print();
-
+*/
 }
 
 
@@ -193,10 +193,12 @@ static uint64_t sc_exit(process_t* proc, void* args, size_t args_sz) {
     // the process will is killed by the scheduler
 
     // atomically mark the current thread as ready
+    _cli();
     spinlock_acquire(&proc->lock);
     proc->threads[sched_current_tid()].state = READY;
     spinlock_release(&proc->lock);
-    
+
+
     _sti();
 
 
@@ -258,7 +260,6 @@ static uint64_t sc_exec(process_t* proc, void* args, size_t args_sz) {
         sc_warn("bad environment vars", args, args_sz);
         return -1;
     }
-
 
     ////////////////////////////////////////////
     /////       open executable file       /////
@@ -340,7 +341,6 @@ static uint64_t sc_exec(process_t* proc, void* args, size_t args_sz) {
         unmap_user();
 
         // sched_create_process needs the user to be unmaped
-
         pid_t p = sched_create_process(
                         proc->pid, // PPID
                         elf_data, file_sz);
@@ -358,6 +358,8 @@ static uint64_t sc_exec(process_t* proc, void* args, size_t args_sz) {
 
 
         new_proc = sched_get_process(p);
+
+//        log_warn("new proc: %d", new_proc->pid);
     }
 
     // here, new_proc is currently mapped in memory
@@ -387,6 +389,7 @@ static uint64_t sc_exec(process_t* proc, void* args, size_t args_sz) {
 
     spinlock_release(&new_proc->lock);
 
+
     // done :)
     // now we must restore the current process 
     // memory map before returning
@@ -412,7 +415,6 @@ static uint64_t sc_exec(process_t* proc, void* args, size_t args_sz) {
     );
 */
 
-    // @todo: yield to the new process maybe
     sched_yield();
 
     return 0;
@@ -781,19 +783,18 @@ static uint64_t sc_chdir(process_t* proc, void* args, size_t args_sz) {
         return -1;
     }
 
-    struct DIR* dir = vfs_opendir(path);
 
+    fast_dirent_t d;
+    fs_t* fs = vfs_open(path, &d);
 
 
     free(path);
 
 
-    if(dir) {
-        vfs_closedir(dir);  
-
+    if(fs != FS_NO && d.type == DT_DIR) {
         free(proc->cwd);
-        proc->cwd = malloc(strlen(a->path) + 1);
-        simplify_path(proc->cwd, a->path);
+        proc->cwd = malloc(strlen(path) + 1);
+        simplify_path(proc->cwd, path);
     }
     else
         return -1;
