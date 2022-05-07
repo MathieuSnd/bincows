@@ -274,8 +274,6 @@ void doorbell_completion(driver_t* this,
     *doorbell = cq->head;
 }
 
-int no;
-
 
 // update queue structure and doorbells
 // and panics if an error occured
@@ -1170,10 +1168,6 @@ void nvme_sync(driver_t* this) {
         || !queue_empty(&data->io_queues.cq)
     )
         sleep(1);
-
-    _cli();
-    no = 1;
-    _sti();
 }
 
 
