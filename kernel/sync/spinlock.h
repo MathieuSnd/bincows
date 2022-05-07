@@ -3,6 +3,8 @@
 #include <stdint.h>
 #include "../lib/stacktrace.h"
 #include "../lib/logging.h"
+#include "../lib/assert.h"
+#include "../lib/registers.h"
 
 typedef uint32_t spinlock_t;
 
@@ -22,7 +24,7 @@ void _spinlock_release(void *lock);
 
 
 static inline void spinlock_acquire(void* lock) { 
-    
+    assert(!interrupt_enable());
     //stacktrace_print();
     //log_warn("---------------------------");
     
@@ -30,6 +32,7 @@ static inline void spinlock_acquire(void* lock) {
 }
 
 static inline void spinlock_release(void* lock) {
+    assert(!interrupt_enable());
 
     //log_warn("spinlock_release(%lx)", (uint64_t)lock);
     //stacktrace_print();
