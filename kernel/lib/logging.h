@@ -32,7 +32,17 @@ void set_logging_level(unsigned level);
 
 const char* log_get(void);
 
-void log_flush(void);
+
+/**
+ * flush the logs.
+ * It means, if a logfile is open, it will 
+ * write the logs to the file.
+ * 
+ * If no logfile is open, if force is set to 1,
+ * logs will be droped.
+ * Otherwise, the function won't have any effect.
+ */
+void log_flush(int force);
 
 
 // after this call, every log call will write to the file.

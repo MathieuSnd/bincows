@@ -8,11 +8,13 @@
 #endif
 
 
+
 #include "../drivers/driver.h"
 #include "../lib/sprintf.h"
 #include "../lib/string.h"
 #include "../fs/vfs.h"
 #include "../acpi/power.h"
+#include "../lib/registers.h"
 
 #include "logging.h"
 
@@ -35,58 +37,67 @@ static inline void append_string(const char* str) {
 
     unsigned len = strlen(str);
     if(i+len >= BUFFER_SIZE)
-        log_flush();        
+        log_flush(1); // buffer full, flush it.
+
     memcpy(logs_buffer+i, str, len);
     i += len;
 }
 
 static const char* get_level_names_and_set_terminal_color(unsigned level) {
-    driver_t* terminal = get_active_terminal();
+    //driver_t* terminal = get_active_terminal();
     switch(level) {
         case LOG_LEVEL_DEBUG:
-            if(terminal)
-                terminal_set_fgcolor(terminal,LOG_DEBUG_COLOR);
-            return "[DEBUG]   ";
+            //if(terminal)
+            //    terminal_set_fgcolor(terminal,LOG_DEBUG_COLOR);
+            return "\x1b[90m[DEBUG]\x1b[0m   ";
         case LOG_LEVEL_INFO:
-            if(terminal)
-                terminal_set_fgcolor(terminal,LOG_INFO_COLOR);
-            return "[INFO]    ";
-
+            //if(terminal)
+            //    terminal_set_fgcolor(terminal,LOG_INFO_COLOR);
+            return "\x1b[32m[INFO]\x1b[0m    ";
         default:// level > warning -> warning.
         case LOG_LEVEL_WARN:
-            if(terminal)
-                terminal_set_fgcolor(terminal,LOG_WARNIN_COLOR);
-            return "[WARNING] ";
+            //if(terminal)
+            //    terminal_set_fgcolor(terminal,LOG_WARNIN_COLOR);
+            return "\x1b[33m[WARNING]\x1b[0m ";
     }
 }
 
+
 void log(unsigned level, const char* string) {
+    // @todo protect this with a spinlock
+
+    static char buffer[2048];
     if(level < current_level)
         return; // avoid overflows
 
     const char* level_name = get_level_names_and_set_terminal_color(level);
 
+    
+    sprintf(buffer, "%s%s\n", level_name, string);
+
     if(level >= current_level) {
-        driver_t* terminal = get_active_terminal();
+
+        puts(buffer);
+
+        //driver_t* terminal = get_active_terminal();
 
     // print on the screen
     // with fancy colors
-        printf(level_name);
+        //printf(level_name);
 
-        if(terminal)
-            terminal_set_fgcolor(terminal, TEXT_COLOR);
+        //if(terminal)
+        //    terminal_set_fgcolor(terminal, TEXT_COLOR);
         
-        printf(string);
-        printf("\n");
+        //printf(string);
+        //printf("\n");
     }
 
 // append to the buffer
-    append_string(level_name);
-    append_string(string);
-    append_string("\n");
+    append_string(buffer);
 
-    if(logfile)
-        log_flush();
+    static int i = 0;
+    if(logfile && i++ % 5 == 0)
+        log_flush(0);
 }
 
 
@@ -115,11 +126,19 @@ const char* log_get(void) {
     return logs_buffer;
 }
 
-void log_flush(void) {
+void log_flush(int force) {
+    if(logfile) {
 
-    if(logfile)
-        vfs_write_file(logs_buffer, i, 1, logfile);
+        if(!interrupt_enable()) {
+            // we cannot use the write 
+            // function.
 
+            if(!force)
+                return;
+        }
+        else
+            vfs_write_file(logs_buffer, i, 1, logfile);
+    }
     i = 0;
 }
 
@@ -136,7 +155,7 @@ void log_init_file(const char* filename) {
 
     assert(logfile);
 
-    log_flush();
+    log_flush(0);
 
     atshutdown(log_cleanup);
 }
