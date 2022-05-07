@@ -30,7 +30,12 @@ void set_cr4(uint64_t cr4);
 #define IA32_FMASK_MSR 0xC0000084
 
 uint64_t read_msr(uint32_t addr);
-uint64_t write_msr(uint32_t addr, uint64_t value);
+void write_msr(uint32_t addr, uint64_t value);
+
+
+static inline int interrupt_enable(void) {
+    return get_rflags() & 0x200;
+}
 
 
 
