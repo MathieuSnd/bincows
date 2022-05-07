@@ -402,6 +402,13 @@ static void page_table_allocator_callback(uint64_t phys_addr,
 static void zero_page_table_page(void* physical_address) {
     assert_aligned(physical_address, 0x1000);
     memset(translate_address(physical_address), 0, 0x1000);
+
+
+    uint8_t* v = translate_address(physical_address);
+
+    for(int i = 0; i < 0x1000; i++) {
+        assert(v[i] == 0);
+    }
 }
 
 
@@ -416,6 +423,7 @@ static void fill_page_table_allocator_buffer(size_t n) {
         return;
 
     int old_size = page_table_allocator_buffer_size;
+
 
     physalloc(to_alloc, 0, page_table_allocator_callback);
     for(unsigned i = old_size; i < n; i++)
@@ -438,6 +446,7 @@ static void* alloc_page_table(void) {
         
         for(int i = 0; i < PTAAB_REFILL; i++)
             zero_page_table_page(page_table_allocator_buffer[i]);
+
     }
 
     return page_table_allocator_buffer[--page_table_allocator_buffer_size];
@@ -450,11 +459,13 @@ static void free_page_table(uint64_t pt) {
     // if the buffer is full already, we cannot store it
     // we need to free it
     if(page_table_allocator_buffer_size == PTAAB_SIZE) {
+        log_info("full");
         physfree(pt);
     }
 
     // if the buffer is not full, we can store it
     else {
+        zero_page_table_page(pt);
         page_table_allocator_buffer[page_table_allocator_buffer_size++] = (void*)pt;
     }
 }
@@ -624,7 +635,6 @@ void alloc_pages(void*  virtual_addr_begin,
             uint64_t physical_address, 
             uint64_t virtual_address,
             size_t   c) {
-        
         internal_map_pages(physical_address,
                   virtual_address,
                   c,
@@ -801,7 +811,16 @@ void set_user_page_map(uint64_t paddr) {
 
 
 uint64_t alloc_user_page_map(void) {
-    return (uint64_t)alloc_page_table();
+    uint64_t p = (uint64_t)alloc_page_table();
+
+    uint8_t* v = translate_address(p);
+
+    for(int i = 0; i < 0x1000; i++) {
+        assert(v[i] == 0);
+    }
+
+
+    return (uint64_t)p;
 }
 
 
@@ -825,11 +844,11 @@ static void deep_free_map(uint64_t page_table, int level) {
         if(present_entry(translated[i])) {
             uint64_t page_table_addr = (uint64_t)extract_pointer(translated[i]);
 
-            if(level == 1) {
+            if(level == 1)
                 // shortcut the last level
                 physfree((void*)page_table_addr);
-            }
-            deep_free_map(page_table_addr, level - 1);
+            else
+                deep_free_map(page_table_addr, level - 1);
         }
     }
 
