@@ -68,7 +68,7 @@ void print_cow(void) {
 
     lseek(file, 0, SEEK_SET);
 
-    char* buf = malloc(file_size);
+    char* buf = malloc(file_size+1);
 
     if(!buf) {
         printf("malloc failed\n");
@@ -76,6 +76,8 @@ void print_cow(void) {
     }
 
     size_t n = read(file, buf, file_size);
+
+    buf[n] = '\0';
 
     printf("%s", buf);
 
@@ -100,7 +102,10 @@ static void export(const char** argv) {
         return;
     }
 
-    putenv(strdup(argv[1]));
+    char* dup = strdup(argv[1]);
+
+
+    putenv(dup);
 }
 
 /**
@@ -184,11 +189,10 @@ static void execute(char* cmd) {
 
     if(ret) 
     {
-        // an error occured.
-        FILE* f = fopen(argv[0], "r");
-        if(f) {
+        // couldn't execute
+        
+        if(access(argv[0], F_OK)) {
             // the file exists, but we can't execute it
-            fclose(f);
 
             printf("can't execute '%s'\n", argv[0]);
         }
@@ -212,22 +216,17 @@ int main(int argc, char** argv) {
 
     printf("%s\n", version_string);
 
-    //for(;;);
-
 
     // current working directory
     cwd = getcwd(NULL, 0);
 
     export((const char*[]){NULL,"PATH=/bin",0});
 
-    // @todo debug cat /dev/ps2kb
-    // and cat /dev/term
-
-
     print_prompt();
 
     int cur = 0;
     char line[1024];
+
 
     while(1) {
         char ch;
