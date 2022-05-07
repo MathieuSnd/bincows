@@ -117,6 +117,9 @@ void terminal_update(driver_t* this) {
 
 static int terminals = 0;
 
+static void terminal_clear(driver_t* this);
+
+
 
 char terminal_install(driver_t* this) {
     log_info("installing terminal...");
@@ -200,7 +203,6 @@ char terminal_install(driver_t* this) {
         loadBMP_24b_1b(&_binary_charmap_bmp, &charmap);
     
 
-    terminal_set_colors(this, 0xfff0a0, 0x212121);
     terminal_clear(this);
 
     active_terminal = this;
@@ -226,7 +228,7 @@ void terminal_remove(driver_t* this) {
 }
 
 
-void terminal_clear(driver_t* this) {
+static void terminal_clear(driver_t* this) {
     struct data* restrict d = this->data;
 
     d->cur_col    = 0;
@@ -243,22 +245,6 @@ void terminal_clear(driver_t* this) {
     flush_screen(this);
 }
 
-
-void terminal_set_fgcolor(driver_t* this, uint32_t c) {
-    struct data* restrict d = this->data;
-    d->current_fgcolor = c;
-}
-void terminal_set_bgcolor(driver_t* this, uint32_t c) {
-    struct data* restrict d = this->data;
-    d->current_bgcolor = c;
-}
-
-/*
-// return a ptr to the actual char at pos 
-static struct Char* get_Char_at(int l, int c) {
-    return & buffer [ c + l * ncols ];
-}
-*/
 
 static void move_buffer(driver_t* this, int lines) {
     struct data* restrict d = this->data;
