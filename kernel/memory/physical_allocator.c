@@ -321,6 +321,11 @@ static void free_page_bitmaps(struct MR_header* header, unsigned page) {
             mask_level2 = 1 << (page /  8) % 8,
             mask_level3 = 1 << (page / 16) % 8;
 
+
+// assert that the page was previously allocated: the bit is set 
+// in mask level 0 bit
+    assert((header->bitmap_level0[page/8] & mask_level0) != 0);
+
 // unset the corresponding bits
     header->bitmap_level0[page/8]    &= ~mask_level0;
     header->bitmap_level1[page/8/4]  &= ~mask_level1;
@@ -435,6 +440,8 @@ void physalloc(size_t size, void* virtual_addr, PHYSALLOC_CALLBACK callback) {
     // there is a last block that handles the very last few pages
         const unsigned total_blocks = (memory_range_length+granularity-1) / granularity;
 
+        int found_block = 0;
+
     // loop through the selected level bitmap
     // to find big regions
         while(current_block < total_blocks) {
@@ -496,10 +503,12 @@ void physalloc(size_t size, void* virtual_addr, PHYSALLOC_CALLBACK callback) {
                 // loop through the region inside the lvl0 map 
                     for(unsigned j = 0; j < granularity; j++) {
                         void* target_address = range->base + (curr_page+1) * 0x1000;
+
                         callback((uint64_t)target_address, (uint64_t)virtual_addr, 1);
                         
                         alloc_page_bitmaps(header, curr_page);
 
+                        found_block = 1;
                         
                         size--;
                         curr_page++;
@@ -532,6 +541,7 @@ void physalloc(size_t size, void* virtual_addr, PHYSALLOC_CALLBACK callback) {
                     return;
             }
         }
+        assert(found_block);
     }
 }
 
@@ -613,6 +623,7 @@ void physfree(uint64_t physical_page_addr) {
 
     unsigned position = (physical_page_addr 
                        - (uint64_t)range->base) / 0x1000 - 1;
+
 
     free_page_bitmaps(get_header_base(range), position);
     memset(translate_address((void*)physical_page_addr), 0, 0x1000);
