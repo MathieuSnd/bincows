@@ -222,7 +222,7 @@ static int devfs_read(void* arg, void* buf, size_t begin, size_t count) {
 static int devfs_write(void* arg, const void* buf, size_t begin, size_t count) {
     (void) buf;
     (void) count;
-    panic("bordel");
+    panic("tried to write in read-only dev file /dev/ps2kb");
     // unwritable
     return 0;
 }
