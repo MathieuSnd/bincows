@@ -130,7 +130,7 @@ uint64_t search_or_insert_file(
                 uint64_t file_len,
                 const char* path
 ) {
-
+    _cli();
     spinlock_acquire(&vfile_lock);
 
     for(unsigned i = 0; i < n_open_files; i++) {
@@ -138,6 +138,7 @@ uint64_t search_or_insert_file(
 
         if(e->addr == addr && e->fs == fs) {
             spinlock_release(&vfile_lock);
+            _sti();
             return e->id;
         }
     }
@@ -169,6 +170,8 @@ uint64_t search_or_insert_file(
 
     spinlock_release(&vfile_lock);
 
+    _sti();
+
     fs->n_open_files++;
 
 
@@ -196,12 +199,16 @@ static void release_vfile(void) {
 }
 
 
-
+// this function can be called 
+// with enabled or disabled interrupts
 static void register_handle_to_vfile(
                 uint64_t vfile_id,
                 file_handle_t*    handle
 ) { 
     handle->vfile_id = vfile_id;
+
+    uint64_t rf = get_rflags();
+    _cli();
 
     struct file_ent* file_ent = aquire_vfile(vfile_id);
 
@@ -214,6 +221,7 @@ static void register_handle_to_vfile(
     file_ent->fhs[file_ent->n_insts - 1] = handle;
 
     release_vfile();
+    set_rflags(rf);
 }
 
 
@@ -300,10 +308,12 @@ void invalidate_handlers_buffer(
 }
 
 
-file_handle_t *vfs_open_file(const char *path) {
+
+file_handle_t* vfs_open_file(const char *path, int flags) {
     fast_dirent_t dirent;
 
-
+    // this function asserts that interrupts
+    // are enabled
     fs_t *restrict fs = vfs_open(path, &dirent);
     
     if (!fs || fs == FS_NO) 
@@ -316,8 +326,17 @@ file_handle_t *vfs_open_file(const char *path) {
         return NULL;
     }
 
+    // file is not writable
+    if (flags & VFS_WRITE && fs->read_only)
+        return NULL;
+
     
-    return create_handler(fs, &dirent, path);
+    file_handle_t* h = create_handler(fs, &dirent, path);
+
+    if(flags & VFS_APPEND)
+        h->file_offset = dirent.file_size;
+
+    return h;
 }
 
 
@@ -350,21 +369,26 @@ file_handle_t* vfs_handle_dup(file_handle_t* from) {
 
 
 static void flush(struct file_ent* vfile) {
+    // @todo find a solution. THIS CAN CAUSE A DEADLOCK
+    _sti();
     vfs_update_metadata(
         vfile->path,
         vfile->addr,
         vfile->file_size
     );
+    _cli();
 }
 
 
 void vfs_flush_file(file_handle_t *handle) {
 
+    _cli();
     struct file_ent* vfile = aquire_vfile(handle->vfile_id);
-
     flush(vfile);
 
     release_vfile();
+
+    _sti();
 }
 
 
@@ -375,7 +399,7 @@ void vfs_close_file(file_handle_t *handle)
 {
     fs_t *fs = handle->fs;
 
-
+    _cli();
     struct file_ent* restrict open_file = aquire_vfile(handle->vfile_id);
 
 
@@ -446,6 +470,8 @@ void vfs_close_file(file_handle_t *handle)
     }
 
     spinlock_release(&vfile_lock);
+    _cli();
+
 
 
     free(handle);
@@ -461,10 +487,12 @@ static void aquire_file_access(uint64_t vfile_id) {
     int accessed = 0;
     
     do {
+        _cli();
         struct file_ent* vfile = aquire_vfile(vfile_id);
         accessed = vfile->accessed;
 
         release_vfile();
+        _sti();
 
         if(accessed)
             sleep(10);
@@ -472,9 +500,11 @@ static void aquire_file_access(uint64_t vfile_id) {
 }
 
 static void release_file_access(uint64_t vfile_id) {
+    _cli();
     struct file_ent* vfile = aquire_vfile(vfile_id);
     vfile->accessed = 0;
     release_vfile();
+    _sti();
 }
 
 
@@ -482,6 +512,8 @@ static void release_file_access(uint64_t vfile_id) {
 size_t vfs_read_file(void *ptr, size_t size, size_t nmemb,
                      file_handle_t *restrict stream)
 {
+    assert(interrupt_enable());
+
 
     aquire_file_access(stream->vfile_id);
 
@@ -496,9 +528,11 @@ size_t vfs_read_file(void *ptr, size_t size, size_t nmemb,
 
     uint64_t file_size;
     {
+        _cli();
         struct file_ent* vfile = aquire_vfile(stream->vfile_id);
         file_size = vfile->file_size;
         release_vfile();
+        _sti();
     }
 
     unsigned granularity = fs->file_access_granularity;
@@ -592,9 +626,11 @@ size_t vfs_read_file(void *ptr, size_t size, size_t nmemb,
 
     file_t file;
     {
+        _cli();
         struct file_ent* vfile = aquire_vfile(stream->vfile_id);
         file = vfile->file;
         release_vfile();
+        _sti();
     }
 
 
@@ -641,6 +677,10 @@ size_t vfs_write_file(const void *ptr, size_t size, size_t nmemb,
                       file_handle_t *stream) {
     unsigned bsize = size * nmemb;
 
+    // assert that interrupts are enabled
+    assert(interrupt_enable());
+
+
     if(bsize == 0) {
         return 0;
     }
@@ -674,8 +714,10 @@ size_t vfs_write_file(const void *ptr, size_t size, size_t nmemb,
     // this filed is a copy.
     // if the file size is to be updated, we have to 
     // reaquire the vfile.
+    _cli();
     file_t file_copy = aquire_vfile(stream->vfile_id)->file;
     release_vfile();
+    _sti();
 
     // if the selected read is perfectly aligned,
     // the we don't need another buffer
@@ -808,11 +850,13 @@ size_t vfs_write_file(const void *ptr, size_t size, size_t nmemb,
         file_copy.file_size = stream->file_offset;
         // update file size
         // we need to reaquire the vfile
+        _cli();
         struct file_ent *vfile = aquire_vfile(stream->vfile_id);
         vfile->file_size = stream->file_offset;
         invalidate_handlers_buffer(vfile, stream);
 
         release_vfile();
+        _sti();
     }
 
 
@@ -826,6 +870,8 @@ size_t vfs_write_file(const void *ptr, size_t size, size_t nmemb,
 
 uint64_t vfs_seek_file(file_handle_t *restrict stream, uint64_t offset, int whence)
 {    
+    assert(interrupt_enable());
+
     if(!stream->fs->seekable)
         return -1;
         
@@ -839,8 +885,10 @@ uint64_t vfs_seek_file(file_handle_t *restrict stream, uint64_t offset, int when
         absolute_offset += stream->file_offset;
         break;
     case SEEK_END:
+        _cli();
         absolute_offset += aquire_vfile(stream->vfile_id)->file_size;
         release_vfile();
+        _sti();
         break;
     case SEEK_SET:
         break;

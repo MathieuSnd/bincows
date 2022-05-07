@@ -6,6 +6,7 @@
 #include "../lib/dump.h"
 #include "../lib/sprintf.h"
 #include "../lib/panic.h"
+#include "../lib/registers.h"
 #include "../lib/math.h"
 #include "../acpi/power.h"
 
@@ -678,6 +679,8 @@ static dir_cache_ent_t *get_cache_entry(const char *path)
 
 fs_t *vfs_open(const char *path, fast_dirent_t *dir)
 {
+    assert(interrupt_enable());
+
     // this buffer belongs to the cache entry 
     // in case of miss. Otherwise, it is
     // released before returning.
@@ -991,14 +994,15 @@ struct DIR *vfs_opendir(const char *path)
      * and fs entries.
      *
      */
-    char *pathbuff = strdup(path);
+    char *pathbuff = malloc(strlen(path) + 1);
+
+    simplify_path(pathbuff, path);
 
     size_t n = 0;
 
     struct DIR *dir = NULL;
     fast_dirent_t fdir;
     fs_t *fs = vfs_open(pathbuff, &fdir);
-
 
 
     if(fs == FS_NO) {

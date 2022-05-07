@@ -225,7 +225,21 @@ int vfs_update_metadata(const char* path, uint64_t cluster, size_t file_size);
 // file  open / read / write
 /////////////////////////////
 
-file_handle_t* vfs_open_file(const char* filename);
+#define VFS_READ 1
+#define VFS_WRITE 2
+#define VFS_RDWR 3
+
+#define VFS_APPEND 4
+
+/** 
+ * @brief open a file
+ * 
+ * @param path the file path
+ * @param flags 
+ * @return file_handle_t* NULL if the file does not exist.
+ * Otherwise, the file handler
+ */
+file_handle_t* vfs_open_file(const char* filename, int flags);
 
 /**
  * @brief create a file handle
