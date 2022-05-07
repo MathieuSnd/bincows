@@ -67,9 +67,9 @@ typedef uint64_t ino_t;
  */
 typedef struct fast_dirent {
     ino_t         ino;       /* Inode number */
-    size_t        file_size;    /* Length of this record */
-    unsigned char   type;      /* Type of file; not supported
-                                    by all filesystem types */
+    size_t        file_size; /* Length of this record */
+    unsigned char type;      /* Type of file; not supported
+                                by all filesystem types */
 } fast_dirent_t;
 
 
