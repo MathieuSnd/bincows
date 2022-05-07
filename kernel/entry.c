@@ -262,15 +262,12 @@ void test_disk_read(void) {
         uint8_t* buf = malloc(size);
         memset(buf, 0, size);        
 
-        no = 0;
         _sti();
         fd = vfs_open_file("/////bin/sh//", VFS_READ);
         int r = vfs_read_file(buf, 1, size, fd);
 
         for(int i = 0; i < 10; i++)
             asm("hlt");
-
-        no = 1;
 
 
         vfs_close_file(fd);
@@ -407,6 +404,7 @@ void _start(struct stivale2_struct *stivale2_struct) {
     append_paging_initialization();
 
 
+
     //set_terminal_handler(empty_terminal_handler);
 
 // init kernel heap
@@ -419,7 +417,6 @@ void _start(struct stivale2_struct *stivale2_struct) {
 
 
     driver_t* terminal = video_init(framebuffer_tag);
-
 
 
     set_backend_print_fun(print_fun);
@@ -451,7 +448,7 @@ void _start(struct stivale2_struct *stivale2_struct) {
     assert(r != 0);
 
     // init log file
-    log_init_file("/var/log/sys.log");
+    //log_init_file("/var/log/sys.log");
 
     r = vfs_mount_devfs();
 
@@ -481,7 +478,7 @@ void _start(struct stivale2_struct *stivale2_struct) {
     log_debug("start scheduling");
 
     // clear the terminal
-    printf("\xff");
+    //printf("\x0c");
     
     // start the scheduler
     schedule();

@@ -54,6 +54,19 @@ struct data {
     uint32_t current_bgcolor;
     unsigned margin_left, margin_top;
 
+    union
+    {
+        uint32_t escape_flags;
+        struct {
+            unsigned seq: 1;
+            unsigned color: 1;
+
+            uint8_t idx;
+        } esc;
+    };
+
+    uint8_t esc_seq[4];
+
     // this buffer keeps a copy of the framebuffer
 };
 
@@ -132,8 +145,8 @@ char terminal_install(driver_t* this) {
     unsigned console_w = (dev->width  ),//* 9 ) / 10,
              console_h = (dev->height );//* 95 ) / 100;
 #ifdef BIGGER_FONT
-    d->ncols       = console_w / TERMINAL_FONTWIDTH / 2 - 1;
-    d->term_nlines = console_h / TERMINAL_LINE_HEIGHT / 2 - 1;
+    d->ncols       = console_w / TERMINAL_FONTWIDTH / 2;
+    d->term_nlines = console_h / TERMINAL_LINE_HEIGHT / 2;
 #else
     d->ncols       = console_w / TERMINAL_FONTWIDTH  ;//- 1;
     d->term_nlines = console_h / TERMINAL_LINE_HEIGHT;// - 1;
@@ -177,6 +190,7 @@ char terminal_install(driver_t* this) {
     d->char_buffer = ((void*) d) + sizeof(struct data);
     d->px_buffers[0] = ((void*) d->char_buffer)   + charbuffer_size;
     d->px_buffers[1] = ((void*) d->px_buffers[0]) + pxbuffer_size;
+    d->escape_flags = 0;
     
     memset(d->px_buffers[0], 0, 2 * pxbuffer_size);
 
@@ -315,25 +329,134 @@ static void emplace_normal_char(driver_t* this, char c) {
 }
 
 
+
+
+static uint32_t colors[] = {
+    0x0c0c1c, 0x400000, 0x13a10e, 0xc19c00,
+    0x0037da, 0x881798, 0x3a96dd, 0xecec9d,
+    0x767676, 0xe74856, 0x16c60c, 0xf9f1a5,
+    0x3b78ff, 0xb4009e, 0x61d6d6, 0xf2f2f2,
+};
+
+// escape terminal colors
+//static uint32_t tcolors[] = 
+
+static void set_color(struct data* restrict d, unsigned tenth, unsigned unit) {
+    (void) d;
+    uint32_t color;
+
+    if(unit > 7)
+        unit = 7;
+
+    uint32_t* c = d->current_bgcolor;
+
+    switch(tenth) {
+    case 3:
+        c = &d->current_fgcolor;
+        color = colors[unit];
+        break;
+    case 4:
+        c = &d->current_bgcolor;
+        color = colors[unit];
+        break;
+    case 9:
+        c = &d->current_fgcolor;
+        color = colors[unit + 8];
+        break;
+    case 10:
+        c = &d->current_bgcolor;
+        color = colors[unit + 8];
+        break;
+    default:
+        // invalid escape sequence
+        return;
+    }
+
+    *c = color;   
+}
+
+
+
+static void commit_colors(driver_t* this) {
+    struct data* restrict d = this->data;
+
+    if(d->esc_seq[0] == '7' )
+    d->current_fgcolor = get_color(this, d->esc_seq[1]);
+
+    d->current_bgcolor = 0;
+}
+
 // emplace the char in the buffer, and maybe draw 
 static void emplace_char(driver_t* this, char c) {
     struct data* restrict d = this->data;
 
+
+    // color escape
+    if(d->esc.color) {
+        if(c <= '9' && c >= '0') {
+            d->esc_seq[d->esc.idx] = c - '0';
+            d->esc.idx++;
+        }
+        else {
+        switch(c) {
+            case 'm':
+                if(d->esc.idx == 2) {
+                    // invalid escape sequence
+                    set_color(d, d->esc_seq[0], d->esc_seq[1]);
+                }
+                else if(d->esc.idx == 4) {
+                    set_color(d, d->esc_seq[0], d->esc_seq[1]);
+                    set_color(d, d->esc_seq[2], d->esc_seq[3]);
+                }
+                else if(d->esc.idx == 1 && d->esc_seq[0] == 0) {
+                    set_color(d, 3,7); // fg: white
+                    set_color(d, 4,0); // bg: black
+                }
+
+                    // reset colors
+                // else, the sequence is invalid
+
+                d->esc.seq = 0;
+                d->esc.color = 0;
+                d->esc.idx = 0;
+                break;
+            case ';':
+                break;
+            default:
+                for(;;);
+                // invalid escape sequence
+                d->esc.seq = 0;
+                d->esc.color = 0;
+                break;
+        }
+        }
+        return;
+    }
+
     switch(c) {
+    case '[':
+        if(d->esc.seq) {
+            d->esc.color = 1;
+            break;
+        }
+    
+
     default:
         // any character
         emplace_normal_char(this, c);
         break;
+
+    // escape color
+    case '\x1b':
+        d->esc.seq = 1;
+        break;
     
     case '\n':
-    {
         for(unsigned i=d->cur_col;i < d->ncols; i++) 
         {
             emplace_normal_char(this, ' ');
         }
-    }
         break;
-    
     case '\t':
     {
         unsigned new_col = ((d->cur_col + TAB_SPACE) / TAB_SPACE) * TAB_SPACE;
@@ -355,8 +478,16 @@ static void emplace_char(driver_t* this, char c) {
             d->cur_col = d->ncols-1;
         }
         break;
+    case '\x0c':
+        // clear the screen
+        terminal_clear(this);
+        break;
     }
 }
+
+
+
+
 
 
 static void print_char(driver_t* this, 
