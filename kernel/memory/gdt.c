@@ -124,9 +124,16 @@ void init_gdt_table() {
 
     // later on, the early kernel stack will be used as
     // IRS stack for the BSP
-    tss.RSP[0] = (uint64_t)stack_base + stack_size;
+    //tss.RSP[0] = (uint64_t)stack_base + stack_size;
 
 
     // the TSS offset in the GDT table << 3 (the first 3 bits are DPL)
     _ltr(0x28);
 }
+
+
+
+void set_tss_rsp(uint64_t rsp) {
+    tss.RSP[0] = rsp;
+}
+
