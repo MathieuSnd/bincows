@@ -2,10 +2,10 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
+#include <sprintf.h>
 
 // for system call numbers
 #include "../../kernel/int/syscall_interface.h"
-
 
 
 static void* brk_addr = NULL;
@@ -222,13 +222,7 @@ int execvpe(const char* file,
 
 
 static int try_access(const char* file, int mode) {
-    int fd = open(file, mode, 0);
-    if(fd == -1) {
-        return -1;
-    }
-
-    close(fd);
-    return 0;
+    return access(file, mode);
 }
 
 
@@ -370,6 +364,15 @@ pid_t getppid (void) {
     return syscall(SC_GETPPID, NULL, 0);
 }
 
+int access (const char* name, int type) {
+    struct sc_access_args args = {
+        .path = name,
+        .path_len = strlen(name) + 1,
+        .type = type,
+    };
+
+    return syscall(SC_ACCESS, &args, sizeof(args));
+}
 
 
 

@@ -16,7 +16,7 @@ typedef struct DIR {
 } DIR;
 
 DIR *opendir (const char* name) {
-    int fd = open(name, O_DIR, 0);
+    int fd = open(name, O_DIRECTORY, 0);
 
 
     if(fd < 0) {
