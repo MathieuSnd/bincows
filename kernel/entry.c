@@ -327,6 +327,7 @@ void launch_shell(void) {
     _cli();
 
     pid_t pid= sched_create_process(KERNEL_PID, elf_file, file_size);
+    free(elf_file);
 
     assert(pid != -1);
 
@@ -348,8 +349,6 @@ void launch_shell(void) {
     assert(pid);
 
 
-
-    free(elf_file);
 }
 
 
@@ -410,10 +409,11 @@ void _start(struct stivale2_struct *stivale2_struct) {
 // init kernel heap
     heap_init();
 
-// drivers
+// shutdown procedure
+    atshutdown(sched_cleanup);
+    atshutdown(gpt_cleanup);
     atshutdown(remove_all_drivers);
     atshutdown(free_all_devices);
-    atshutdown(gpt_cleanup);
 
 
     driver_t* terminal = video_init(framebuffer_tag);
@@ -449,8 +449,8 @@ void _start(struct stivale2_struct *stivale2_struct) {
 
     // init log file
     //log_init_file("/var/log/sys.log");
-
     r = vfs_mount_devfs();
+
 
     assert(r);
 
@@ -463,6 +463,7 @@ void _start(struct stivale2_struct *stivale2_struct) {
 
     log_debug("init sched");
     sched_init();
+
     log_debug("init syscalls");
     syscall_init();
 
@@ -482,5 +483,6 @@ void _start(struct stivale2_struct *stivale2_struct) {
     
     // start the scheduler
     schedule();
+    
     panic("unreachable");
 }

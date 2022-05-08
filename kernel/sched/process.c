@@ -193,6 +193,8 @@ void free_process(process_t* process) {
 
     free(process->fds);
 
+    free(process->cwd);
+
 
     if(process->threads)
         // thread buffer hasn't been freed yet

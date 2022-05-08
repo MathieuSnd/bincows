@@ -5,12 +5,15 @@
 
 #define KERNEL_PID ((pid_t)0)
 
+#define SLEEP_IRQ 46
 #define YIELD_IRQ 47
 
 // the caller should disable interrupts
 void sched_save(gp_regs_t* context);
 
 void sched_init(void);
+
+void sched_cleanup(void);
 
 
 

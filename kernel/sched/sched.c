@@ -97,6 +97,12 @@ static void yield_irq_handler(struct driver* unused) {
     schedule();
 }
 
+static void sleep_irq_handler(struct driver* unused) {
+    (void) unused;
+
+    for(;;) asm("hlt");
+}
+
 
 void sched_init(void) {
     // init syscall stacks
@@ -104,6 +110,7 @@ void sched_init(void) {
 
     // init the virtual yield IRQ 
     register_irq(YIELD_IRQ, yield_irq_handler, 0);
+    register_irq(SLEEP_IRQ, sleep_irq_handler, 0);
 }
 
 
@@ -359,6 +366,14 @@ int sched_kill_process(pid_t pid, int status) {
             // and free the thread
 
             thread_terminate(thread, status);
+
+            // remove the element from the list
+            *thread = process->threads[process->n_threads - 1];
+            process->n_threads--;
+
+            if(process->n_threads == 0)
+                free(process->threads);
+
             log_debug("thread %d terminated", thread->tid);
         }
     }
@@ -410,7 +425,8 @@ void  sched_save(gp_regs_t* rsp) {
     currenly_in_nested_irq += currenly_in_irq;
     currenly_in_irq = 1;
 
-    assert(!currenly_in_nested_irq);
+    if(current_pid != KERNEL_PID)
+        assert(!currenly_in_nested_irq);
 
     //log_info("sched_save rsp = %lx", rsp);
 
@@ -437,6 +453,64 @@ void  sched_save(gp_regs_t* rsp) {
         spinlock_release(&p->lock);
 
     }
+}
+
+
+
+void sched_free_killed_processes(void) {
+    assert(!currenly_in_irq);
+
+    _cli();
+    spinlock_acquire(&sched_lock);
+
+    for(unsigned i = 0; i < n_killed_processes; i++) {
+        process_t* p = &killed_processes[i];
+
+        // free the process
+        free_process(p);
+    }
+
+    spinlock_acquire(&sched_lock);
+
+    n_killed_processes = 0;
+
+}
+
+
+void sched_cleanup(void) { 
+    _cli();
+
+    // @todo: invoke sleep IPIs to 
+    // other CPUs
+
+    // start by setting current pid to 0
+    current_pid = KERNEL_PID;
+
+    spinlock_acquire(&sched_lock);
+
+    for(int i = 0; i < n_processes; i++) {
+        process_t* p = &processes[i];
+
+        spinlock_acquire(&p->lock);
+
+        for(int j = 0; j < p->n_threads; j++) {
+            thread_t* t = &p->threads[j];
+            thread_terminate(t, 0);
+        }
+
+        p->n_threads = 0;
+
+        free_process(p);
+    }
+
+    if(n_processes)
+        free(processes);
+    if(syscall_stacks)
+        free(syscall_stacks);
+
+    n_processes = 0;
+
+    spinlock_release(&sched_lock);
 }
 
 
@@ -563,7 +637,6 @@ void schedule(void) {
     // disable interrupts
     _cli();
 
-    assert(!currenly_in_nested_irq);
 
     if(currenly_in_irq && current_pid == KERNEL_PID) {
         // do not schedule if the interrupted task
@@ -573,6 +646,8 @@ void schedule(void) {
         irq_end();
         _restore_context(kernel_saved_rsp);
     }
+
+    assert(!currenly_in_nested_irq);
 
     // next process
     process_t* p;
@@ -600,7 +675,6 @@ void schedule(void) {
 
 
         if(t->should_exit && t->state == READY) {
-            log_debug("terminating process %u", p->pid);
             // if t->state != READY,
             // the process might be executing already 
             // in kernel space, on the core we are executing 
@@ -613,8 +687,12 @@ void schedule(void) {
             // lock the process
 
             thread_terminate(t, t->exit_status);
+            
+            // remove the element from the list
+            *t = p->threads[p->n_threads - 1];
+            p->n_threads--;
 
-            if(--p->n_threads == 0) {
+            if(p->n_threads == 0) {
                 // no more threads, we can kill the process
 
                 // remove the process from the list

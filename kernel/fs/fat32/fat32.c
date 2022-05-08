@@ -1080,6 +1080,8 @@ fs_t* fat32_mount(disk_part_t* part) {
 
     free(buf);
 
+    fs->name = strdup("fat32");
+
     return fs;
 }
 
@@ -1088,10 +1090,12 @@ fs_t* fat32_mount(disk_part_t* part) {
 void fat32_unmount(fs_t* fs) {
     log_warn("unmount fat32");
     fat32_privates_t* pr = (fat32_privates_t*)(fs+1);
+
     cleanup_cache(&pr->fat_cache);
     free(fs);
 
     log_debug("fat32 unmounted");
+
 
     // open files checking should be done by the vfs
 }

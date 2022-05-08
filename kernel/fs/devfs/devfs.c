@@ -250,5 +250,7 @@ fs_t* devfs_mount(void) {
 
     assert(!devfs);
 
+    fs->name = strdup("devfs");
+
     return devfs = fs;
 }
