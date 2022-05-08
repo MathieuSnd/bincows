@@ -206,6 +206,10 @@ char terminal_install(driver_t* this) {
     terminal_clear(this);
 
     active_terminal = this;
+
+    // @todo remove this
+    d->current_fgcolor = 0xffffff;
+    d->current_bgcolor = 0;
     return 1;
 }
 
@@ -380,6 +384,12 @@ static void emplace_char(driver_t* this, char c) {
     // color escape
     if(d->esc.color) {
         if(c <= '9' && c >= '0') {
+            if(d->esc.idx > sizeof(d->esc_seq)) {
+                // invalid escape sequence
+                d->esc.color = 0;
+                return;
+            }
+                
             d->esc_seq[d->esc.idx] = c - '0';
             d->esc.idx++;
         }
@@ -402,16 +412,13 @@ static void emplace_char(driver_t* this, char c) {
                     // reset colors
                 // else, the sequence is invalid
 
-                d->esc.seq = 0;
                 d->esc.color = 0;
                 d->esc.idx = 0;
                 break;
             case ';':
                 break;
             default:
-                for(;;);
                 // invalid escape sequence
-                d->esc.seq = 0;
                 d->esc.color = 0;
                 break;
         }
@@ -419,20 +426,20 @@ static void emplace_char(driver_t* this, char c) {
         return;
     }
 
-    switch(c) {
-    case '[':
-        if(d->esc.seq) {
-            d->esc.color = 1;
-            break;
-        }
-    
 
+    if(d->esc.seq && c == '[') {
+        d->esc.color = 1;
+        return;
+    }
+    d->esc.seq = 0;
+
+    switch(c) {
     default:
         // any character
         emplace_normal_char(this, c);
         break;
-
     // escape color
+
     case '\x1b':
         d->esc.seq = 1;
         break;
@@ -469,6 +476,7 @@ static void emplace_char(driver_t* this, char c) {
         terminal_clear(this);
         break;
     }
+
 }
 
 
@@ -644,17 +652,6 @@ void write_string(driver_t* this, const char *string, size_t length) {
 }
 
 
-void terminal_set_colors(driver_t* this, 
-                         uint32_t foreground, 
-                         uint32_t background) 
-{
-    struct data* restrict d = this->data;
-
-    d->current_fgcolor = foreground;
-    d->current_bgcolor = background;
-}
-
-
 
 ///////////////////////////////////////////////////////////////////////////////
 /////////////      /dev/term0 driver      ////////////////////////////////////
@@ -671,6 +668,8 @@ static int terminal_devfile_read(
     (void)buffer;
     (void)begin;
     (void)count;
+
+    log_info("terminal_devfile_read");
     
     // unreadable
     return -1;
