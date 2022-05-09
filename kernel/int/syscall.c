@@ -193,6 +193,7 @@ static uint64_t sc_exit(process_t* proc, void* args, size_t args_sz) {
     // the process will is killed by the scheduler
 
     // atomically mark the current thread as ready
+    /*
     _cli();
     spinlock_acquire(&proc->lock);
     proc->threads[sched_current_tid()].state = READY;
@@ -200,7 +201,7 @@ static uint64_t sc_exit(process_t* proc, void* args, size_t args_sz) {
 
 
     _sti();
-
+*/
 
     sched_yield();
 
@@ -336,6 +337,7 @@ static uint64_t sc_exec(process_t* proc, void* args, size_t args_sz) {
         // regular UNIX exec
         replace_process(proc, elf_data, file_sz);
         new_proc = proc;
+        free(elf_data);
     }
     else {
         unmap_user();
@@ -344,6 +346,7 @@ static uint64_t sc_exec(process_t* proc, void* args, size_t args_sz) {
         pid_t p = sched_create_process(
                         proc->pid, // PPID
                         elf_data, file_sz);
+        free(elf_data);
 
         if(p == -1) {
             sc_warn("failed to create process", args, args_sz);
@@ -372,10 +375,14 @@ static uint64_t sc_exec(process_t* proc, void* args, size_t args_sz) {
 
     set_user_page_map(new_proc->page_dir_paddr);
 
-    
-    if(set_process_entry_arguments(new_proc, 
+    int res = set_process_entry_arguments(new_proc, 
         args_copy, cmd_args_sz, env_copy, env_sz
-    )) {
+    );
+
+    free(args_copy);
+    free(env_copy);
+
+    if(res) {
         sc_warn("failed to set process arguments", args, args_sz);
 
         // release process lock
@@ -480,6 +487,9 @@ static uint64_t sc_open(process_t* proc, void* args, size_t args_sz) {
         free(path);
         return -1;
     }
+
+
+    int pid = proc->pid;
 
 
     fd_t fd = find_available_fd(proc);
@@ -1001,6 +1011,8 @@ char* scname[] = {
 uint64_t syscall_main(uint8_t scid, void* args, size_t args_sz) {
 
     process_t* process = sched_current_process();
+
+    assert(process->pid > 0 && process->pid <= MAX_PID);
 
     assert(process);
 
