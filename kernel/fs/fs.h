@@ -122,6 +122,9 @@ typedef struct fs {
     };
 
 
+    char* restrict name;
+
+
     /**
      * @brief size of the file descriptor
      * data structure used by open_file,
@@ -140,7 +143,7 @@ typedef struct fs {
      * 
      * This field is vfs private
      */
-    unsigned n_open_files;
+    int n_open_files;
 
 
     /**

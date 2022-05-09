@@ -990,7 +990,7 @@ void fat32_free_dirents(dirent_t* dir) {
         free(dir);
 }
 
-
+#include "../../lib/registers.h"
 
 fs_t* fat32_mount(disk_part_t* part) {
 
@@ -1000,6 +1000,7 @@ fs_t* fat32_mount(disk_part_t* part) {
 
     // boot record 
     read(part, 0, buf, 1);
+
 
     uint32_t total_clusters = *(uint16_t*)(buf + 0x13);
     uint16_t fat32_sig      = *(uint8_t *)(buf + 0x42);
@@ -1037,7 +1038,10 @@ fs_t* fat32_mount(disk_part_t* part) {
     // cluster id of root dir
     cluster_t root_dir_cluster = *(uint32_t*)(buf + 0x2c);
 
+
+    log_warn(" --------- rflags = %x", get_rflags());
     fs_t* fs = malloc(sizeof(fs_t) + sizeof(fat32_privates_t));
+    assert(interrupt_enable() && "interrupts are not enabled");
     
     fs->part = part;
     fs->type = FS_TYPE_FAT;
@@ -1093,8 +1097,6 @@ void fat32_unmount(fs_t* fs) {
 
     cleanup_cache(&pr->fat_cache);
     free(fs);
-
-    log_debug("fat32 unmounted");
 
 
     // open files checking should be done by the vfs

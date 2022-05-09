@@ -122,25 +122,21 @@ uint16_t path_hash(const char *path)
 static void free_vtree(vdir_t *root)
 {
     for (unsigned i = 0; i < root->n_children; i++)
-    {
-        vdir_t *child = &root->children[i];
-        log_warn("unmounting %s", child->path);
-        // unmount mounted entries
-        if (child->fs)
-            unmount(child);
-        else
-            free_vtree(child);
+        free_vtree(root->children + i);
 
-    }
 
     if(root->n_children) {
         free(root->children);
         root->n_children = 0;
     }
+    log_warn("unmounting %s", root->path);
 
-    // don't free the root path:
-    // the vfs root path is static
-
+    // unmount mounted entries
+    if (root->fs) {
+        int res = unmount(root);
+        
+        assert(res);
+    }
 }
 
 
@@ -209,6 +205,7 @@ static int unmount(vdir_t *vdir) {
     assert(vdir);
     assert(vdir->fs);
 
+
     fs_t *fs = vdir->fs;
 
 
@@ -223,7 +220,7 @@ static int unmount(vdir_t *vdir) {
     {
         log_warn(
             "cannot unmount partition %s: %u open files",
-            fs->part->name, fs->n_open_files);
+            vdir->path, fs->n_open_files);
 
         return 0;
     }
@@ -239,12 +236,17 @@ static int unmount(vdir_t *vdir) {
         // set the partition not mounted
         fs->part->mount_point = NULL;
     }
+
+    free(fs->name);
+
         
 
     if (vdir == &vfs_root)
         vfs_root.fs = NULL;
     else {
-        free_vtree(vdir);
+        if(vdir->children)
+            return 0;
+        
         remove_vdir(vdir);
     }
 
@@ -337,6 +339,7 @@ static void free_cache_entry(dir_cache_ent_t *cache_ent)
  */
 static 
 void add_cache_entry(char* path, fs_t* fs, fast_dirent_t* dent) {
+
     uint16_t hash = path_hash(path) & (cache_size - 1);
 
     dir_cache_ent_t *cache_ent = &cached_dir_list[hash];
@@ -739,6 +742,9 @@ fs_t *vfs_open(const char *path, fast_dirent_t *dir)
 
         if(parent_path[1] == 0) {
             *dir = cur;
+    
+            free(pathbuf);
+
             return fs;
         }
     }
@@ -941,7 +947,7 @@ int vfs_unmount(const char *path)
 
     if (!vdir)
         return 0;
-    log_info("unmounting %s", path);
+
     return unmount(vdir);
 }
 
@@ -1102,6 +1108,8 @@ int vfs_update_metadata(
         uint64_t addr, 
         size_t file_size
 ) {
+    assert(interrupt_enable());
+
     char* pathbuf = malloc(strlen(path)+1);
 
     simplify_path(pathbuf, path);

@@ -79,7 +79,9 @@ disk_part_t* search_partition(const char* name) {
 }
 
 void gpt_remove_drive_parts(driver_t* driver) {
-    assert(partitions);
+
+    if(!partitions)
+        return;
 
     int n_removed = 0;
 
@@ -110,6 +112,7 @@ void gpt_remove_drive_parts(driver_t* driver) {
 }
 
 void gpt_cleanup(void) {
+    log_debug("gpt_cleanup()");
     if(partitions != NULL) {
         free(partitions);
         partitions = NULL;

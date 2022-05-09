@@ -132,6 +132,9 @@ uint64_t search_or_insert_file(
 ) {
     _cli();
     spinlock_acquire(&vfile_lock);
+    
+    fs->n_open_files++;
+
 
     for(unsigned i = 0; i < n_open_files; i++) {
         struct file_ent* e = &open_files[i];
@@ -171,8 +174,6 @@ uint64_t search_or_insert_file(
     spinlock_release(&vfile_lock);
 
     _sti();
-
-    fs->n_open_files++;
 
 
     return id;
@@ -360,6 +361,8 @@ file_handle_t* vfs_handle_dup(file_handle_t* from) {
     new->sector_offset = from->sector_offset;
     new->sector_buff   = new + 1;
 
+    fs->n_open_files++;
+
 
     uint64_t vfile_id = from->vfile_id;
     register_handle_to_vfile(vfile_id, new);
@@ -367,16 +370,37 @@ file_handle_t* vfs_handle_dup(file_handle_t* from) {
     return new;
 }
 
+// lazy flush: a kernel process takes care of
+// flushing files metadata to disk.
+typedef struct flush_args {
+    char* path;
+    uint64_t addr;
+    uint64_t file_size;
+} flush_args_t;
+
+unsigned n_lazy_flush_entries = 0;
+static flush_args_t* lazy_flush_entries = NULL;
 
 static void flush(struct file_ent* vfile) {
-    // @todo find a solution. THIS CAN CAUSE A DEADLOCK
-    _sti();
+    lazy_flush_entries = realloc(lazy_flush_entries, 
+                            (n_lazy_flush_entries + 1) * sizeof(flush_args_t));
+    
+    lazy_flush_entries[n_lazy_flush_entries] = (flush_args_t) {
+        .path = vfile->path,
+        .addr = vfile->addr,
+        .file_size = vfile->file_size
+    };
+
+
+
+    
+    /*
     vfs_update_metadata(
         vfile->path,
         vfile->addr,
         vfile->file_size
     );
-    _cli();
+    */
 }
 
 
@@ -405,9 +429,12 @@ void vfs_close_file(file_handle_t *handle)
 
     open_file->n_insts--;
 
-    flush(open_file);
 
     if(!open_file->n_insts) {
+
+        // no one holds the file anymore
+        flush(open_file);
+
         // free the vfile
         free(open_file->path);
         free(open_file->fhs);
@@ -415,6 +442,7 @@ void vfs_close_file(file_handle_t *handle)
         // remove open_file from 
         // the table
         n_open_files--;
+
         int found = 0;
 
 
@@ -476,6 +504,9 @@ void vfs_close_file(file_handle_t *handle)
 
     free(handle);
     fs->n_open_files--;
+
+
+    assert(fs->n_open_files >= 0);
 }
 
 
