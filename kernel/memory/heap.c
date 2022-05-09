@@ -9,6 +9,8 @@
 #include "../lib/string.h"
 #include "../lib/panic.h"
 #include "../lib/logging.h"
+#include "../lib/registers.h"
+#include "../int/idt.h"
 
 
 //#define DEBUG_HEAP
@@ -320,6 +322,9 @@ void heap_init(void) {
 
 
 void* __attribute__((noinline)) malloc(size_t size) {
+    uint64_t rf = get_rflags();
+    _cli();
+
     log_heap("malloc(%u)", size);
     //assert(current_segment->free == 1);
 
@@ -386,8 +391,10 @@ void* __attribute__((noinline)) malloc(size_t size) {
         // one allocation
         n_allocations++;
 
+        
         log_heap(" --> %lx", (void*)seg+sizeof(seg_header));
         
+        set_rflags(rf);
         return (void *)seg + sizeof(seg_header);
     }
 
@@ -396,7 +403,9 @@ void* __attribute__((noinline)) malloc(size_t size) {
 
     expand_heap(MAX(size+sizeof(seg_header), MIN_EXPAND_SIZE));
 // retrty now that we are sure that the memory is avaiable
-    return malloc(size);
+    void* addr = malloc(size);
+    set_rflags(rf);
+    return addr;
 }
 
 
@@ -409,6 +418,9 @@ void* realloc(void* ptr, size_t size) {
         return NULL;
     }
 
+    // mutual exclusion
+    uint64_t rf = get_rflags();
+    _cli();
     seg_header* header = ptr - sizeof(seg_header);
 
     uint32_t header_size = header->size;
@@ -425,6 +437,7 @@ void* realloc(void* ptr, size_t size) {
     if(cpsize > size)
         cpsize = size;
 
+
     void* new_ptr = malloc(size);
     memcpy(new_ptr, ptr, cpsize);
     
@@ -433,12 +446,19 @@ void* realloc(void* ptr, size_t size) {
     // but we just reallocated
     //  n_allocations--;
 
+        
+    // end of mutual exclusion
+    set_rflags(rf);
+
     return new_ptr;
 }
 
 
 // O(1) free
 void __attribute__((noinline)) free(void *ptr) {
+    uint64_t rf = get_rflags();
+    _cli();
+
     log_heap("free(%lx)", ptr);
 
     seg_header* header = ptr - sizeof(seg_header);
@@ -457,11 +477,34 @@ void __attribute__((noinline)) free(void *ptr) {
         defragment();
 
     n_allocations--;
+
+    set_rflags(rf);
 }
 
 
 void heap_defragment(void) {
+    uint64_t rf = get_rflags();
+    _cli();
     defragment();
+    set_rflags(rf);
+}
+
+
+int is_in_heap(void* p) {
+
+    if(p > heap_begin && p < heap_begin + heap_size) {
+        uint64_t rf = get_rflags();
+        _cli();
+        seg_header* seg = p - sizeof(seg_header);
+        heap_assert_seg(seg);
+
+        int allocated = !seg->free;
+        set_rflags(rf);
+        return allocated;
+    }
+    else {
+        return 0;
+    }
 }
 
 
@@ -469,11 +512,16 @@ void heap_defragment(void) {
 //#ifdef DEBUG_HEAP
 
 void heap_print(void) {
+    uint64_t rf = get_rflags();
+    _cli();
     for(seg_header* seg = current_segment; 
                     seg != NULL;
                     seg = seg->next) {
+        heap_assert_seg(seg);
         log_debug("%lx size=%x,free=%u", seg,seg->size, seg->free);
     }
+
+    set_rflags(rf);
 }
 
 
@@ -489,7 +537,6 @@ void malloc_test(void) {
                 arr[i] = realloc(arr[i], size % (1024*1024));
                 size = (16807 * size) % ((1lu << 31) - 1);
             }
-
         }
         
         for(int i = 0; i < 128; i++) {
@@ -498,7 +545,9 @@ void malloc_test(void) {
         }
     }
 
+    _cli();
     defragment();
+    _sti();
     heap_print();
 }
 

@@ -1,7 +1,20 @@
+
+/**
+ * This pmm unsures mutual exclusion 
+ * for allocations.
+ * 
+ * allocating and freeing can be done in an
+ * IRQ context. 
+ * 
+ * 1 cpu: mutual exclusion = cli/sti
+ * @todo add spinlocks for SMP
+ */
 #pragma once
 
 #include <stddef.h>
 #include <stdint.h>
+
+
 
 struct stivale2_struct_tag_memmap;
 

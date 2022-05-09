@@ -368,6 +368,8 @@ void init_paging(const struct stivale2_struct_tag_memmap* memmap) {
     map_kernel(memmap);
 }
 
+
+
 void append_paging_initialization(void) {
 
 // enable  PAE in cr4 
@@ -567,6 +569,9 @@ static void internal_map_pages(uint64_t physical_addr,
 void remap_pages(void*    vaddr_ptr, 
                  size_t   count,
                  uint64_t flags) {
+    // mutual exclusion
+    uint64_t rf = get_rflags();
+    _cli();
 
     uint64_t virtual_addr = (uint64_t)vaddr_ptr;
     
@@ -615,6 +620,9 @@ void remap_pages(void*    vaddr_ptr,
             virtual_addr  += 0x1000;               
         }
     }
+
+    // end of mutual exclusion
+    set_rflags(rf);
 }
 
 
@@ -623,6 +631,10 @@ void remap_pages(void*    vaddr_ptr,
 void alloc_pages(void*  virtual_addr_begin, 
                size_t   count,
                uint64_t flags) {
+    // mutual exclusion
+    uint64_t rf = get_rflags();
+    _cli();
+    
     // don't allow recusion
     alloc_page_table_realloc = 0;
 
@@ -652,12 +664,18 @@ void alloc_pages(void*  virtual_addr_begin,
         count -= size;
         virtual_addr_begin += size * 0x1000;
     }
+
+    // end of mutual exclusion
+    set_rflags(rf);
 }
 
 void map_pages(uint64_t physical_addr, 
                uint64_t virtual_addr, 
                size_t   count,
                uint64_t flags) {
+    // mutual exclusion
+    uint64_t rf = get_rflags();
+    _cli();
 
     while(count > PTAAB_SIZE) {
         fill_page_table_allocator_buffer(PTAAB_SIZE);
@@ -671,6 +689,9 @@ void map_pages(uint64_t physical_addr,
     // count <= 64
     fill_page_table_allocator_buffer(PTAAB_SIZE);
     internal_map_pages(physical_addr, virtual_addr, count, flags);
+
+    // end of mutual exclusion
+    set_rflags(rf);
 }
 
 // return 1 iif the no entry is present in the range
@@ -706,6 +727,9 @@ static pte* get_page_table_or_panic(uint64_t vaddr) {
 }
 
 void unmap_pages(uint64_t virtual_addr, size_t count) {
+    // mutual exclusion
+    uint64_t rf = get_rflags();
+    _cli();
 
     while(count > 0) {
         // fetch table indexes
@@ -762,6 +786,9 @@ void unmap_pages(uint64_t virtual_addr, size_t count) {
         }
         */
     }
+
+    // end of mutual exclusion
+    set_rflags(rf);
 }
 
 uint64_t get_paddr(const void* vaddr) {
@@ -811,7 +838,15 @@ void set_user_page_map(uint64_t paddr) {
 
 
 uint64_t alloc_user_page_map(void) {
+    // mutual exclusion
+    uint64_t rf = get_rflags();
+    _cli();
+
     uint64_t p = (uint64_t)alloc_page_table();
+
+    // end of mutual exclusion
+    set_rflags(rf);
+
 
     uint8_t* v = translate_address(p);
 
@@ -857,9 +892,15 @@ static void deep_free_map(uint64_t page_table, int level) {
 
 
 void free_user_page_map(uint64_t user_page_map) {
+    // mutual exclusion
+    uint64_t rf = get_rflags();
+    _cli();
 
     // deep free the page map
     deep_free_map(user_page_map, 3);
+
+    // end of mutual exclusion
+    set_rflags(rf);
 }
 
 

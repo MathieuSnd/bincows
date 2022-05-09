@@ -1,3 +1,10 @@
+/**
+ * paging manager for the kernel
+ * 
+ * coarse grained mutual exclusion
+ * 
+ */
+
 #pragma once
 
 #include <stddef.h>

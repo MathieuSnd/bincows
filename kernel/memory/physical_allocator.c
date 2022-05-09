@@ -7,6 +7,9 @@
 #include "../lib/sprintf.h"
 #include "../lib/assert.h"
 #include "../lib/panic.h"
+#include "../lib/registers.h"
+#include "../int/idt.h"
+
 #include "physical_allocator.h"
 #include "../lib/logging.h"
 #include "vmap.h"
@@ -403,6 +406,11 @@ static int move_region_if_full(struct memory_range* range,
  * @return void* the physical allocated address
  */
 void physalloc(size_t size, void* virtual_addr, PHYSALLOC_CALLBACK callback) {
+    // mutual exclusion
+    uint64_t rf = get_rflags();
+
+    _cli();
+
     assert_aligned(virtual_addr, 0x1000);
 
     if(total_available_pages < size) {
@@ -535,14 +543,17 @@ void physalloc(size_t size, void* virtual_addr, PHYSALLOC_CALLBACK callback) {
                 // check if it became full
                 if(move_region_if_full(range, header, max_block_size_id)) {
                     break;
-
                 }
+
                 if(size == 0)
-                    return;
+                    break;
             }
         }
         assert(found_block);
     }
+
+    // end of mutal exclusion
+    set_rflags(rf);
 }
 
 
@@ -617,6 +628,11 @@ static const struct memory_range* get_memory_range(const void* addr) {
  * 
  */
 void physfree(uint64_t physical_page_addr) {
+    // mutual exclusion
+    uint64_t rf = get_rflags();
+
+    _cli();
+
     assert_aligned(physical_page_addr, 0x1000);
 
     const struct memory_range* range = get_memory_range((void*)physical_page_addr);
@@ -629,6 +645,9 @@ void physfree(uint64_t physical_page_addr) {
     memset(translate_address((void*)physical_page_addr), 0, 0x1000);
     
     total_available_pages++;
+
+    // end of mutual exclusion
+    set_rflags(rf);
 }
 
 

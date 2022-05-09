@@ -15,6 +15,8 @@ void* heap_get_brk(void);
 void heap_print(void);
 void heap_defragment(void);
 
+int is_in_heap(void* p);
+
 #ifndef NDEBUG
 void  malloc_test(void);
 #endif
