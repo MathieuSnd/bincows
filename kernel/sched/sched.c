@@ -61,7 +61,7 @@ static int currenly_in_nested_irq = 0;
 static size_t n_processes = 0;
 //static size_t n_threads = 0;
 
-static process_t* processes;
+static process_t** processes = NULL;
 
 // killed processes aren't freed instantly
 // because freeing one involves interrupts
@@ -69,7 +69,7 @@ static process_t* processes;
 // in an IRQ. As nested IRQs arn't 
 // implemented, an iddle task takes care
 // of the killed processes once in a while
-static process_t* killed_processes = NULL;
+static process_t** killed_processes = NULL;
 static int n_killed_processes = 0;
 
 
@@ -126,15 +126,19 @@ void sched_init(void) {
  * @return process_t* 
  */
 static process_t* add_process(void) {
+
+    log_warn("add process");
     
     spinlock_acquire(&sched_lock);
 
     unsigned id = n_processes++;
-    processes = realloc(processes, sizeof(process_t) * n_processes);
+    processes = realloc(processes, sizeof(process_t*) * n_processes);
 
     //log_debug("add_process: %u", id);
 
-    return processes + id;
+    
+
+    return processes[id] = malloc(sizeof(process_t));
 }
 
 
@@ -147,22 +151,21 @@ static int add_killed_process(process_t* process) {
     // add the process in the killed processes list
     killed_processes = realloc(
             killed_processes, 
-            sizeof(process_t) * (n_killed_processes + 1)
+            sizeof(process_t*) * (n_killed_processes + 1)
     );
 
-    memcpy(
-        killed_processes + n_killed_processes,
-        process, 
-        sizeof(process_t)
-    );
+    killed_processes[n_killed_processes++] = process;
 
     return 0;
 } 
 
 
 static int remove_process(pid_t pid) {
+    log_warn("process %d removed", pid);
     // first lock the sched lock
     spinlock_acquire(&sched_lock);
+
+
 
     // remove it from the list
 
@@ -170,13 +173,13 @@ static int remove_process(pid_t pid) {
 
     // sequential search
     for(unsigned i = 0; i < n_processes; i++) {
-        if(processes[i].pid == pid) {
+        if(processes[i]->pid == pid) {
             
             // free it
-            spinlock_acquire(&processes[i].lock);
+            spinlock_acquire(&processes[i]->lock);
 
             // copy it to free it later on
-            add_killed_process(&processes[i]);
+            add_killed_process(processes[i]);
 
             // remove it
             processes[i] = processes[--n_processes];
@@ -191,14 +194,10 @@ static int remove_process(pid_t pid) {
 
     return found;
 
-    //log_warn("process %d removed", pid);
 }
 
 
 #define N_QUEUES 4
-
-// alloc pids in a circular way
-static pid_t last_pid = KERNEL_PID;
 
 
 // contains kernel regs if saved_context was called
@@ -252,8 +251,8 @@ process_t* sched_get_process(pid_t pid) {
 
     // sequencial research
     for(unsigned i = 0; i < n_processes; i++) {
-        if(processes[i].pid == pid)
-            process = &processes[i];
+        if(processes[i]->pid == pid)
+            process = processes[i];
     }
 
     if(!process) {
@@ -458,19 +457,23 @@ void  sched_save(gp_regs_t* rsp) {
 
 
 void sched_free_killed_processes(void) {
-    assert(!currenly_in_irq);
+    assert(!currenly_in_nested_irq);
 
     _cli();
     spinlock_acquire(&sched_lock);
 
     for(unsigned i = 0; i < n_killed_processes; i++) {
-        process_t* p = &killed_processes[i];
+        process_t* p = killed_processes[i];
 
         // free the process
         free_process(p);
     }
+    if(n_killed_processes)
+        free(killed_processes);
 
-    spinlock_acquire(&sched_lock);
+    n_killed_processes = 0;
+
+    spinlock_release(&sched_lock);
 
     n_killed_processes = 0;
 
@@ -486,10 +489,13 @@ void sched_cleanup(void) {
     // start by setting current pid to 0
     current_pid = KERNEL_PID;
 
+    sched_free_killed_processes();
+
+
     spinlock_acquire(&sched_lock);
 
     for(int i = 0; i < n_processes; i++) {
-        process_t* p = &processes[i];
+        process_t* p = processes[i];
 
         spinlock_acquire(&p->lock);
 
@@ -509,6 +515,7 @@ void sched_cleanup(void) {
         free(syscall_stacks);
 
     n_processes = 0;
+
 
     spinlock_release(&sched_lock);
 }
@@ -559,7 +566,7 @@ static process_t* choose_next(void) {
     
 
     if(n_processes) {
-        p = &processes[current_process];
+        p = processes[current_process];
         // lock the process
         // log_debug("choose_next: %u / %u", current_process, n_processes);
         spinlock_acquire(&p->lock);
@@ -570,14 +577,15 @@ static process_t* choose_next(void) {
     // unlock the process table
     spinlock_release(&sched_lock);
 
-
+    assert(is_in_heap(p));
+    assert(is_in_heap(p->threads));
 
 
     // no process found
     return p;
 }
 
-#define RR_TIME_SLICE_MS 20
+#define RR_TIME_SLICE_MS 10
 
 
 int timer_irq_should_schedule(void) {
@@ -587,6 +595,7 @@ int timer_irq_should_schedule(void) {
     // don't schedule if we are in an irq
     if(currenly_in_nested_irq)
         return 0;
+
 
     // LAPIC_IRQ_FREQ is in Hz
     if(c++ == RR_TIME_SLICE_MS * LAPIC_IRQ_FREQ / 1000) {
@@ -793,6 +802,13 @@ process_t* sched_current_process(void) {
 }
 
 
+// assert that MAX_PID is a power of 2 - 1
+static_assert((MAX_PID & (MAX_PID + 1)) == 0);
+
 pid_t alloc_pid(void) {
-    return ++last_pid;
+
+    // alloc pids in a circular way
+    static _Atomic pid_t last_pid = KERNEL_PID;
+
+    return ++last_pid & (MAX_PID);
 }

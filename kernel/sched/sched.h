@@ -4,9 +4,14 @@
 #include "process.h"
 
 #define KERNEL_PID ((pid_t)0)
+#define MAX_PID 0xffff
+
+
 
 #define SLEEP_IRQ 46
 #define YIELD_IRQ 47
+
+
 
 // the caller should disable interrupts
 void sched_save(gp_regs_t* context);

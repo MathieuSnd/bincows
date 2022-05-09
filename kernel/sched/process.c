@@ -201,6 +201,8 @@ void free_process(process_t* process) {
         free(process->threads);
 
     elf_free(process->program);
+
+    free(process);
 }
 
 int replace_process(process_t* process, void* elffile, size_t elffile_sz) {
