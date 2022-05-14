@@ -142,8 +142,6 @@ static void devfs_unmount(struct fs* fs) {
     assert(fs == devfs);
     assert(fs->type == FS_TYPE_DEVFS);
     
-    log_info("unmounting devfs");
-
     struct devfs_priv* priv = (void *)(fs + 1);
 
 

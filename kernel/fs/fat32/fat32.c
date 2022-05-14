@@ -1039,7 +1039,6 @@ fs_t* fat32_mount(disk_part_t* part) {
     cluster_t root_dir_cluster = *(uint32_t*)(buf + 0x2c);
 
 
-    log_warn(" --------- rflags = %x", get_rflags());
     fs_t* fs = malloc(sizeof(fs_t) + sizeof(fat32_privates_t));
     assert(interrupt_enable() && "interrupts are not enabled");
     
@@ -1092,7 +1091,6 @@ fs_t* fat32_mount(disk_part_t* part) {
 
 
 void fat32_unmount(fs_t* fs) {
-    log_warn("unmount fat32");
     fat32_privates_t* pr = (fat32_privates_t*)(fs+1);
 
     cleanup_cache(&pr->fat_cache);
@@ -1304,7 +1302,6 @@ int fat32_write_file_sectors(
             // this is the last iteration
             write_size = n;
 
-        // log_warn("WRITE AT CLUSTER=%u", cluster);
         write(fs->part, lba, buf, write_size);
 
         buf += bsize * write_size;
