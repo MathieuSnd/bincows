@@ -129,7 +129,7 @@ static void free_vtree(vdir_t *root)
         free(root->children);
         root->n_children = 0;
     }
-    log_warn("unmounting %s", root->path);
+    log_info("unmounting %s", root->path);
 
     // unmount mounted entries
     if (root->fs) {
@@ -285,6 +285,8 @@ static void free_cache(void)
     cache_size = 0;
 }
 
+
+
 void vfs_init(void)
 {
     // cache size must be a power of two
@@ -300,15 +302,20 @@ void vfs_init(void)
         .fs = 0,
         .path = "/",
     };
-
-    atshutdown(vfs_cleanup);
 }
 
-void vfs_cleanup(void)
-{
+
+
+void vfs_cleanup(void) {
+    assert(interrupt_enable());
+    
+    vfs_lazy_flush();
+
     free_cache();
     free_vtree(&vfs_root);
 }
+
+
 
 // return 0 iif entry not present
 static int is_cache_entry_present(dir_cache_ent_t *cache_ent)
@@ -656,6 +663,9 @@ static int find_fs_child(
 // return NULL if empty / conflict
 static dir_cache_ent_t *get_cache_entry(const char *path)
 {
+    // @todo: add vfs cache spinlock:
+    // aquire it there, and free it after 
+    // doing stuf with the returned entry
     assert(is_absolute(path));
 
     assert(cache_size);
@@ -1103,19 +1113,18 @@ struct dirent *vfs_readdir(struct DIR *dir)
 }
 
 
-int vfs_update_metadata(
+int vfs_update_metadata_cache(
         const char* path, 
         uint64_t addr, 
         size_t file_size
 ) {
-    assert(interrupt_enable());
-
     char* pathbuf = malloc(strlen(path)+1);
 
     simplify_path(pathbuf, path);
     assert(is_absolute(pathbuf));
 
     // update cache if hit
+    
     dir_cache_ent_t *ent = get_cache_entry(pathbuf);
     
     if (ent) {// hit
@@ -1126,7 +1135,22 @@ int vfs_update_metadata(
         ent->file_size = file_size;
     }
 
-    // now update disk
+
+    free(pathbuf);
+}
+
+
+int vfs_update_metadata_disk(
+        const char* path, 
+        uint64_t addr, 
+        size_t file_size
+) {
+    assert(interrupt_enable());
+
+    char* pathbuf = malloc(strlen(path)+1);
+
+    simplify_path(pathbuf, path);
+    assert(is_absolute(pathbuf));
 
     // first open the parent and compute
     // the file name
@@ -1164,5 +1188,6 @@ int vfs_update_metadata(
 
     int ret = fs->update_dirent(fs, parent_dirent.ino, file_name, addr, file_size);
     free(pathbuf);
+
     return ret;
 }

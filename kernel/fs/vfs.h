@@ -125,6 +125,9 @@ typedef struct file_handler {
     // handler along with informations 
     // about handlers pointing on it
     uint64_t vfile_id;
+
+    // input flags of the open call
+    int flags;
 } file_handle_t;
 
 
@@ -218,8 +221,21 @@ struct dirent* vfs_readdir(struct DIR* dir);
  * @param size new file size
  * @return int 0 if success
  */
-int vfs_update_metadata(const char* path, uint64_t cluster, size_t file_size);
+int vfs_update_metadata_disk(const char* path, uint64_t cluster, size_t file_size);
+int vfs_update_metadata_cache(const char* path, uint64_t cluster, size_t file_size);
 
+
+
+/**
+ * @brief flush the file metadata to disk
+ * This function is called by the kernel
+ * process.
+ * 
+ * Flushes the file metadata that hasn't been 
+ * yet.
+ * 
+ */
+void vfs_lazy_flush(void);
 
 /////////////////////////////
 // file  open / read / write

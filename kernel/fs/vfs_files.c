@@ -11,6 +11,7 @@
 #include "../memory/heap.h"
 #include "../sync/spinlock.h"
 #include "../lib/time.h"
+#include "../int/idt.h"
 
 #include "fat32/fat32.h"
 
@@ -337,6 +338,8 @@ file_handle_t* vfs_open_file(const char *path, int flags) {
     if(flags & VFS_APPEND)
         h->file_offset = dirent.file_size;
 
+    h->flags = flags;
+
     return h;
 }
 
@@ -378,33 +381,84 @@ typedef struct flush_args {
     uint64_t file_size;
 } flush_args_t;
 
+
 unsigned n_lazy_flush_entries = 0;
 static flush_args_t* lazy_flush_entries = NULL;
 
+
+
+void vfs_lazy_flush(void) {
+    // we should be in interrupts disabled state
+    // not in an irq handler
+    assert(interrupt_enable());
+
+    flush_args_t* local_lazy_flush_entries;
+    unsigned n;
+
+    _cli();
+    spinlock_acquire(&vfile_lock);
+    // shouldn't be able to add lazy flush entries
+
+    n = n_lazy_flush_entries;
+    
+    if(n_lazy_flush_entries > 0) {
+        local_lazy_flush_entries = malloc(
+            n * sizeof(flush_args_t));
+        
+
+        memcpy(local_lazy_flush_entries, lazy_flush_entries,
+            n * sizeof(flush_args_t));
+
+        n_lazy_flush_entries = 0;
+        
+        free(lazy_flush_entries);
+        lazy_flush_entries = NULL;
+    }
+
+    spinlock_release(&vfile_lock);
+    _sti();
+
+
+    for(unsigned i = 0; i < n; i++) {
+        flush_args_t* args = local_lazy_flush_entries + i;
+
+
+        // flush it
+        int res = vfs_update_metadata_disk(args->path, args->addr, args->file_size);
+        free(args->path);
+        assert(!res);
+    }
+
+    if(n > 0)
+        free(local_lazy_flush_entries);
+}
+
 static void flush(struct file_ent* vfile) {
+
+    assert(!interrupt_enable());
+
     lazy_flush_entries = realloc(lazy_flush_entries, 
                             (n_lazy_flush_entries + 1) * sizeof(flush_args_t));
     
-    lazy_flush_entries[n_lazy_flush_entries] = (flush_args_t) {
-        .path = vfile->path,
+    lazy_flush_entries[n_lazy_flush_entries++] = (flush_args_t) {
+        .path = strdup(vfile->path),
         .addr = vfile->addr,
         .file_size = vfile->file_size
     };
 
-
-
     
-    /*
-    vfs_update_metadata(
+    
+    vfs_update_metadata_cache(
         vfile->path,
         vfile->addr,
         vfile->file_size
     );
-    */
 }
 
 
 void vfs_flush_file(file_handle_t *handle) {
+
+    assert(interrupt_enable());
 
     _cli();
     struct file_ent* vfile = aquire_vfile(handle->vfile_id);
@@ -498,7 +552,7 @@ void vfs_close_file(file_handle_t *handle)
     }
 
     spinlock_release(&vfile_lock);
-    _cli();
+    _sti();
 
 
 
@@ -750,7 +804,7 @@ size_t vfs_write_file(const void *ptr, size_t size, size_t nmemb,
     release_vfile();
     _sti();
 
-    // if the selected read is perfectly aligned,
+    // if the selected write is perfectly aligned,
     // the we don't need another buffer
     if(stream->sector_offset == 0 && end_offset == 0) {
         fs->write_file_sectors(
@@ -803,11 +857,14 @@ size_t vfs_write_file(const void *ptr, size_t size, size_t nmemb,
         // if the beginning is not beyond
         // file end, we need to read
         // the sector
-        if(stream->sector_offset != 0
+        if((stream->sector_offset != 0
             && stream->file_offset - stream->sector_offset 
-                < file_copy.file_size) {
+                < file_copy.file_size)
+
+                // less than 1 sector is written
+            || stream->sector_offset + bsize < granularity
+            ) {
             if(!stream->buffer_valid || !cachable) {
-                
                 // must read before writing
                 fs->read_file_sectors(
                         fs,
@@ -818,8 +875,21 @@ size_t vfs_write_file(const void *ptr, size_t size, size_t nmemb,
                 );
             }
             else // buf contains cached data of sc block
+            {
                 memcpy(write_buf, buf, stream->sector_offset);
+                
+
+                int64_t remaning = granularity - (bsize + stream->sector_offset);
+                // if remaning > 0, there is stuff in sc that we need to read
+                if(remaning > 0)
+                    memcpy(
+                        write_buf + bsize + stream->sector_offset, 
+                        buf       + bsize + stream->sector_offset, 
+                        remaning
+                    );
+            }
         }
+
         uint64_t last_sector = stream->sector_count + write_blocks - 1;
 
         if(last_sector != stream->sector_count) {
