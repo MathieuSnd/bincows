@@ -17,20 +17,21 @@ typedef unsigned fd_t;
 #define SC_CLOSE         5 
 #define SC_READ          6 
 #define SC_WRITE         7 
-#define SC_SEEK          8 
-#define SC_ACCESS        9  
-#define SC_DUP           10
-#define SC_CREATE_THREAD 11
-#define SC_JOIN_THREAD   12
-#define SC_EXIT_THREAD   13
-#define SC_SBRK          14
-#define SC_FORK          15
-#define SC_EXEC          16
-#define SC_CHDIR         17
-#define SC_GETCWD        18
-#define SC_GETPID        19
-#define SC_GETPPID       20
-#define SC_END           21
+#define SC_TRUNCATE      8
+#define SC_SEEK          9
+#define SC_ACCESS        10
+#define SC_DUP           11
+#define SC_CREATE_THREAD 12
+#define SC_JOIN_THREAD   13
+#define SC_EXIT_THREAD   14
+#define SC_SBRK          15
+#define SC_FORK          16
+#define SC_EXEC          17
+#define SC_CHDIR         18
+#define SC_GETCWD        19
+#define SC_GETPID        20
+#define SC_GETPPID       21
+#define SC_END           22
 
 
 
@@ -76,6 +77,11 @@ struct sc_write_args {
     fd_t fd;
     const void* buf;
     size_t count;
+};
+
+struct sc_truncate_args {
+    fd_t fd;
+    size_t size;
 };
 
 
