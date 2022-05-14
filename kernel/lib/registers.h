@@ -58,4 +58,9 @@ uint8_t inb(uint16_t port);
 void outb(uint16_t port, uint8_t val);
 
 
+void __attribute__((noreturn)) _change_stack(
+    void* stack_ptr, 
+    void (*no_return)(void)
+);
+
 #endif// REGISTERS_H

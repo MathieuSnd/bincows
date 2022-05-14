@@ -19,6 +19,7 @@
 [global read_msr]
 [global write_msr]
 [global _rbp]
+[global _change_stack]
 
 [section .text]
 
@@ -173,3 +174,12 @@ write_msr:
     mov rsp, rbp
     pop rbp
     ret
+
+; void [[noreturn]] change_stack(uint64_t stack_addr, void (*no_return)(void))
+_change_stack:
+    mov rsp, rdi
+    push rbp
+    mov rbp, rsp
+
+    mov rdi, rsi
+    jmp rdi
