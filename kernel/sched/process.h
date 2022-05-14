@@ -111,6 +111,15 @@ int create_process(process_t* process, process_t* pparent, const void* elffile, 
 
 
 /**
+ * @brief Create a kernel process with pid 0,
+ * ppid 0, no program, 1 thread, no file
+ * 
+ * 
+ * 
+ */
+int create_kernel_process(process_t* process);
+
+/**
  * @brief Set the process entry arguments object
  * interrupts should be disabled before 
  * calling this function

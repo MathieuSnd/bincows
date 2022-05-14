@@ -16,8 +16,23 @@
 // the caller should disable interrupts
 void sched_save(gp_regs_t* context);
 
+
+// inits the scheduler.
+// shed_cleanup should be called afterwards
+// the scheduler should then be started
+// before doing stuff
 void sched_init(void);
 
+// start the scheduler.
+// sched_init should have been called beforehand.
+// Basically, it marks the scheduler as started so that
+// interrupts can trigger the schedule mechanism,
+// and performs the very first schedule call.
+void sched_start(void);
+
+// this function cleans up the scheduler.
+// it is safe to call it even if sched_init or
+// sched_start havn't been called already
 void sched_cleanup(void);
 
 

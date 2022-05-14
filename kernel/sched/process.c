@@ -64,6 +64,8 @@ int close_fd(file_descriptor_t* fd) {
             assert(0);
     }
 
+
+
     fd->type = FD_NONE;
 
     return 0;
@@ -103,29 +105,16 @@ int create_process(
 
     char* cwd;
 
-    if(pparent) {
-        // inherit parent file handlers
-        ppid = pparent->pid;
+    // inherit parent file handlers
+    ppid = pparent->pid;
 
-        for(unsigned i = 0; i < MAX_FDS; i++) {
-            dup_fd(pparent->fds + i, fds + i);
-        }
+    for(unsigned i = 0; i < MAX_FDS; i++)
+        dup_fd(pparent->fds + i, fds + i);
 
 
-        // inherit parent directory
-        cwd = strdup(pparent->cwd);
-    }
-    else {
-        // empty file handlers
-        for(unsigned i = 0; i < MAX_FDS; i++) {
-            fds[i].type = FD_NONE;
-            fds[i].file = NULL;
-        }
-        //memset(fds, 0, sizeof(file_descriptor_t) * MAX_FDS);
+    // inherit parent directory
+    cwd = strdup(pparent->cwd);
 
-        // root directory
-        cwd = strdup("/");
-    }
 
 
     thread_t* threads = malloc(sizeof(thread_t));
@@ -180,10 +169,94 @@ int create_process(
 }
 
 
-void free_process(process_t* process) {
+extern void kernel_process_entry(void);
+
+int create_kernel_process(process_t* process) {
+
+    // create a process with a single thread
+    thread_t* threads = malloc(sizeof(thread_t));
+    *threads = (thread_t) {
+        .exit_hooks = NULL,
+        .n_exit_hooks = 0,
+        .lock = 0,
+        .pid = 0,
+        .tid = 1,
+        .state = READY,
+        .running_cpu_id = 0,
+        .should_exit = 0,
+        .stack = (stack_t) {
+            .base = NULL,
+            .size = 0,
+        },
+        .kernel_stack = (stack_t) {
+        .base = malloc(THREAD_KERNEL_STACK_SIZE),
+        .size = THREAD_KERNEL_STACK_SIZE,
+        },
+    };
+
+    void* stack_top = threads->kernel_stack.base 
+                      + threads->kernel_stack.size;
+
+    uint64_t* saved_frame = (uint64_t*)stack_top - 1;
+
+    // frame top
+    *saved_frame = (uint64_t)0;
+
+
+    threads->rsp = (uint64_t)stack_top - sizeof(gp_regs_t) - 8;
+
     assert(process);
 
+    // set initial PC
+    threads[0].rsp->rip = (uint64_t)kernel_process_entry;
+
+    threads->rsp->cs  = KERNEL_CS;
+    threads->rsp->ss  = KERNEL_DS;
+    threads->rsp->rsp = (uint64_t)threads->rsp;
+
+    threads->rsp->rflags = USER_RF; // doesn't really matter
+
+    *process = (process_t) {
+        .n_threads = 1,
+        .threads = threads,
+        .page_dir_paddr = 0,
+        .saved_page_dir_paddr = 0,
+        .pid  = 0,
+        .ppid = 0,
+        .cwd  = strdup("/"), // root directory
+        .program = NULL,
+        .clock_begin = clock_ns()
+    };
+
+
+
+
+    process->fds = malloc(sizeof(file_descriptor_t) * MAX_FDS);
+
+    for(unsigned i = 0; i < MAX_FDS; i++) {
+        process->fds[i].type = FD_NONE;
+        process->fds[i].file = NULL;
+    }
+
+
+
+    log_info("kernel process created");
+
+    return 1;
+}
+
+
+
+void free_process(process_t* process) {
+
+    assert(interrupt_enable());
+    assert(process);
     assert(!process->n_threads);
+
+    if(process->pid == KERNEL_PID) {
+        log_info("free_process: kernel process");
+        // kernel process
+    }
 
     for(unsigned i = 0; i < MAX_FDS; i++) {
         if(process->fds[i].type != FD_NONE) {
@@ -192,7 +265,6 @@ void free_process(process_t* process) {
     }
 
     free(process->fds);
-
     free(process->cwd);
 
 
@@ -200,10 +272,14 @@ void free_process(process_t* process) {
         // thread buffer hasn't been freed yet
         free(process->threads);
 
-    elf_free(process->program);
+    if(process->program)
+        elf_free(process->program);
+
 
     free(process);
 }
+
+
 
 int replace_process(process_t* process, void* elffile, size_t elffile_sz) {
     // assert that the process is already mapped
