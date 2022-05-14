@@ -699,6 +699,7 @@ void setup_irqs(
 
 
 int nvme_install(driver_t* this) {
+    _sti();
 
     log_info("installing nvme driver...");
 
@@ -723,10 +724,9 @@ int nvme_install(driver_t* this) {
     // maybe the computer won't explode
     bar0->config = 0x460000;
 
-
-    while(bar0->status & 1) {
+    //log_info("wait for the controller to be ready...");
+    while(bar0->status & 1)
         sleep(1);
-    }
 
     bar0->aqattr = 
             ((ADMIN_QUEUE_SIZE-1) << 16) // admin queues
@@ -909,15 +909,6 @@ void perform_read_command(
       ==( buf_vaddr                 & ~0x0fff)
     );
 
-/*
-    int i = 0;
-
-    while(count != 0) {
-        if(i++) {
-            log_warn("bordel ");
-        }
-  */      
-
         uint64_t paddr = trv2p((void*)buf_vaddr);
         
 
@@ -993,14 +984,7 @@ void perform_write_command(
         ((buf_vaddr + (1 << shift)) & ~0x0fff)
       ==( buf_vaddr                 & ~0x0fff)
     );
-/*
-    int i = 0;
 
-    while(count != 0) {
-        if(i++) {
-            log_warn("bordel ");
-        }
-*/
         uint64_t paddr = trv2p((void*)buf_vaddr);
 
         _cli();

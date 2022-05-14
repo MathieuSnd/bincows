@@ -44,7 +44,7 @@ unsigned pcie_bar_size(void* config_space,
 // and set them up
 static void scan_drivers_callback(struct pcie_dev* dev) {
     register_dev((struct dev *)dev);
-
+/*
     log_info("pcie device: %s %2x:%2x:%2x.%2x, "
              "%2x.%2x.%2x, rev%x",
                 dev->dev.name.ptr,
@@ -58,6 +58,8 @@ static void scan_drivers_callback(struct pcie_dev* dev) {
                 dev->info.progIF,
                 dev->info.revID
                 );
+
+*/
 // 3.0: vga controller
 // 3.1: xga
 // 3.2: 3d

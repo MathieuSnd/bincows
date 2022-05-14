@@ -55,7 +55,6 @@ static void map_bar(uint64_t paddr,
                     void*    vaddr, 
                     uint32_t size
 ) {
-    //log_warn("MAP BAR %lx, size=%x", paddr, size);
     map_pages(
         paddr & ~0xfff, // align paddr and vaddr
         (uint64_t)vaddr & ~0xfff, // on a page 
