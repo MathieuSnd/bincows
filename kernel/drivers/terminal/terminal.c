@@ -207,9 +207,6 @@ char terminal_install(driver_t* this) {
 
     active_terminal = this;
 
-    // @todo remove this
-    d->current_fgcolor = 0xffffff;
-    d->current_bgcolor = 0;
     return 1;
 }
 
@@ -319,8 +316,6 @@ static void emplace_normal_char(driver_t* this, char c) {
 }
 
 
-
-
 static uint32_t colors[] = {
     0x0c0c1c, 0x400000, 0x13a10e, 0xc19c00,
     0x0037da, 0x881798, 0x3a96dd, 0xecec9d,
@@ -329,7 +324,6 @@ static uint32_t colors[] = {
 };
 
 // escape terminal colors
-//static uint32_t tcolors[] = 
 
 static void set_color(struct data* restrict d, unsigned tenth, unsigned unit) {
     (void) d;
@@ -394,34 +388,34 @@ static void emplace_char(driver_t* this, char c) {
             d->esc.idx++;
         }
         else {
-        switch(c) {
-            case 'm':
-                if(d->esc.idx == 2) {
+            switch(c) {
+                case 'm':
+                    if(d->esc.idx == 2) {
+                        // invalid escape sequence
+                        set_color(d, d->esc_seq[0], d->esc_seq[1]);
+                    }
+                    else if(d->esc.idx == 4) {
+                        set_color(d, d->esc_seq[0], d->esc_seq[1]);
+                        set_color(d, d->esc_seq[2], d->esc_seq[3]);
+                    }
+                    else if(d->esc.idx == 1 && d->esc_seq[0] == 0) {
+                        set_color(d, 3,7); // fg: white
+                        set_color(d, 4,0); // bg: black
+                    }
+
+                        // reset colors
+                    // else, the sequence is invalid
+
+                    d->esc.color = 0;
+                    d->esc.idx = 0;
+                    break;
+                case ';':
+                    break;
+                default:
                     // invalid escape sequence
-                    set_color(d, d->esc_seq[0], d->esc_seq[1]);
-                }
-                else if(d->esc.idx == 4) {
-                    set_color(d, d->esc_seq[0], d->esc_seq[1]);
-                    set_color(d, d->esc_seq[2], d->esc_seq[3]);
-                }
-                else if(d->esc.idx == 1 && d->esc_seq[0] == 0) {
-                    set_color(d, 3,7); // fg: white
-                    set_color(d, 4,0); // bg: black
-                }
-
-                    // reset colors
-                // else, the sequence is invalid
-
-                d->esc.color = 0;
-                d->esc.idx = 0;
-                break;
-            case ';':
-                break;
-            default:
-                // invalid escape sequence
-                d->esc.color = 0;
-                break;
-        }
+                    d->esc.color = 0;
+                    break;
+            }
         }
         return;
     }
@@ -429,9 +423,12 @@ static void emplace_char(driver_t* this, char c) {
 
     if(d->esc.seq && c == '[') {
         d->esc.color = 1;
+        d->esc.seq = 0;
         return;
     }
+
     d->esc.seq = 0;
+
 
     switch(c) {
     default:
@@ -443,12 +440,9 @@ static void emplace_char(driver_t* this, char c) {
     case '\x1b':
         d->esc.seq = 1;
         break;
-    
     case '\n':
         for(unsigned i=d->cur_col;i < d->ncols; i++) 
-        {
             emplace_normal_char(this, ' ');
-        }
         break;
     case '\t':
     {
@@ -457,7 +451,6 @@ static void emplace_char(driver_t* this, char c) {
             new_col = 0;
         while(d->cur_col < new_col)
             emplace_char(this, ' ');
-
     }
         break;
     case '\r':
@@ -476,11 +469,7 @@ static void emplace_char(driver_t* this, char c) {
         terminal_clear(this);
         break;
     }
-
 }
-
-
-
 
 
 
