@@ -10,7 +10,9 @@
 #include "../memory/heap.h"
 #include "../lib/time.h"
 #include "../lib/string.h"
+#include "../lib/panic.h"
 #include "../lib/stacktrace.h"
+#include "../int/idt.h"
 #include "apic.h"
 
 
@@ -22,7 +24,10 @@ typedef uint64_t(*sc_fun_t)(process_t*, void*, size_t);
 static sc_fun_t sc_funcs[SC_END];
 
 static inline void sc_warn(const char* msg, void* args, size_t args_sz) {
-/*
+    (void) args;
+    (void) args_sz;
+    (void) msg;
+
     log_debug("syscall process %u, thread %u: %s", 
              sched_current_pid(), 
              sched_current_tid(),
@@ -30,7 +35,7 @@ static inline void sc_warn(const char* msg, void* args, size_t args_sz) {
              args_sz
     );   
     stacktrace_print();
-*/
+
 }
 
 
@@ -206,6 +211,7 @@ static uint64_t sc_exit(process_t* proc, void* args, size_t args_sz) {
     sched_yield();
 
     panic("reached unreachable code");
+    __builtin_unreachable();
     //schedule();
 }
 
@@ -362,7 +368,6 @@ static uint64_t sc_exec(process_t* proc, void* args, size_t args_sz) {
 
         new_proc = sched_get_process(p);
 
-//        log_warn("new proc: %d", new_proc->pid);
     }
 
     // here, new_proc is currently mapped in memory
@@ -379,6 +384,7 @@ static uint64_t sc_exec(process_t* proc, void* args, size_t args_sz) {
         args_copy, cmd_args_sz, env_copy, env_sz
     );
 
+
     free(args_copy);
     free(env_copy);
 
@@ -394,19 +400,23 @@ static uint64_t sc_exec(process_t* proc, void* args, size_t args_sz) {
         return -1;
     }
 
+    pid_t new_pid = new_proc->pid;
+
     spinlock_release(&new_proc->lock);
 
+
+
+    _sti();
+
+
+    // unblock the process
+    sched_unblock(new_pid, 1);
+    
 
     // done :)
     // now we must restore the current process 
     // memory map before returning
 
-    _sti();
-    
-
-//   unmap_user();
-//   launch_shell();
-    
     set_user_page_map(proc->page_dir_paddr);
 /*
     dump(
@@ -422,7 +432,7 @@ static uint64_t sc_exec(process_t* proc, void* args, size_t args_sz) {
     );
 */
 
-    sched_yield();
+    //sched_yield();
 
     return 0;
 }   
@@ -432,35 +442,6 @@ static fd_t find_available_fd(process_t* proc) {
     for(fd_t i = 0; i < MAX_FDS; i++) {
         if(proc->fds[i].type == FD_NONE)
             return i;
-    }
-
-    return -1;
-}
-
-// insert the file and returrn file descriptor
-// return -1 if no free fd
-static fd_t insert_process_file(process_t* proc, file_handle_t* file) {
-    for(unsigned i = 0; i < MAX_FDS; i++) {
-        if(proc->fds[i].type == FD_NONE) {
-            proc->fds[i].file = file;
-            proc->fds[i].type = FD_FILE;
-            return i;
-        }
-    }
-
-    return -1;
-}
-
-
-// insert the dir and returrn file descriptor
-// return -1 if no free fd
-static fd_t insert_process_dir(process_t* proc, struct DIR* dir) {
-    for(unsigned i = 0; i < MAX_FDS; i++) {
-        if(proc->fds[i].type == FD_NONE) {
-            proc->fds[i].dir = dir;
-            proc->fds[i].type = FD_DIR;
-            return i;
-        }
     }
 
     return -1;
@@ -489,9 +470,6 @@ static uint64_t sc_open(process_t* proc, void* args, size_t args_sz) {
     }
 
 
-    int pid = proc->pid;
-
-
     fd_t fd = find_available_fd(proc);
 
 
@@ -515,6 +493,25 @@ static uint64_t sc_open(process_t* proc, void* args, size_t args_sz) {
             free(path);
             return -1;
         }
+        else if(a->flags & O_TRUNC) {
+            sc_warn("truncating directory", args, args_sz);
+
+            free(path);
+            return -1;
+        }
+        else if(a->flags & O_APPEND) {
+            sc_warn("appending to directory", args, args_sz);
+
+            free(path);
+            return -1;
+        }
+        else if(a->flags & O_CREAT) {
+            sc_warn("creating directory", args, args_sz);
+
+            free(path);
+            return -1;
+        }
+
         struct DIR* dir = vfs_opendir(path);
 
 
@@ -531,8 +528,14 @@ static uint64_t sc_open(process_t* proc, void* args, size_t args_sz) {
         }
     }
     else {
-        
+
         file_handle_t* h = vfs_open_file(path, a->flags);
+
+        if(a->flags & O_TRUNC) {
+            vfs_truncate_file(h, 0);
+            h->file_offset = 0;
+        }
+
 
         if(!h) {
             sc_warn("failed to open file", args, args_sz);
@@ -552,6 +555,39 @@ static uint64_t sc_open(process_t* proc, void* args, size_t args_sz) {
 
     return fd;
 }
+
+uint64_t sc_truncate(process_t* proc, void* args, size_t args_sz) {
+    if(args_sz != sizeof(struct sc_truncate_args)) {
+        sc_warn("bad args_sz", args, args_sz);
+        return -1;
+    }
+
+    struct sc_truncate_args* a = args;
+
+    // check a->fd
+
+    fd_t fd = a->fd;
+
+    if(fd >= MAX_FDS) {
+        sc_warn("bad fd", args, args_sz);
+        return -1;
+    }
+
+    if(proc->fds[fd].type == FD_NONE) {
+        sc_warn("fd not open", args, args_sz);
+        return -1;
+    }
+
+    if(proc->fds[fd].type != FD_FILE) {
+        sc_warn("can only truncate files", args, args_sz);
+        return -1;
+    }
+
+    int res = vfs_truncate_file(proc->fds[fd].file, a->size);
+
+    return res = 0 ? 0 : -1;
+}
+
 
 
 static uint64_t sc_close(process_t* proc, void* args, size_t args_sz) {
@@ -661,7 +697,7 @@ static uint64_t sc_access(process_t* proc, void* args, size_t args_sz) {
 
     if(fs == FS_NO)
         ret = -1;
-    else if(d.type == DT_DIR && a->type & (R_OK|W_OK|X_OK) != 0) 
+    else if(d.type == DT_DIR && (a->type & (R_OK|W_OK|X_OK)) != 0) 
         ret = -1;
     else if(a->type & W_OK && (!fs || fs->read_only))
         ret = -1;
@@ -765,6 +801,7 @@ static uint64_t sc_write(process_t* proc, void* args, size_t args_sz) {
 }
 
 
+
 static uint64_t sc_chdir(process_t* proc, void* args, size_t args_sz) {
     if(args_sz != sizeof(struct sc_chdir_args)) {
         sc_warn("bad args_sz", args, args_sz);
@@ -774,6 +811,7 @@ static uint64_t sc_chdir(process_t* proc, void* args, size_t args_sz) {
     struct sc_chdir_args* a = args;
 
     check_args(proc, a->path, a->path_len);
+
 
     if(a->path[a->path_len-1] != 0) {
         sc_warn("invalid path", args, args_sz);
@@ -787,6 +825,8 @@ static uint64_t sc_chdir(process_t* proc, void* args, size_t args_sz) {
 
     char* path = get_absolute_path(proc->cwd, a->path);
 
+
+
     if(strlen(path) > MAX_PATH) {
         sc_warn("path too long", args, args_sz);
         free(path);
@@ -798,18 +838,24 @@ static uint64_t sc_chdir(process_t* proc, void* args, size_t args_sz) {
     fs_t* fs = vfs_open(path, &d);
 
 
-    free(path);
+
+    int res;
 
 
     if(fs != FS_NO && d.type == DT_DIR) {
         free(proc->cwd);
         proc->cwd = malloc(strlen(path) + 1);
+
         simplify_path(proc->cwd, path);
+
+        res = 0;
     }
     else
-        return -1;
+        res = -1;
 
-    return 0;
+    free(path);
+
+    return res;
 }
 
 
@@ -831,6 +877,7 @@ static uint64_t sc_getcwd(process_t* proc, void* args, size_t args_sz) {
 
         return (uint64_t)NULL;
     }
+
 
     strcpy(a->buf, proc->cwd);
 
@@ -985,13 +1032,14 @@ void syscall_init(void) {
 
 char* scname[] = {
     "NULL",
-    "SLEEP", 
+    "SLEEP",            
     "CLOCK", 
     "EXIT", 
     "OPEN", 
     "CLOSE", 
     "READ", 
-    "WRITE", 
+    "WRITE",
+    "TRUNCATE", 
     "SEEK", 
     "ACCESS",
     "DUP", 
@@ -1026,12 +1074,15 @@ uint64_t syscall_main(uint8_t scid, void* args, size_t args_sz) {
 
 
     if(!scid && scid >= SC_END) {
-        log_warn("process %u, thread %u: bad syscall", sched_current_pid(), sched_current_tid());
+        log_info("process %u, thread %u: bad syscall", sched_current_pid(), sched_current_tid());
         for(;;)
             asm ("hlt");
     }
     else {
-        //log_debug("%u.%u: %s", sched_current_pid(), sched_current_tid(), scname[scid]);
-        return sc_funcs[scid](process, args, args_sz);
+//        log_debug("%u.%u: %s", sched_current_pid(), sched_current_tid(), scname[scid]);
+        uint64_t res = sc_funcs[scid](process, args, args_sz);
+
+
+        return res;
     }
 }
