@@ -74,8 +74,18 @@ elf_program_t* elf_load(const void* file, size_t file_size) {
     
     const ehdr_t* ehdr = file;
 
-    if(!check_elf_header(ehdr, file_size))
+    if(!check_elf_header(ehdr, file_size)) {
+        log_debug("elf_load: invalid elf header. file_size: %d. ehdr dump:", file_size);
+        dump(
+            file,
+            sizeof(ehdr_t),
+            16,
+            DUMP_8
+        );
+        
         return NULL;
+    }
+    
     elf_program_t* prog = malloc(
         sizeof(elf_program_t) +
         sizeof(prog->segs[0]) * ehdr->phdr_table_size
@@ -96,7 +106,7 @@ elf_program_t* elf_load(const void* file, size_t file_size) {
         prog->segs[j].base   = (void*)phdr->p_addr;
 
 
-
+/*
         log_warn(
             "i = %u\n"
             "prog->segs[j].base=%lx \n"
@@ -107,7 +117,7 @@ elf_program_t* elf_load(const void* file, size_t file_size) {
             (prog->segs[j].length+0xfff) >> 12,
             prog->segs[j].flags
         );
-
+*/  
         if(phdr->p_type != PT_LOAD) {
             --j;
             continue;
@@ -132,6 +142,7 @@ elf_program_t* elf_load(const void* file, size_t file_size) {
 
         // map segments without paging attributes
         // until we copied the content
+        
         alloc_pages(
             (void*) ((uint64_t)prog->segs[j].base & ~0x0fff),
             page_count,
