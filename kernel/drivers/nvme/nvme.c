@@ -49,7 +49,7 @@ static void remove(driver_t* this);
 
 static atomic_int cmd_counter = 0;
 
-static make_cmdid(int task_id) {
+static int make_cmdid(int task_id) {
     int cmdid = task_id | (cmd_counter % IO_QUEUE_SIZE);
 
     cmd_counter = cmd_counter + 1;
@@ -977,7 +977,7 @@ void perform_write_command(
     
     unsigned shift = data->namespaces[0].block_size_shift;
 
-    assert(count <= (0x1000 >> shift) && count);
+    assert(count <= (0x1000llu >> shift) && count);
 
     // must not cross a 4K page boudary
     assert(
@@ -1002,17 +1002,6 @@ void perform_write_command(
             count - 1                    // cdw12 low part: count-1
         );
         _sti();
-/*
-    }
-    /*
-    while(
-        //data->io_queues.sq.head != data->io_queues.sq.tail
-        !queue_empty(&data->io_queues.sq) 
-        || !queue_empty(&data->io_queues.cq)
-    )
-        sleep(1);
-
-    */
 }
 
 
