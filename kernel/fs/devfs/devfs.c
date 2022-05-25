@@ -4,6 +4,7 @@
 #include "../../lib/string.h"
 #include "../../lib/logging.h"
 #include "../../lib/assert.h"
+#include "../../lib/panic.h"
 #include "../../memory/heap.h"
 #include "devfs.h"
 
@@ -215,6 +216,19 @@ int devfs_unmap_device(const char* name) {
 }
 
 
+static 
+void truncate_file(struct fs* restrict fs, 
+             const file_t*    restrict fd, 
+                   size_t            size
+) {
+    (void)fs;
+    (void)fd;
+    (void)size;
+
+    panic("truncate not implemented");
+}
+
+
 
 fs_t* devfs_mount(void) {
     fs_t* fs = malloc(sizeof(fs_t) + sizeof(struct devfs_priv));
@@ -233,6 +247,7 @@ fs_t* devfs_mount(void) {
     fs->file_access_granularity = 1;
 
     fs->n_open_files = 0;
+    fs->truncatable = 0;
 
     fs->root_addr = 0;
 
@@ -244,6 +259,9 @@ fs_t* devfs_mount(void) {
     fs->update_dirent      = update_dirent;
     fs->add_dirent         = add_dirent;
     fs->unmount            = devfs_unmount;
+    fs->truncate_file      = truncate_file;
+
+
 
 
     assert(!devfs);

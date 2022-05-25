@@ -66,6 +66,12 @@ struct file_ent {
     // posix files writes and reads are
     // atomic. 
     int accessed;
+    
+
+
+    // if 1, the file has been modified 
+    // and then should be flushed to disk
+    int modified;
 
     // number of distincs file handlers
     // associated with this file
@@ -170,6 +176,7 @@ uint64_t search_or_insert_file(
 
         .fhs = NULL,
         .n_insts = 0,
+        .modified = 0,
     };
 
     spinlock_release(&vfile_lock);
@@ -183,6 +190,7 @@ uint64_t search_or_insert_file(
 
 
 static struct file_ent* aquire_vfile(uint64_t vfile_id) {
+    assert(!interrupt_enable());
     spinlock_acquire(&vfile_lock);
 
     for(unsigned i = 0; i < n_open_files; i++) {
@@ -197,7 +205,7 @@ static struct file_ent* aquire_vfile(uint64_t vfile_id) {
 }
 
 static void release_vfile(void) {
-    spinlock_release(&vfile_lock);
+        spinlock_release(&vfile_lock);
 }
 
 
@@ -212,17 +220,19 @@ static void register_handle_to_vfile(
     uint64_t rf = get_rflags();
     _cli();
 
-    struct file_ent* file_ent = aquire_vfile(vfile_id);
+    {
+        struct file_ent* file_ent = aquire_vfile(vfile_id);
 
-    // register the handle in the file entry
-    file_ent->n_insts++;
-    file_ent->fhs = realloc(file_ent->fhs, 
-                        file_ent->n_insts * sizeof(file_handle_t *));
+        // register the handle in the file entry
+        file_ent->n_insts++;
+        file_ent->fhs = realloc(file_ent->fhs, 
+                            file_ent->n_insts * sizeof(file_handle_t *));
 
 
-    file_ent->fhs[file_ent->n_insts - 1] = handle;
+        file_ent->fhs[file_ent->n_insts - 1] = handle;
 
-    release_vfile();
+        release_vfile();
+    }
     set_rflags(rf);
 }
 
@@ -309,6 +319,20 @@ void invalidate_handlers_buffer(
     }
 }
 
+static
+void set_stream_offset(file_handle_t* stream, 
+                       uint64_t absolute_offset
+) {
+    size_t block_size = stream->fs->file_access_granularity;
+
+
+    stream->file_offset   = absolute_offset;
+    stream->sector_offset = absolute_offset % block_size;
+    stream->sector_count  = absolute_offset / block_size;
+    stream->buffer_valid  = 0;
+}
+
+
 
 
 file_handle_t* vfs_open_file(const char *path, int flags) {
@@ -336,7 +360,7 @@ file_handle_t* vfs_open_file(const char *path, int flags) {
     file_handle_t* h = create_handler(fs, &dirent, path);
 
     if(flags & VFS_APPEND)
-        h->file_offset = dirent.file_size;
+        set_stream_offset(h, dirent.file_size);
 
     h->flags = flags;
 
@@ -433,9 +457,12 @@ void vfs_lazy_flush(void) {
         free(local_lazy_flush_entries);
 }
 
-static void flush(struct file_ent* vfile) {
 
+static void flush(struct file_ent* vfile) {
     assert(!interrupt_enable());
+
+    if(!vfile->modified)
+        return;
 
     lazy_flush_entries = realloc(lazy_flush_entries, 
                             (n_lazy_flush_entries + 1) * sizeof(flush_args_t));
@@ -445,26 +472,31 @@ static void flush(struct file_ent* vfile) {
         .addr = vfile->addr,
         .file_size = vfile->file_size
     };
-
-    
+  
     
     vfs_update_metadata_cache(
         vfile->path,
         vfile->addr,
         vfile->file_size
     );
+    
 }
 
 
 void vfs_flush_file(file_handle_t *handle) {
 
+    //if(handle->flags & VFS_WRITE == 0)
+    //    return;
+
     assert(interrupt_enable());
 
     _cli();
-    struct file_ent* vfile = aquire_vfile(handle->vfile_id);
-    flush(vfile);
+    {
+        struct file_ent* vfile = aquire_vfile(handle->vfile_id);
+        flush(vfile);
 
-    release_vfile();
+        release_vfile();
+    }
 
     _sti();
 }
@@ -473,8 +505,8 @@ void vfs_flush_file(file_handle_t *handle) {
 /**
  * @todo
  */
-void vfs_close_file(file_handle_t *handle)
-{
+void vfs_close_file(file_handle_t *handle) {
+
     fs_t *fs = handle->fs;
 
     _cli();
@@ -483,8 +515,15 @@ void vfs_close_file(file_handle_t *handle)
 
     open_file->n_insts--;
 
+    // when the file is closed, we 
+    // should flush it to disk
+    if(handle->flags & VFS_WRITE)
+        open_file->modified = 1;
+
 
     if(!open_file->n_insts) {
+        // @todo do not remove the file every time
+        // let the kernel process do it
 
         // no one holds the file anymore
         flush(open_file);
@@ -499,9 +538,6 @@ void vfs_close_file(file_handle_t *handle)
 
         int found = 0;
 
-
-        // @todo
-        // c'est de la merde faut tout changer
         for(unsigned i = 0; i < n_open_files + 1; i++) {
             if(&open_files[i] == open_file) {
                 // found it!
@@ -573,24 +609,88 @@ static void aquire_file_access(uint64_t vfile_id) {
     
     do {
         _cli();
-        struct file_ent* vfile = aquire_vfile(vfile_id);
-        accessed = vfile->accessed;
-
-        release_vfile();
+        {
+            struct file_ent* vfile = aquire_vfile(vfile_id);
+            accessed = vfile->accessed;
+            vfile->accessed = 1;
+            release_vfile();
+        }
         _sti();
 
+        
         if(accessed)
-            sleep(10);
+            sleep(0);
+
+        
+        // yield until the process is done
     } while(accessed);
 }
 
 static void release_file_access(uint64_t vfile_id) {
+
+    assert(interrupt_enable());
+
     _cli();
-    struct file_ent* vfile = aquire_vfile(vfile_id);
-    vfile->accessed = 0;
-    release_vfile();
+    {
+                struct file_ent* vfile = aquire_vfile(vfile_id);
+        assert(vfile);
+                vfile->accessed = 0;
+                release_vfile();
+    }
     _sti();
 }
+
+
+
+int vfs_truncate_file(file_handle_t *handle, uint64_t size)
+{
+    fs_t *fs = handle->fs;
+
+    assert(interrupt_enable());
+
+    if(     !fs->truncatable 
+    // can only truncate files open in write mode
+     || (handle->flags & VFS_WRITE) == 0) 
+        return -1;
+
+
+    file_t file;
+    // aquire vfile
+    {
+        _cli();
+        struct file_ent* f = aquire_vfile(handle->vfile_id);
+        f->accessed = 1;
+        file = f->file;
+        release_vfile();
+        _sti();
+    }
+
+    int res = fs->truncate_file(fs, &file, size);
+
+    log_debug("truncate_file: %d", res);
+
+    // release vfile
+    {
+        _cli();
+        struct file_ent* f = aquire_vfile(handle->vfile_id);
+
+        // invalidate access granularity caches for this file
+        invalidate_handlers_buffer(f, NULL);
+        
+        // the operation can fail
+        if(!size)
+            f->file_size = size;
+
+
+        f->accessed = 0;
+        release_vfile();
+        _sti();
+    }
+
+
+    return res;
+}
+
 
 
 
@@ -615,10 +715,12 @@ size_t vfs_read_file(void *ptr, size_t size, size_t nmemb,
     {
         _cli();
         struct file_ent* vfile = aquire_vfile(stream->vfile_id);
+
         file_size = vfile->file_size;
         release_vfile();
         _sti();
     }
+
 
     unsigned granularity = fs->file_access_granularity;
 
@@ -766,11 +868,14 @@ size_t vfs_write_file(const void *ptr, size_t size, size_t nmemb,
     assert(interrupt_enable());
 
 
+
     if(bsize == 0) {
         return 0;
     }
 
     aquire_file_access(stream->vfile_id);
+
+    
 
     assert(stream);
     assert(ptr);
@@ -784,6 +889,24 @@ size_t vfs_write_file(const void *ptr, size_t size, size_t nmemb,
     
     
 
+
+    // this filed is a copy.
+    // if the file size is to be updated, we have to 
+    // reaquire the vfile.
+    
+    file_t file_copy;
+    _cli();
+    {
+        struct file_ent* vfile = aquire_vfile(stream->vfile_id);
+        file_copy = vfile->file;
+
+        release_vfile();
+    }
+    _sti();
+
+    if(stream->flags & VFS_APPEND)
+        set_stream_offset(stream, file_copy.file_size);
+
     unsigned must_write = stream->sector_offset + bsize;
 
     size_t write_blocks = CEIL_DIV(must_write, granularity);
@@ -795,15 +918,11 @@ size_t vfs_write_file(const void *ptr, size_t size, size_t nmemb,
 
     unsigned write_buf_size = write_blocks * granularity;
 
+    assert(stream->sector_offset + bsize <= write_buf_size);
 
-    // this filed is a copy.
-    // if the file size is to be updated, we have to 
-    // reaquire the vfile.
-    _cli();
-    file_t file_copy = aquire_vfile(stream->vfile_id)->file;
-    release_vfile();
-    _sti();
+    
 
+    // print file_copy
     // if the selected write is perfectly aligned,
     // the we don't need another buffer
     if(stream->sector_offset == 0 && end_offset == 0) {
@@ -851,6 +970,7 @@ size_t vfs_write_file(const void *ptr, size_t size, size_t nmemb,
         |=========|=========|=========|=========|=========|
     */
     else {
+
         void* write_buf = malloc(write_buf_size);
 
         // unaligned beginning
@@ -862,7 +982,11 @@ size_t vfs_write_file(const void *ptr, size_t size, size_t nmemb,
                 < file_copy.file_size)
 
                 // less than 1 sector is written
-            || stream->sector_offset + bsize < granularity
+                // and the write doesn't reach 
+                // the end of the file
+            || (stream->sector_offset + bsize < granularity
+                && stream->file_offset + bsize 
+                    < file_copy.file_size)
             ) {
             if(!stream->buffer_valid || !cachable) {
                 // must read before writing
@@ -928,8 +1052,11 @@ size_t vfs_write_file(const void *ptr, size_t size, size_t nmemb,
             }
         }
 
+        
+        assert(stream->sector_offset + bsize <= write_buf_size);
         memcpy(write_buf + stream->sector_offset, ptr, bsize);
 
+        
         fs->write_file_sectors(
             fs,
             &file_copy,
@@ -937,6 +1064,7 @@ size_t vfs_write_file(const void *ptr, size_t size, size_t nmemb,
             stream->sector_count,
             write_blocks
         );
+        
 
         free(write_buf);
     }
@@ -952,16 +1080,20 @@ size_t vfs_write_file(const void *ptr, size_t size, size_t nmemb,
         // update file size
         // we need to reaquire the vfile
         _cli();
-        struct file_ent *vfile = aquire_vfile(stream->vfile_id);
-        vfile->file_size = stream->file_offset;
-        invalidate_handlers_buffer(vfile, stream);
+        {
 
-        release_vfile();
+                        struct file_ent *vfile = aquire_vfile(stream->vfile_id);
+                        vfile->file_size = stream->file_offset;
+            
+            invalidate_handlers_buffer(vfile, stream);
+            
+            release_vfile();
+        }
         _sti();
     }
 
 
-
+    
 
     release_file_access(stream->vfile_id);
 
@@ -998,13 +1130,7 @@ uint64_t vfs_seek_file(file_handle_t *restrict stream, uint64_t offset, int when
         return -1;
     }
 
-    size_t block_size = stream->fs->file_access_granularity;
-
-
-    stream->file_offset   = absolute_offset;
-    stream->sector_offset = absolute_offset % block_size;
-    stream->sector_count  = absolute_offset / block_size;
-    stream->buffer_valid  = 0;
+    set_stream_offset(stream, absolute_offset);
 
     // everything is fine: return 0
     return absolute_offset;

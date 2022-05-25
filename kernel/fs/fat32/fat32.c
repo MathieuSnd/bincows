@@ -18,6 +18,8 @@
  */
 #define FAT_CACHE_SIZE 2048
 
+int fat32_truncate_file(fs_t* fs, const file_t* restrict  file, uint64_t file_size);
+
 
 // stolen from Linux source
 static inline 
@@ -1047,9 +1049,10 @@ fs_t* fat32_mount(disk_part_t* part) {
     fs->file_access_granularity = block_size(part);
     fs->n_open_files = 0;
 
-    fs->cacheable = 1;
-    fs->read_only = 0;
-    fs->seekable  = 1;
+    fs->cacheable   = 1;
+    fs->read_only   = 0;
+    fs->seekable    = 1;
+    fs->truncatable = 1;
 
     fs->root_addr = root_dir_cluster;
 
@@ -1065,6 +1068,7 @@ fs_t* fat32_mount(disk_part_t* part) {
     fs->free_dirents       = fat32_free_dirents;
     fs->add_dirent         = fat32_add_dirent;
     fs->unmount            = fat32_unmount;
+    fs->truncate_file      = fat32_truncate_file;
 
 
     fat32_privates_t* pr = (void*)fs + sizeof(fs_t);
@@ -1124,7 +1128,7 @@ static
 cluster_t fetch_cluster(
         fs_t* restrict fs,
         fat32_privates_t* restrict pr,
-        file_t* fd, 
+        const file_t* fd, 
         size_t off,
         uint64_t* end
 ) {
@@ -1144,6 +1148,142 @@ cluster_t fetch_cluster(
 
     *end = ~0llu;
     return cluster;
+}
+
+
+
+static 
+int extend_file(fs_t* fs, 
+                const file_t* restrict  file, 
+                uint64_t file_size
+) {
+    assert(file_size > file->file_size);
+
+    unsigned extend = file_size - file->file_size;
+
+    if(extend > 1 >> 31)
+        return 1; // too big
+    const unsigned max_buf_size = 8 * 1024 * 1024;
+
+    int sz = extend > max_buf_size ? max_buf_size : extend;
+    void* buf = malloc(sz);
+
+    memset(buf, 0, sz);
+
+    while(extend) {
+        unsigned to_write = extend > max_buf_size ? max_buf_size : extend;
+        extend -= to_write;
+            
+        // we need to extend the file
+        fat32_write_file_sectors(
+            fs,
+            file,
+            buf,
+            file->file_size,
+            extend
+        );
+    }
+
+    return 0; // success
+}
+
+
+
+static 
+int trunc_file(fs_t* fs, 
+                const file_t* restrict  file, 
+                uint64_t file_size
+) {
+    fat32_privates_t* restrict pr = (void*)(fs+1);
+    disk_part_t* restrict part = fs->part;
+
+    assert(file_size < file->file_size);
+
+
+    const unsigned cluster_bsize = pr->cluster_size * block_size(fs->part);
+
+    int trunc_clusters = 
+        file->file_size / cluster_bsize  // old cluster count
+      - file_size       / cluster_bsize; // new cluster count
+
+    assert(trunc_clusters >= 0);
+
+    if(file->file_size - file_size > cluster_bsize)
+        return -1; // too big
+
+    // if the new limit is in the middle of the cluster
+    // of the old limit, there is no trucation to do
+    else if(trunc_clusters == 0)
+        return 0; // success
+
+    
+
+    // fetch the new last cluster of the file
+    uint64_t clusterend = 0;
+    uint32_t cluster = fetch_cluster(
+                        fs, pr, file, 
+                        file_size / pr->cluster_size, 
+                        &clusterend);
+
+    // if this fails, the fs is f***ed up
+    assert(clusterend != ~0llu);
+
+    // if this expression is false,
+    // then the FS is broken
+    // cluster endd is the index of the requested cluster
+    assert(clusterend == file_size / pr->cluster_size);
+
+
+    // mark the last cluster as the chain end
+    linkFAT(part, pr, cluster, 0x0fffffff);
+
+
+
+
+
+    // free the rest of the cluster chain
+    for(int i = 0; i < trunc_clusters; i++) {
+        // get the next one
+        cluster_t next = readFAT(part, pr, cluster);
+
+        // mark this cluster as free
+        linkFAT(part, pr, cluster, 0);
+
+        if(i != trunc_clusters - 1) {
+            // if this is not the last cluster,
+            // the next one should be allocated
+            assert(next != 0);
+        }
+        else {
+            // if this is the last cluster,
+            // it should be the last one
+            assert(next == 0);
+        }
+
+        cluster = next;
+    }
+
+    return 0; // success
+}
+
+
+int fat32_truncate_file(fs_t* fs, 
+            const file_t* restrict  file, uint64_t file_size
+) {
+    assert(fs->type == FS_TYPE_FAT);
+
+
+    if(file_size > file->file_size)  {
+    log_warn("zefzrg");
+
+        return extend_file(fs, file, file_size);
+    }
+    
+    else if(file_size < file->file_size) 
+        return trunc_file(fs, file, file_size);
+
+    // success
+    return 0;
 }
 
 

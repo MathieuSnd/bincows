@@ -118,6 +118,7 @@ typedef struct fs {
             unsigned read_only: 1;
             unsigned cacheable: 1;
             unsigned seekable: 1;
+            unsigned truncatable: 1;
         };
     };
 
@@ -169,6 +170,10 @@ typedef struct fs {
      * must be at least fd_size big
      */
     //void (*close_file)(void *);
+
+
+    int (*truncate_file)(struct fs* restrict fs, 
+                        const file_t* restrict file, size_t size);
 
 
 

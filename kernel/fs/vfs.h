@@ -225,6 +225,14 @@ int vfs_update_metadata_disk(const char* path, uint64_t cluster, size_t file_siz
 int vfs_update_metadata_cache(const char* path, uint64_t cluster, size_t file_size);
 
 
+/** 
+ * @brief truncate a file
+ * 
+ * @param handle the file handle
+ * @param size the new size
+ * @return int 0 if success
+ */
+int vfs_truncate_file(file_handle_t *handle, uint64_t size);
 
 /**
  * @brief flush the file metadata to disk
@@ -245,7 +253,7 @@ void vfs_lazy_flush(void);
 #define VFS_WRITE 2
 #define VFS_RDWR 3
 
-#define VFS_APPEND 4
+#define VFS_APPEND 32
 
 /** 
  * @brief open a file
