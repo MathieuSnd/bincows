@@ -10,6 +10,7 @@
 #include "../lib/logging.h"
 #include "../lib/registers.h"
 #include "../smp/smp.h"
+#include "../int/idt.h"
 
 
 #define CR0_WP            (1lu << 16)
@@ -122,7 +123,6 @@ static void* extract_pointer(void* c)  {
 
 
 // the current page flags 
-//static unsigned current_page_flags;
 
 
 
@@ -467,7 +467,7 @@ static void free_page_table(uint64_t pt) {
 
     // if the buffer is not full, we can store it
     else {
-        zero_page_table_page(pt);
+        zero_page_table_page((void*)pt);
         page_table_allocator_buffer[page_table_allocator_buffer_size++] = (void*)pt;
     }
 }
@@ -848,7 +848,7 @@ uint64_t alloc_user_page_map(void) {
     set_rflags(rf);
 
 
-    uint8_t* v = translate_address(p);
+    uint8_t* v = translate_address((void*)p);
 
     for(int i = 0; i < 0x1000; i++) {
         assert(v[i] == 0);
@@ -869,7 +869,7 @@ uint64_t alloc_user_page_map(void) {
 // level: 0: page
 static void deep_free_map(uint64_t page_table, int level) {
     if(!level) {
-        physfree((void*)page_table);
+        physfree(page_table);
         return;
     }
 
@@ -881,7 +881,7 @@ static void deep_free_map(uint64_t page_table, int level) {
 
             if(level == 1)
                 // shortcut the last level
-                physfree((void*)page_table_addr);
+                physfree(page_table_addr);
             else
                 deep_free_map(page_table_addr, level - 1);
         }
