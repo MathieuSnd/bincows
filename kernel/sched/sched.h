@@ -7,8 +7,13 @@
 #define MAX_PID 0xffff
 
 
+// blocking the current thread consists
+// in triggering a special software
+// interrupt that changes the thread state
+#define BLOCK_IRQ 46
 
-#define SLEEP_IRQ 46
+// a yield consists in a software interrupt
+// that just schedules
 #define YIELD_IRQ 47
 
 
@@ -37,6 +42,11 @@ void sched_cleanup(void);
 
 
 
+// return 1 if the sched is well initialized
+// and is currently running
+int sched_is_running(void);
+
+
 // every interrupt handler should call
 // either sched_irq_ack() or schedule()
 void sched_irq_ack(void);
@@ -46,6 +56,22 @@ int timer_irq_should_schedule(void);
 
 void __attribute__((noreturn)) schedule(void); 
 
+/**
+ * @brief block the current thread
+ * 
+ */
+void sched_block(void);
+
+/**
+ * @brief block a thread that has been blocked
+ * 
+ * @param pid the pid of the thread to unblock
+ * @param tid the tid of the thread to unblock
+ */
+void sched_unblock(pid_t pid, tid_t tid);
+
+
+void sched_launch_process(process_t* p);
 
 /**
  * return a fresh new pid that 

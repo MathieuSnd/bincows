@@ -7,6 +7,7 @@
 #include "../lib/assert.h"
 #include "../lib/logging.h"
 #include "../lib/sprintf.h"
+#include "../lib/time.h"
 #include "../memory/vmap.h"
 #include "../drivers/hpet.h"
 #include "../lib/string.h"
@@ -75,16 +76,25 @@ void lapic_timer_handler(void* arg) {
 
     timer_offset += 1000 * 1000 * 1000 / LAPIC_IRQ_FREQ;
 
+    wakeup_threads();
+
     apic_eoi();
     
-    schedule();
+    if(timer_irq_should_schedule())
+        schedule();
 }  
 
 
-static uint64_t lapic_period;
+static uint64_t lapic_period = 0;
+
 
 
 uint64_t clock_ns(void)  {
+    
+    // uninitialized
+    if(lapic_period == 0)
+        return lapic_period;
+
     return timer_offset +
              (apic_config->timer_initial_count.reg - apic_config->timer_current_count.reg) * lapic_period;
 }

@@ -1,6 +1,7 @@
 #include "sched.h"
 #include "process.h"
 #include "../int/idt.h"
+#include "../acpi/power.h"
 #include "../int/apic.h"
 #include "../lib/logging.h"
 #include "../memory/vmap.h"
@@ -58,7 +59,18 @@ static int currenly_in_nested_irq = 0;
 
 static int sched_running = 0;
 
+// 1 if the kernel process is doing
+// something important and doesn't 
+// want to be interrupted
+static _Atomic int kernel_process_running = 0;
 
+static 
+thread_t* get_thread_by_tid(process_t* process, tid_t tid);
+
+
+int sched_is_running(void) {
+    return sched_running;
+}
 
 
 
@@ -77,12 +89,16 @@ static process_t** killed_processes = NULL;
 static int n_killed_processes = 0;
 
 
+// this field is useful for the kernel process
+// to know if it can put the system in idle
+static int n_ready_processes = 0;
+
 /**
  * this lock is used to protect the process table
  * and the ready queues
  * 
  */
-fast_spinlock_t sched_lock = {0};
+static fast_spinlock_t sched_lock = {0};
 
 /**
  * when invoking a syscall,
@@ -95,16 +111,40 @@ void** syscall_stacks;
 
 
 static void yield_irq_handler(struct driver* unused) {
-    //log_info("YIELD current pid: %u", current_pid);
     (void) unused;
 
     schedule();
 }
 
-static void sleep_irq_handler(struct driver* unused) {
+
+static void block_irq_handler(struct driver* unused) {
     (void) unused;
 
-    for(;;) asm("hlt");
+    process_t* p = sched_current_process();
+    assert(p);
+
+    thread_t* t = get_thread_by_tid(p, current_tid);
+
+    if(t->state == READY) {
+        // the approch is optimistic
+        // a processor could have executed 
+        // the thread. This is why the block function
+        // should be executed in a loop.
+
+        // the thread will eventually block.
+
+        // @todo it doesn't work if the thread
+        // gets unblocked before it is actually blocked!!
+        // it can be avoided with a "soft_blocked" flag
+        t->state = BLOCKED;
+
+        n_ready_processes--;
+    }
+    // else, don't do anything
+
+    spinlock_release(&p->lock);
+
+    schedule();
 }
 
 
@@ -138,7 +178,7 @@ void sched_init(void) {
 
     // init the virtual yield IRQ 
     register_irq(YIELD_IRQ, yield_irq_handler, 0);
-    register_irq(SLEEP_IRQ, sleep_irq_handler, 0);
+    register_irq(BLOCK_IRQ, block_irq_handler, 0);
 
     // add the kernel process
     _cli();
@@ -149,6 +189,10 @@ void sched_init(void) {
     spinlock_release(&sched_lock);
 
     _sti();
+
+
+    // unblock the kernel process
+    sched_unblock(KERNEL_PID, 1);
 }
 
 
@@ -290,8 +334,6 @@ process_t* sched_get_process(pid_t pid) {
 
 
 
-
-
 pid_t sched_create_process(pid_t ppid, const void* elffile, size_t elffile_sz) {
     process_t new;
 
@@ -335,6 +377,13 @@ pid_t sched_create_process(pid_t ppid, const void* elffile, size_t elffile_sz) {
 }
 
 
+void sched_launch_process(process_t* p) {
+    assert(p->n_threads == 1);
+    p->threads[0].state = READY;
+    n_ready_processes++;
+}
+
+
 int sched_kill_process(pid_t pid, int status) {
     // the entier operation is critical
     _cli();
@@ -371,6 +420,8 @@ int sched_kill_process(pid_t pid, int status) {
             // and free the thread
 
             thread_terminate(thread, status);
+            n_ready_processes--;
+
 
             // remove the element from the list
             *thread = process->threads[process->n_threads - 1];
@@ -447,6 +498,7 @@ void  sched_save(gp_regs_t* rsp) {
 
         assert(t);
 
+        n_ready_processes++;
         t->state = READY;
         t->rsp = rsp;
 
@@ -474,7 +526,7 @@ void sched_free_killed_processes(void) {
     // copy the killed processes list to a local variable
     // then clear the list
 
-    int n = n_killed_processes;
+    unsigned n = n_killed_processes;
 
     process_t** to_kill = malloc(sizeof(process_t*) * n);
     memcpy(
@@ -521,15 +573,16 @@ void sched_cleanup(void) {
 
     spinlock_acquire(&sched_lock);
 
-    for(int i = 0; i < n_processes; i++) {
+    for(unsigned i = 0; i < n_processes; i++) {
         process_t* p = processes[i];
 
         spinlock_acquire(&p->lock);
 
-        for(int j = 0; j < p->n_threads; j++) {
+        for(unsigned j = 0; j < p->n_threads; j++) {
             thread_t* t = &p->threads[j];
 
             thread_terminate(t, 1);
+            n_ready_processes--;
         }
 
         p->n_threads = 0;
@@ -577,6 +630,8 @@ static process_t* choose_next(void) {
 
     _cli();
 
+    assert(n_processes);
+
     // lock the process table
     spinlock_acquire(&sched_lock);
 
@@ -584,14 +639,39 @@ static process_t* choose_next(void) {
         current_process = 0;
     
 
-    if(n_processes) {
-        p = processes[current_process];
-        // lock the process
-        //log_debug("choose_next: %u / %u", current_process, n_processes);
-        spinlock_acquire(&p->lock);
+    int i = current_process;
+    
+    while(1) {
+        p = processes[i];
 
-        current_process++;
+        if(   p->n_threads 
+           && p->threads[0].state == READY
+        ) {
+            // we found a process to schedule
+            break;
+        }
+
+        i = (i + 1) % n_processes;
+
+
+
+        if(i == current_process) {
+            // we have looped around
+            // and haven't found a process
+            // to schedule
+            panic("no process to schedule");
+        }
     }
+
+    //log_info("choosing process %d", p->pid);
+
+    assert(p->threads[0].state == READY);
+
+    // lock the process
+    spinlock_acquire(&p->lock);
+
+    current_process = i + 1;
+
 
     // unlock the process table
     spinlock_release(&sched_lock);
@@ -608,6 +688,9 @@ static process_t* choose_next(void) {
 
 
 int timer_irq_should_schedule(void) {
+
+    return 0;
+
     // round robin
     static uint64_t c = 0;
 
@@ -615,6 +698,11 @@ int timer_irq_should_schedule(void) {
 
     // don't schedule if we are in an irq
     if(currenly_in_nested_irq || !sched_running)
+        return 0;
+
+    // don't schedule if the kernel process
+    // is in its critical section
+    if(kernel_process_running)
         return 0;
 
 
@@ -644,7 +732,7 @@ static void irq_end(void) {
 
 void sched_irq_ack(void) {
     assert(currenly_in_irq);
-    
+    assert(!currenly_in_nested_irq);
     _cli();
 
     if(!currenly_in_nested_irq && sched_running) {
@@ -654,8 +742,9 @@ void sched_irq_ack(void) {
         if(!t) {
             // no process or no thread
             schedule();
-        }
+        }   
 
+        n_ready_processes--;
         t->state = RUNNING;
         
         // release process lock
@@ -666,10 +755,54 @@ void sched_irq_ack(void) {
 }
 
 
+
+void sched_block(void) {
+
+    assert(!currenly_in_irq);
+
+    if(!sched_running) {
+        asm volatile("hlt");
+        return;
+    }
+
+    asm volatile("int $" XSTR(BLOCK_IRQ));    
+}
+
+
+void sched_unblock(pid_t pid, tid_t tid) {
+    //if(!sched_running)
+    //    return;
+
+    //log_info("unblocking %d:%d %d", pid, tid,n_ready_processes);
+
+    uint64_t rf = get_rflags();
+    _cli();
+    process_t* p = sched_get_process(pid);
+    assert(p);
+
+    thread_t* t = get_thread_by_tid(p, tid);
+    assert(t);
+
+    assert(t->state == BLOCKED);
+
+    t->state = READY;
+
+    n_ready_processes++;
+
+
+    spinlock_release(&p->lock);
+    set_rflags(rf);
+}
+
+
+
 void schedule(void) {
 
     // disable interrupts
     _cli();
+
+
+    assert(!kernel_process_running);
 
     assert(sched_running);
 
@@ -728,6 +861,7 @@ void schedule(void) {
             // lock the process
 
             thread_terminate(t, t->exit_status);
+            n_ready_processes--;
             
             // remove the element from the list
             *t = p->threads[p->n_threads - 1];
@@ -766,12 +900,13 @@ void schedule(void) {
 
     if(p->pid != current_pid || t->tid != current_tid) {
         // we should change the IRQ stack
-        set_tss_rsp(t->kernel_stack.base + t->kernel_stack.size);
+        set_tss_rsp((uint64_t)t->kernel_stack.base + t->kernel_stack.size);
     }
 
     assert(t->state == READY);
 
     t->state = RUNNING;
+    n_ready_processes--;
 
     
     current_pid = p->pid;
@@ -821,10 +956,6 @@ tid_t sched_current_tid(void) {
 
 
 process_t* sched_current_process(void) {
-    if(!current_pid) {
-        // current process: kernel 
-        return NULL;
-    }
     process_t* process = sched_get_process(current_pid);
 
     assert(process);
@@ -834,7 +965,46 @@ process_t* sched_current_process(void) {
 
 
 int lazy_shutdown = 0;
-const void* const bs_stack_end;
+void* const bs_stack_end;
+
+
+/**
+ * this function is called by the kernel process
+ * to engage the shutdown/reboot  sequence.
+ * 
+ * @param reboot: if non 0, the system will reboot
+ * else, it will shutdown
+ */
+static void kernel_process_shutdown(int do_reboot) {
+    // first need to suicide this process
+
+    _cli();            
+    process_t* p = sched_get_process(current_pid);
+
+    assert(current_pid == KERNEL_PID);
+    assert(p->n_threads == 1);
+    thread_t* t = &p->threads[0];
+
+    t->state = READY;
+
+    // release p lock
+    spinlock_release(&p->lock);
+
+    void shutdown_sequence(void) {
+        if(do_reboot)
+            reboot();
+        else
+            shutdown();
+        panic("unreachable");
+    };
+
+
+    // change the stack
+    // and shutdown
+    _change_stack(bs_stack_end, shutdown_sequence);
+    panic("unreachable");
+}
+
 
 
 void kernel_process_entry(void) {
@@ -843,47 +1013,46 @@ void kernel_process_entry(void) {
     assert(!currenly_in_irq);
     assert(interrupt_enable());
 
+    kernel_process_running = 0;
 
     for(;;) {
         
-        if(n_killed_processes)
+        if(n_killed_processes) {
             sched_free_killed_processes();
+        }
+
+        assert(!kernel_process_running);
+
+
+        //kernel_process_running = 1;
 
         vfs_lazy_flush();
 
+        //kernel_process_running = 0;
+
         
         if(lazy_shutdown) {
-            // first need to suicide this process
+            kernel_process_running = 1;
 
-            _cli();            
-            process_t* p = sched_get_process(current_pid);
-
-            assert(current_pid == KERNEL_PID);
-            assert(p->n_threads == 1);
-            thread_t* t = &p->threads[0];
-
-            t->state = READY;
-
-            // release p lock
-            spinlock_release(&p->lock);
-
-            void shutdown_sequence(void) {
-                shutdown();
-                panic("unreachable");
-            };
-
-
-            // change the stack
-            // and shutdown
-            _change_stack(bs_stack_end, shutdown_sequence);
-            _sti();
-            
+            kernel_process_shutdown(0);
         }
 
-
-        
-        sched_yield();
-        //asm volatile("hlt");
+        uint64_t sleep_begin = clock_ns();
+        const uint64_t sleep_time = 100*1000*1000; // 100ms
+        while(sleep_begin + 1000000000 > clock_ns()) {
+            assert(n_ready_processes >= 0);
+            //log_warn("SLEEP %d", n_ready_processes);
+            if(n_ready_processes == 0) {
+                // we are the only ready process
+                asm volatile("hlt");
+            }
+            else {
+                // there is at least someone else,
+                // let him runs
+                sched_yield();
+            }
+            // spin
+        }
     }
 }
 

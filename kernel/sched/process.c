@@ -181,7 +181,7 @@ int create_kernel_process(process_t* process) {
         .lock = 0,
         .pid = 0,
         .tid = 1,
-        .state = READY,
+        .state = BLOCKED,
         .running_cpu_id = 0,
         .should_exit = 0,
         .stack = (stack_t) {
@@ -203,7 +203,7 @@ int create_kernel_process(process_t* process) {
     *saved_frame = (uint64_t)0;
 
 
-    threads->rsp = (uint64_t)stack_top - sizeof(gp_regs_t) - 8;
+    threads->rsp = stack_top - sizeof(gp_regs_t) - 8;
 
     assert(process);
 
@@ -429,11 +429,6 @@ int set_process_entry_arguments(process_t* process,
     process->threads[0].rsp->rax = 0;
     process->threads[0].rsp->rbx = 0;
     
-
-
-    // the process is ready to be run
-    process->threads[0].state = READY;
-
     return 0;
 }
 
