@@ -375,6 +375,53 @@ int access (const char* name, int type) {
 }
 
 
+/* Truncate FILE to LENGTH bytes.  */
+int truncate (const char* file, off_t length) {
+    int fd = open(file, O_RDWR, 0);
+
+    if(!fd)
+        return -1;
+
+    int res = ftruncate(fd, length);
+
+    close(fd);
+
+    return res;
+}
+
+/* Truncate the file FD is open on to LENGTH bytes.  */
+int ftruncate (int fd, off_t length) {
+    struct sc_truncate_args args = {
+        .fd = fd,
+        .size = length,
+    };
+    
+
+    return syscall(SC_TRUNCATE, &args, sizeof(args));
+}
+
+
+/* Make all changes done to FD actually appear on disk.
+
+   This function is a cancellation point and therefore not marked with
+   __THROW.  */
+int fsync (int __fd) {
+    (void) __fd;
+    sync();
+
+    return 0;
+}
+
+/* Make all changes done to all files actually appear on disk.  */
+void sync (void) {
+    usleep(0);
+}
+
+
+unsigned int sleep(unsigned int seconds) {
+    syscall(SC_SLEEP, &seconds, sizeof(seconds));
+    return 0;
+}
 
 
 int __attribute__ ((__const__)) getpagesize (void)  {

@@ -351,32 +351,15 @@ extern int chroot (const char *__path) __THROW __nonnull ((1)) __wur;
 extern char *getpass (const char *__prompt) __nonnull ((1));
 
 
-/* Make all changes done to FD actually appear on disk.
-
-   This function is a cancellation point and therefore not marked with
-   __THROW.  */
-extern int fsync (int __fd);
 
 
 /* Return identifier for the current host.  */
 extern long int gethostid (void);
 
-/* Make all changes done to all files actually appear on disk.  */
-extern void sync (void) __THROW;
-
 
 /* Return the maximum number of file descriptors
    the current process could possibly have.  */
 extern int getdtablesize (void) __THROW;
-
-
-
-/* Truncate FILE to LENGTH bytes.  */
-extern int truncate (const char *__file, __off_t __length)
-     __THROW __nonnull ((1)) __wur;
-
-/* Truncate the file FD is open on to LENGTH bytes.  */
-extern int ftruncate (int __fd, __off_t __length) __THROW __wur;
 
 
 /* NOTE: These declarations also appear in <fcntl.h>; be sure to keep both
@@ -592,9 +575,9 @@ extern pid_t getppid (void);
 
 
 typedef enum open_flags {
-    O_RDONLY    = 0,
-    O_WRONLY    = 1,
-    O_RDWR      = 2,
+    O_RDONLY    = 1,
+    O_WRONLY    = 2,
+    O_RDWR      = 3,
     O_CREAT     = 4,
     O_EXCL      = 8,
     O_TRUNC     = 16,
@@ -649,6 +632,26 @@ int open (const char *pathname, int flags, mode_t mode);
 
 /* Test for access to NAME using the real UID and real GID.  */
 extern int access (const char* name, int type);
+
+
+
+/* Truncate FILE to LENGTH bytes.  */
+extern int truncate (const char* file, off_t length);
+
+/* Truncate the file FD is open on to LENGTH bytes.  */
+extern int ftruncate (int fd, off_t length);
+
+
+
+
+/* Make all changes done to FD actually appear on disk.
+
+   This function is a cancellation point and therefore not marked with
+   __THROW.  */
+extern int fsync (int __fd);
+
+/* Make all changes done to all files actually appear on disk.  */
+extern void sync (void);
 
 
 

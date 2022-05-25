@@ -87,9 +87,33 @@ FILE *fopen (const char *restrict filename,
 		     const char *restrict modes
 ) {
 
-    (void) modes;
+    int flags = 0;
+    int fd;
 
-    int fd = open(filename, 0, 0);
+    // compute flags
+    if(modes[0] == 'r')
+        flags |= O_RDONLY;
+    else if(modes[0] == 'w') {
+        flags |= O_WRONLY;
+        flags |= O_CREAT;
+        flags |= O_TRUNC;
+    }
+    else if(modes[0] == 'a') {
+        flags |= O_WRONLY;
+        flags |= O_CREAT;
+        flags |= O_APPEND;
+    }
+    else
+        return NULL;
+    
+
+    if(modes[1] == '+')
+        flags |= O_RDWR;
+    else if(modes[1] != 0)
+        return NULL;
+    
+
+    fd = open(filename, flags, 0);
     if(fd < 0) {
         return NULL;
     }
