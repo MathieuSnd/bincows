@@ -2,6 +2,7 @@
 disk.bin
 img_moint
 limine-bootloader/
+disk_root/bin/*
 *.o
 include_cp
 *.elf
