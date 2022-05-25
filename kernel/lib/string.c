@@ -97,7 +97,7 @@ char* strchr (const char *_s, int c) {
         curr = *s;
 
         if(curr == c)
-            return (const char *)s;
+            return (char *)s;
         else if(curr == '\0')
             break;
         
@@ -124,7 +124,7 @@ char* strrchr(const char *s, int c) {
         s++;
     }
 
-    return (const char*)found;    
+    return (char*)found;
 }
 
 
