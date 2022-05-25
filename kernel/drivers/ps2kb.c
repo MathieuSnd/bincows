@@ -4,6 +4,7 @@
 #include "../int/irq.h"
 #include "../int/pic.h"
 #include "../lib/registers.h"
+#include "../lib/panic.h"
 
 #include "../fs/devfs/devfs.h"
 
@@ -35,13 +36,13 @@ static char file_buffer[BUFFER_SIZE];
 static volatile unsigned buff_tail = 0, buff_head = 0;
 
 
+extern int lazy_shutdown;
+
 static void append_event(const struct kbevent* ev) {
-    if(ev->type == KEYRELEASED && ev->scancode == PS2KB_ESCAPE) {
-        shutdown();
-        __builtin_unreachable();
-    }
+    if(ev->type == KEYRELEASED && ev->scancode == PS2KB_ESCAPE)
+        lazy_shutdown = 1;
     
-    if(ev->type == KEYPRESSED && ev->keycode != 0) {
+    else if(ev->type == KEYPRESSED && ev->keycode != 0) {
         if((buff_head + 1) % BUFFER_SIZE == buff_tail) {
             // buffer is full
             return;
@@ -51,7 +52,7 @@ static void append_event(const struct kbevent* ev) {
             buff_head = (buff_head + 1) % BUFFER_SIZE;
         }
     }
-};
+}
 
 static int block_pop_chars(char* c, size_t n) {
     size_t i;
@@ -215,12 +216,17 @@ void ps2kb_init(void) {
 
 static int devfs_read(void* arg, void* buf, size_t begin, size_t count) {
     (void) arg;
+    (void) buf;
+    (void) begin;
+    (void) count;
 
     return block_pop_chars(buf, count);
 }
 
 static int devfs_write(void* arg, const void* buf, size_t begin, size_t count) {
+    (void) arg;
     (void) buf;
+    (void) begin;
     (void) count;
     panic("tried to write in read-only dev file /dev/ps2kb");
     // unwritable
