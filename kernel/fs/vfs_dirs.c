@@ -663,6 +663,10 @@ static int find_fs_child(
 // return NULL if empty / conflict
 static dir_cache_ent_t *get_cache_entry(const char *path)
 {
+    uint64_t rf = get_rflags();
+    _cli();
+
+
     // @todo: add vfs cache spinlock:
     // aquire it there, and free it after 
     // doing stuf with the returned entry
@@ -676,16 +680,19 @@ static dir_cache_ent_t *get_cache_entry(const char *path)
     dir_cache_ent_t *ent = &cached_dir_list[hash];
     if (ent->path == NULL) {// not present entry
         //log_debug("VFS cache miss for %s (hash %u): not present", path, hash);
+        set_rflags(rf);
         return NULL;
     }
 
     if (!strcmp(ent->path, path)) {// right entry (no collision)
         //log_debug("VFS cache hit for %s (hash %u)", path, hash);
+        set_rflags(rf);
         return ent;
     }
 
     //log_debug("VFS cache miss for %s (hash %u): conflit", path, hash);
 
+    set_rflags(rf);
     return NULL;
 }
 
@@ -879,6 +886,20 @@ static vdir_t* emplace_vdir(const char* path) {
 }
 
 
+
+// asserts that fs is well formed
+static void check_fs_struct(fs_t *fs) {
+    assert(fs->add_dirent != NULL);
+    assert(fs->read_dir != NULL);
+    assert(fs->read_file_sectors != NULL);
+    assert(fs->write_file_sectors != NULL);
+    assert(fs->truncate_file != NULL);
+    assert(fs->update_dirent != NULL);
+    assert(fs->name != NULL);
+}
+
+
+
 int vfs_mount(disk_part_t *part, const char *path)
 {
     vdir_t* new = emplace_vdir(path);
@@ -906,9 +927,11 @@ int vfs_mount(disk_part_t *part, const char *path)
     new->fs = fs;
     part->mount_point = strdup(new->path);
 
-    
+    check_fs_struct(fs);
     return 1;
 }
+
+
 
 int vfs_mount_devfs(void) {
 
@@ -938,9 +961,10 @@ int vfs_mount_devfs(void) {
 
     new->fs = fs;
 
+    check_fs_struct(fs);
+
     return 1;
 }
-
 
 
 
@@ -1123,10 +1147,14 @@ int vfs_update_metadata_cache(
     simplify_path(pathbuf, path);
     assert(is_absolute(pathbuf));
 
+    uint64_t rf = get_rflags();
+    _cli();
+
     // update cache if hit
-    
     dir_cache_ent_t *ent = get_cache_entry(pathbuf);
-    
+
+    assert(ent);
+
     if (ent) {// hit
         // it should be a file
         assert(ent->type == DT_REG);
@@ -1135,8 +1163,11 @@ int vfs_update_metadata_cache(
         ent->file_size = file_size;
     }
 
-
+    set_rflags(rf);
+    
     free(pathbuf);
+
+    return 0;
 }
 
 
@@ -1185,6 +1216,7 @@ int vfs_update_metadata_disk(
 
     assert(parent_dirent.type == DT_DIR);
     assert(parent_dirent.file_size == 0);
+
 
     int ret = fs->update_dirent(fs, parent_dirent.ino, file_name, addr, file_size);
     free(pathbuf);
