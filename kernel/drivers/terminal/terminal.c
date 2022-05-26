@@ -100,7 +100,6 @@ extern uint8_t _binary_charmap_bmp;
 void terminal_update(driver_t* this) {
     (void) this;
     return;
-    //static unsigned update_cur_line = 0;
     
 
 
@@ -332,7 +331,7 @@ static void set_color(struct data* restrict d, unsigned tenth, unsigned unit) {
     if(unit > 7)
         unit = 7;
 
-    uint32_t* c = d->current_bgcolor;
+    uint32_t* c;
 
     switch(tenth) {
     case 3:
@@ -360,15 +359,6 @@ static void set_color(struct data* restrict d, unsigned tenth, unsigned unit) {
 }
 
 
-
-static void commit_colors(driver_t* this) {
-    struct data* restrict d = this->data;
-
-    if(d->esc_seq[0] == '7' )
-    d->current_fgcolor = get_color(this, d->esc_seq[1]);
-
-    d->current_bgcolor = 0;
-}
 
 // emplace the char in the buffer, and maybe draw 
 static void emplace_char(driver_t* this, char c) {
