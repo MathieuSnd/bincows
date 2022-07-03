@@ -353,14 +353,22 @@ file_handle_t* vfs_open_file(const char *path, int flags) {
     }
 
     // file is not writable
-    if (flags & VFS_WRITE && fs->read_only)
+    if (flags & VFS_WRITE && !dirent.rights.write)
         return NULL;
-
+    
+    if (flags & VFS_READ && !dirent.rights.read)
+        return NULL;
     
     file_handle_t* h = create_handler(fs, &dirent, path);
 
     if(flags & VFS_APPEND)
         set_stream_offset(h, dirent.file_size);
+
+    if(dirent.rights.seekable)
+        flags |= VFS_SEEKABLE;
+    
+    if(dirent.rights.truncatable)
+        flags |= VFS_TRUNCATABLE;
 
     h->flags = flags;
 
@@ -619,7 +627,7 @@ static void aquire_file_access(uint64_t vfile_id) {
 
         
         if(accessed)
-            sleep(0);
+            sched_yield();
 
         
         // yield until the process is done
@@ -648,7 +656,7 @@ int vfs_truncate_file(file_handle_t *handle, uint64_t size)
 
     assert(interrupt_enable());
 
-    if(     !fs->truncatable 
+    if((handle->flags & VFS_TRUNCATABLE) == 0
     // can only truncate files open in write mode
      || (handle->flags & VFS_WRITE) == 0) 
         return -1;
@@ -694,7 +702,7 @@ int vfs_truncate_file(file_handle_t *handle, uint64_t size)
 
 
 
-size_t vfs_read_file(void *ptr, size_t size, size_t nmemb,
+size_t vfs_read_file(void *ptr, size_t size,
                      file_handle_t *restrict stream)
 {
     assert(interrupt_enable());
@@ -711,6 +719,8 @@ size_t vfs_read_file(void *ptr, size_t size, size_t nmemb,
 
 
 
+
+
     uint64_t file_size;
     {
         _cli();
@@ -721,25 +731,22 @@ size_t vfs_read_file(void *ptr, size_t size, size_t nmemb,
         _sti();
     }
 
-
     unsigned granularity = fs->file_access_granularity;
 
     unsigned cachable = fs->cacheable;
 
+    if(file_size <= stream->file_offset) {
+        // EOF
+        release_file_access(stream->vfile_id);
+        return 0;
+    }
+
     uint64_t max_read = file_size - stream->file_offset;
 
-    unsigned bsize = size * nmemb;
+    unsigned bsize = MIN(size, max_read);
 
-    // check nmemb bounds
-
-    if (max_read < bsize)
-    {
-        nmemb = max_read / size;
-        bsize = size * nmemb;
-    }
-    
-
-    if(bsize == 0) {
+    if(bsize <= 0) {
+        // nothing to read
         release_file_access(stream->vfile_id);
         return 0;
     }
@@ -773,7 +780,7 @@ size_t vfs_read_file(void *ptr, size_t size, size_t nmemb,
         
         if(!bsize) {
             release_file_access(stream->vfile_id);
-            return nmemb;
+            return size;
         }
 
         ptr += size;
@@ -821,13 +828,33 @@ size_t vfs_read_file(void *ptr, size_t size, size_t nmemb,
     }
 
 
-    fs->read_file_sectors(
+    int rd = fs->read_file_sectors(
         fs, 
         &file, 
         read_buf, 
         stream->sector_count,
         read_blocks
     );
+
+    if(rd < 0) {
+        release_file_access(stream->vfile_id);
+        return rd;
+    }
+
+    // if we have read less than we wanted,
+    // we have reached the end of the file
+    if(rd < read_blocks) {
+        // reading less than we wanted
+        // is only possible on special files,
+        // with granularity = 1 (non block fs)
+        assert(granularity == 1); 
+        
+        // no need to update the sector offset
+        // 
+
+        read_buf_size = rd;
+        size -= read_blocks - rd;
+    }
 
 
     // need copy if 
@@ -855,7 +882,8 @@ size_t vfs_read_file(void *ptr, size_t size, size_t nmemb,
 
     release_file_access(stream->vfile_id);
     
-    return nmemb;
+    
+    return size;
 }
 
 
@@ -904,8 +932,9 @@ size_t vfs_write_file(const void *ptr, size_t size, size_t nmemb,
     }
     _sti();
 
-    if(stream->flags & VFS_APPEND)
+    if(stream->flags & VFS_APPEND) {
         set_stream_offset(stream, file_copy.file_size);
+    }
 
     unsigned must_write = stream->sector_offset + bsize;
 
@@ -1105,8 +1134,10 @@ uint64_t vfs_seek_file(file_handle_t *restrict stream, uint64_t offset, int when
 {    
     assert(interrupt_enable());
 
-    if(!stream->fs->seekable)
+    if((stream->flags & VFS_SEEKABLE) == 0) {
+        log_warn("non seekable file");
         return -1;
+    }
         
     // real file offset: to be
     // calculated with the whence field

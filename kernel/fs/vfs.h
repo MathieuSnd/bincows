@@ -149,6 +149,11 @@ typedef struct dir_cache_ent {
     // NULL if this is a virtual 
     // file/dir
     struct fs* restrict fs;
+
+    // operation rights if the entry
+    // represents a file. Else,
+    // this field is undefined
+    file_rights_t rights;
     
     // null-terminated path name pointer, 
     // max path length = MAX_PATH
@@ -253,6 +258,9 @@ void vfs_lazy_flush(void);
 #define VFS_WRITE 2
 #define VFS_RDWR 3
 
+#define VFS_SEEKABLE 4
+#define VFS_TRUNCATABLE 8
+
 #define VFS_APPEND 32
 
 /** 
@@ -289,7 +297,7 @@ void vfs_close_file(file_handle_t* handle);
 void simplify_path(char *dst, const char *src);
 
 
-size_t vfs_read_file(void* ptr, size_t size, size_t nmemb, 
+size_t vfs_read_file(void* ptr, size_t size, 
             file_handle_t* stream);
 
 size_t vfs_write_file(const void* ptr, size_t size, size_t nmemb,
