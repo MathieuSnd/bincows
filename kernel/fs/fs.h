@@ -22,6 +22,19 @@
 
 
 
+typedef union file_rights {
+    struct {
+        unsigned read       : 1;
+        unsigned write      : 1;
+        unsigned exec       : 1;
+        unsigned seekable   : 1;
+        unsigned truncatable: 1;
+    };
+    uint8_t value;
+} file_rights_t;
+
+
+
 /**
  * file descriptor
  * !! the actual size of this structure
@@ -39,6 +52,9 @@ typedef struct file {
     // file size in bytes
     // 0 if it is a directory
     uint32_t file_size;
+
+    // file operation rights
+    file_rights_t rights;
 } file_t;
 
 
@@ -70,6 +86,7 @@ typedef struct fast_dirent {
     size_t        file_size; /* Length of this record */
     unsigned char type;      /* Type of file; not supported
                                 by all filesystem types */
+    file_rights_t rights;    /* rights for the file */
 } fast_dirent_t;
 
 
@@ -86,6 +103,7 @@ typedef struct dirent {
             size_t        file_size; /* Length of this record */
             unsigned char type;      /* Type of file; not supported
                                         by all filesystem types */
+            file_rights_t rights;    /* right for the file */
         };
     };
 
@@ -93,6 +111,10 @@ typedef struct dirent {
 } dirent_t;
 
 //static_assert(sizeof(dirent_t) == 0x10a, "dirent_t is not the correct size");
+
+
+
+
 
 /**
  * @brief generic filesystem interface
@@ -115,10 +137,11 @@ typedef struct fs {
     union {
         uint8_t flags;
         struct {
-            unsigned read_only: 1;
+            //unsigned read_only: 1;
+            //unsigned write_only: 1;
             unsigned cacheable: 1;
-            unsigned seekable: 1;
-            unsigned truncatable: 1;
+           // unsigned seekable: 1;
+           // unsigned truncatable: 1;
         };
     };
 
@@ -155,7 +178,7 @@ typedef struct fs {
 
 
     /**
-     * @brief create a cursor over a file
+     * @brief create a file
      * 
      * @param file the file to open
      * @param cur (output) the file descriptor
@@ -193,7 +216,7 @@ typedef struct fs {
      * @param buf buffer that is big enough to hold one sector
      * @param begin the position (in blocks) of the
      * first sector to read
-     * @return int the number of read bytes.
+     * @return int the number of read sectors.
      */
     int (*read_file_sectors)(struct fs* restrict fs, const file_t* restrict fd,
             void* restrict buf, uint64_t begin, size_t n);
@@ -302,6 +325,7 @@ typedef struct fs {
 // fs::type field values
 #define FS_TYPE_FAT 1
 #define FS_TYPE_DEVFS 2
+#define FS_TYPE_PIPEFS 3
 
 // seek whence field values
 #define SEEK_SET 0

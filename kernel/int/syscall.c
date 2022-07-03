@@ -118,7 +118,12 @@ static uint64_t sc_sleep(process_t* proc, void* args, size_t args_sz) {
 
     (void) proc;
 
-    sleep(*(uint64_t*)args);
+    uint64_t ms = *(uint64_t*)args;
+
+    if(ms == 0)
+        sched_yield();
+    else 
+        sleep(*(uint64_t*)args);
 
 
     return 0;
@@ -294,7 +299,7 @@ static uint64_t sc_exec(process_t* proc, void* args, size_t args_sz) {
 
     memset(elf_data, 0, file_sz);
 
-    size_t rd = vfs_read_file(elf_data, 1, file_sz, elf_file);
+    size_t rd = vfs_read_file(elf_data, file_sz, elf_file);
 
     vfs_close_file(elf_file);
 
@@ -481,7 +486,6 @@ static uint64_t sc_open(process_t* proc, void* args, size_t args_sz) {
     }
 
 
-
     if(a->flags & O_DIRECTORY) {
         // opening as a directory
 
@@ -530,6 +534,8 @@ static uint64_t sc_open(process_t* proc, void* args, size_t args_sz) {
     else {
 
         file_handle_t* h = vfs_open_file(path, a->flags);
+
+        
 
         if(a->flags & O_TRUNC) {
             vfs_truncate_file(h, 0);
@@ -653,6 +659,7 @@ static uint64_t sc_seek(process_t* proc, void* args, size_t args_sz) {
         return -1;
     }
 
+uint64_t seek;
     switch(proc->fds[a->fd].type) {
         case FD_FILE:
             return vfs_seek_file(proc->fds[a->fd].file, a->offset, a->whence);
@@ -697,9 +704,18 @@ static uint64_t sc_access(process_t* proc, void* args, size_t args_sz) {
 
     if(fs == FS_NO)
         ret = -1;
+
+    else if((a->type & (W_OK | R_OK | X_OK)) && (!fs || d.type == DT_DIR))
+        ret = -1;
+
     else if(d.type == DT_DIR && (a->type & (R_OK|W_OK|X_OK)) != 0) 
         ret = -1;
-    else if(a->type & W_OK && (!fs || fs->read_only))
+
+    else if(a->type & W_OK && !d.rights.write)
+        ret = -1;
+    else if(a->type & R_OK && !d.rights.read)
+        ret = -1;
+    else if(a->type & X_OK && !d.rights.exec)
         ret = -1;
 
     free(path);
@@ -753,7 +769,11 @@ static uint64_t sc_read(process_t* proc, void* args, size_t args_sz) {
 
     switch(proc->fds[a->fd].type) {
         case FD_FILE:
-            return vfs_read_file(a->buf, 1, a->count, proc->fds[a->fd].file);
+        {
+            size_t rd = vfs_read_file(a->buf, a->count, proc->fds[a->fd].file);
+
+            return rd;
+        }
             break;
         case FD_DIR:
             return read_dir(&proc->fds[a->fd], a->buf, a->count);
@@ -1079,7 +1099,7 @@ uint64_t syscall_main(uint8_t scid, void* args, size_t args_sz) {
             asm ("hlt");
     }
     else {
-//        log_debug("%u.%u: %s", sched_current_pid(), sched_current_tid(), scname[scid]);
+        //log_debug("%u.%u: %s", sched_current_pid(), sched_current_tid(), scname[scid]);
         uint64_t res = sc_funcs[scid](process, args, args_sz);
 
 

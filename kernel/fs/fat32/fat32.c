@@ -601,6 +601,16 @@ static int parse_dir_entry(
                 ((uint32_t)dir->cluster_high << 16);
     
     cur_entry->file_size  = dir->file_size;
+
+    // no read only files for now
+    cur_entry->rights = (file_rights_t) {
+        .exec = 1,
+        .read = 1,
+        .write = 1,
+        .truncatable = 1,
+        .seekable = 1,
+    };
+
     
 
 
@@ -1050,9 +1060,6 @@ fs_t* fat32_mount(disk_part_t* part) {
     fs->n_open_files = 0;
 
     fs->cacheable   = 1;
-    fs->read_only   = 0;
-    fs->seekable    = 1;
-    fs->truncatable = 1;
 
     fs->root_addr = root_dir_cluster;
 
@@ -1314,6 +1321,8 @@ int fat32_read_file_sectors(
     assert(clusterend == ~0llu);
 
     unsigned bsize = block_size(fs->part);
+
+    int rd = n;
     
 
     while(n > 0) {
@@ -1362,7 +1371,7 @@ int fat32_read_file_sectors(
 
     fs->part->interface->sync(fs->part->interface->driver);
 
-    return n;
+    return rd;
 }
 
 

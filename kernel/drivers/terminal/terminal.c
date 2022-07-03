@@ -648,7 +648,7 @@ static int terminal_devfile_read(
     (void)begin;
     (void)count;
 
-    log_info("terminal_devfile_read");
+    assert("read from terminal device" == 0);
     
     // unreadable
     return -1;
@@ -680,6 +680,7 @@ void terminal_register_dev_file(const char* filename, driver_t* this) {
         .arg   = this,
         .read  = (void*) terminal_devfile_read,
         .write = (void*) terminal_devfile_write,
+        .rights = {.read = 0, .write = 1, .seekable = 0},
         .file_size = ~0llu,
     }, filename);
 

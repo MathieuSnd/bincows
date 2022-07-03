@@ -5,6 +5,8 @@
 #include "../int/pic.h"
 #include "../lib/registers.h"
 #include "../lib/panic.h"
+#include "../lib/time.h"
+
 
 #include "../fs/devfs/devfs.h"
 
@@ -241,6 +243,7 @@ void ps2kb_register_dev_file(const char* filename) {
         .arg   = NULL,
         .read  = (void*)devfs_read,
         .write = (void*)devfs_write,
+        .rights = {.read = 1, .write = 0, .seekable = 0},
         .file_size = ~0llu,
     }, filename);
 

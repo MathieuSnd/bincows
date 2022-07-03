@@ -12,6 +12,9 @@ typedef struct devfs_file_interface {
 
     uint64_t file_size;
 
+    // rights.truncatable is forbiden
+    file_rights_t rights;
+
     // arg that will be passed to read/write
     void* arg;
 } devfs_file_interface_t;
@@ -19,6 +22,10 @@ typedef struct devfs_file_interface {
 
 /**
  * @brief map a file to a device
+ * 
+ * fi.rights.truncatable is forbiden
+ * fi.read won't be called if rights.read is false
+ * fi.write won't be called if rights.write is false
  * 
  * return 0 on success, -1 on failure
  */

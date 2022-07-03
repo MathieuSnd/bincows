@@ -357,6 +357,7 @@ void add_cache_entry(char* path, fs_t* fs, fast_dirent_t* dent) {
     cache_ent->cluster   = dent->ino;
     cache_ent->file_size = dent->file_size;
     cache_ent->type      = dent->type;
+    cache_ent->rights    = dent->rights;
     cache_ent->fs        = fs;
     cache_ent->path      = path;
 }
@@ -647,6 +648,9 @@ static int find_fs_child(
             child->ino = ents[i].ino;
             child->file_size = ents[i].file_size;
             child->type = ents[i].type;
+            child->rights = ents[i].rights;
+
+            assert(child->type == DT_DIR || child->rights.value != 0);
 
             found = 1;
             break;
@@ -716,11 +720,15 @@ fs_t *vfs_open(const char *path, fast_dirent_t *dir)
         dir->ino = ent->cluster;
         dir->file_size = ent->file_size;
         dir->type = ent->type;
+        dir->rights = ent->rights;
 
         free(pathbuf);
 
         return ent->fs;
     }
+
+
+    // cache miss!
 
 
     vdir_t *vdir = get_fs_vdir(pathbuf);
@@ -804,6 +812,7 @@ fs_t *vfs_open(const char *path, fast_dirent_t *dir)
             cur.ino       = ent->cluster;
             cur.file_size = ent->file_size;
             cur.type      = ent->type;
+            cur.rights    = ent->rights;  
 
             // restore the path buffer
             if(name_end)
@@ -834,12 +843,19 @@ fs_t *vfs_open(const char *path, fast_dirent_t *dir)
         cur.ino       = child.ino;
         cur.file_size = child.file_size;
         cur.type      = child.type;
+        cur.rights    = child.rights;
+
+        if(cur.type == DT_REG)
+            assert(cur.rights.value);
     }
 
 
     dir->ino = cur.ino;
     dir->file_size = cur.file_size;
     dir->type = cur.type;
+    dir->rights = cur.rights;
+
+    assert(dir->type == DT_DIR || dir->rights.value != 0);
 
     // we missed, so 
     // add a cache entry

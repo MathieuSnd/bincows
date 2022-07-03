@@ -17,6 +17,8 @@ typedef struct devfs_file {
 
     void* arg;
 
+    file_rights_t rights;
+
     uint64_t file_size;
 
     char name[DEVFS_MAX_NAME_LEN];
@@ -53,8 +55,10 @@ static int read(struct fs* restrict fs, const file_t* restrict fd,
     struct devfs_priv* priv = (void *)(fs + 1);
 
     for (size_t i = 0; i < priv->n_files; i++) {
-        if (priv->files[i].id == fd->addr) {
-            return priv->files[i].read(priv->files[i].arg, buf, begin, n);
+        devfs_file_t* f = &priv->files[i];
+        if (f->id == fd->addr) {
+            assert(f->rights.read);
+            return f->read(f->arg, buf, begin, n);
         }
     }
 
@@ -71,8 +75,10 @@ static int write(struct fs* restrict fs, const file_t* restrict fd,
     assert(fs->type == FS_TYPE_DEVFS);
 
     for (size_t i = 0; i < priv->n_files; i++) {
-        if (priv->files[i].id == fd->addr) {
-            return priv->files[i].write(priv->files[i].arg, buf, begin, n);
+        devfs_file_t* f = &priv->files[i];
+        if (f->id == fd->addr) {
+            assert(f->rights.write);
+            return f->write(f->arg, buf, begin, n);
         }
     }
 
@@ -101,6 +107,7 @@ static dirent_t* read_dir(struct fs* restrict fs, uint64_t dir_addr, size_t* res
         ret[i].ino       = priv->files[i].id;
         ret[i].file_size = priv->files[i].file_size;
         ret[i].type      = DT_REG;
+        ret[i].rights    = priv->files[i].rights;
     }
 
     return ret;
@@ -160,6 +167,14 @@ static void devfs_unmount(struct fs* fs) {
 int devfs_map_device(devfs_file_interface_t fi, const char* name) {
     assert(devfs);
     assert(devfs->type == FS_TYPE_DEVFS);
+    
+    if(fi.rights.truncatable) {
+        return -1;
+    }
+
+
+    if (strlen(name) >= DEVFS_MAX_NAME_LEN)
+        return -1;
 
 
     static uint64_t cur_id;
@@ -178,14 +193,12 @@ int devfs_map_device(devfs_file_interface_t fi, const char* name) {
     struct devfs_file* file = &priv->files[priv->n_files];
 
     file->id = cur_id++;
-    file->read = fi.read;
-    file->write = fi.write;
-    file->arg = fi.arg;
+    file->read      = fi.read;
+    file->write     = fi.write;
+    file->arg       = fi.arg;
     file->file_size = fi.file_size;
+    file->rights    = fi.rights;
 
-    if (strlen(name) >= DEVFS_MAX_NAME_LEN) {
-        return -1;
-    }
 
     strncpy(file->name, name, DEVFS_MAX_NAME_LEN);
 
@@ -238,16 +251,13 @@ fs_t* devfs_mount(void) {
     priv->n_files = 0;
     priv->files = NULL;
 
-    fs->read_only = 0;
     fs->cacheable = 0;
-    fs->seekable  = 1;
 
     fs->type = FS_TYPE_DEVFS;
 
     fs->file_access_granularity = 1;
 
     fs->n_open_files = 0;
-    fs->truncatable = 0;
 
     fs->root_addr = 0;
 
