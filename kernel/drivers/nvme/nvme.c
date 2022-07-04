@@ -29,6 +29,8 @@
 #include "../../memory/vmap.h"
 #include "../../int/irq.h"
 
+#include "../block_cache.h"
+
 #include "../../fs/gpt.h"
 
 // for apic_eoi()
@@ -62,7 +64,11 @@ struct namespace {
 
     // block size: 1 << block_size_shift
     uint32_t block_size_shift;
+
+    // number of logical blocks contained
+    // in the namespace
     uint64_t capacity;
+
     uint32_t pref_granularity;
     uint32_t pref_write_alignment;
     uint32_t pref_write_size;
@@ -100,6 +106,7 @@ struct data {
     struct namespace  namespaces[HANDLED_NAMESPACES];
 
     struct storage_interface si;
+    struct storage_interface cache_si;
 
     uint64_t prps[IO_QUEUE_SIZE];
 };
@@ -776,7 +783,14 @@ int nvme_install(driver_t* this) {
             .sync       = nvme_sync,
         };
 
-        gpt_scan(&data->si);
+        struct block_cache_params params = {
+            // for now, allow as mutch virtual memory as the disk size
+            .virt_size = data->namespaces[0].capacity << data->namespaces[0].block_size_shift,
+        };
+
+        block_cache_setup(&data->si, &data->cache_si, &params);
+
+        gpt_scan(&data->cache_si);
     }
 
 

@@ -112,25 +112,6 @@ typedef struct {
 
 
 
-static 
-void* read(
-            const disk_part_t* restrict part, 
-            uint64_t lba, 
-            void* restrict buf, 
-            size_t count
-) {
-    lba += part->begin;
-
-
-    assert(lba >= part->begin);
-    assert(lba < part->end);
-
-    
-    part->interface->read(part->interface->driver, lba, buf, count);
-
-    return buf;
-}
-
 
 static 
 void* async_read(
@@ -150,6 +131,25 @@ void* async_read(
 
     return buf;
 }
+
+
+static 
+void* read(
+            const disk_part_t* restrict part, 
+            uint64_t lba, 
+            void* restrict buf, 
+            size_t count
+) {
+    async_read(part, lba, buf, count);
+    
+    //log_info("----------------------------");
+    //stacktrace_print();
+
+    part->interface->sync(part->interface->driver);
+    
+    return buf;
+}
+
 
 
 static inline

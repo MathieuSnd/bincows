@@ -171,7 +171,8 @@ void gpt_scan(const struct storage_interface* sti) {
     void* buffer = malloc(1 << sti->lbashift);
     
     // LBA 1: Partition Table Header
-    sti->read(sti->driver, 1, buffer, 1);
+    sti->async_read(sti->driver, 1, buffer, 1);
+    sti->sync(sti->driver);
 
     // magic
     if(strcmp(buffer+0, "EFI PART")) {
@@ -194,8 +195,10 @@ void gpt_scan(const struct storage_interface* sti) {
 
 
     // LBA 1: Partition Entries
-    sti->read(sti->driver, partition_entry_array_lba,
+    sti->async_read(sti->driver, partition_entry_array_lba,
               buffer, size >> sti->lbashift);
+
+    sti->sync(sti->driver);
 
 
     // temporary pointer of gpt partition entry
