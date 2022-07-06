@@ -194,9 +194,17 @@ typedef struct fs {
      */
     //void (*close_file)(void *);
 
-
+    /**
+     * @brief truncate a file to a given size.
+     * 
+     * @param fs the filesystem
+     * @param file the file to truncate. It is not
+     * constant: a FS can modify fd->addr.
+     * WARNING: modifying fd->* except fd->addr forbidden
+     * 
+     */
     int (*truncate_file)(struct fs* restrict fs, 
-                        const file_t* restrict file, size_t size);
+                        file_t* restrict file, size_t size);
 
 
 
@@ -232,15 +240,16 @@ typedef struct fs {
      * All the checking should be done by the VFS
      * 
      * @param fs partition structure
-     * @param fd file descriptor
-     * must be at least fd_size big
+     * @param fd file descriptor structure. It is not
+     * constant: a FS can modify fd->addr.
+     * WARNING: modifying fd->* except fd->addr forbidden
      * @param buf buffer to write from
      * @param begin the position (in blocks) of the
      * first sector to write
      * @param n amount of sectors to be written
      * @return int the number of read bytes.
      */
-    int (*write_file_sectors)(struct fs* restrict fs, const file_t* restrict fd, 
+    int (*write_file_sectors)(struct fs* restrict fs, file_t* restrict fd, 
             const void* restrict buf, uint64_t begin, size_t n);
 
 

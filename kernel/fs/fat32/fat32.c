@@ -18,7 +18,7 @@
  */
 #define FAT_CACHE_SIZE 2048
 
-int fat32_truncate_file(fs_t* fs, const file_t* restrict  file, uint64_t file_size);
+int fat32_truncate_file(fs_t* fs, file_t* restrict  file, uint64_t file_size);
 
 
 // stolen from Linux source
@@ -53,7 +53,7 @@ int fat32_read_file_sectors(
 
 int fat32_write_file_sectors(
         fs_t* restrict fs, 
-        const file_t* restrict file, 
+        file_t* restrict file, 
         const void* restrict buf,
         uint64_t begin,
         size_t n
@@ -599,6 +599,8 @@ static int parse_dir_entry(
     cur_entry->type = fat_attr2fs_type(dir->attr);
     cur_entry->ino  = dir->cluster_low | 
                 ((uint32_t)dir->cluster_high << 16);
+
+    log_warn("%s: ino = %lu", cur_entry->name, cur_entry->ino);
     
     cur_entry->file_size  = dir->file_size;
 
@@ -1161,7 +1163,7 @@ cluster_t fetch_cluster(
 
 static 
 int extend_file(fs_t* fs, 
-                const file_t* restrict  file, 
+                file_t* restrict  file, 
                 uint64_t file_size
 ) {
     assert(file_size > file->file_size);
@@ -1275,7 +1277,7 @@ int trunc_file(fs_t* fs,
 
 
 int fat32_truncate_file(fs_t* fs, 
-            const file_t* restrict  file, uint64_t file_size
+            file_t* restrict  file, uint64_t file_size
 ) {
     assert(fs->type == FS_TYPE_FAT);
 
@@ -1377,7 +1379,7 @@ int fat32_read_file_sectors(
 
 int fat32_write_file_sectors(
         fs_t* restrict fs, 
-        const file_t* restrict fd, 
+        file_t* restrict fd, 
         const void* restrict buf,
         uint64_t begin,
         size_t n
@@ -1393,8 +1395,16 @@ int fat32_write_file_sectors(
     uint32_t cluster_offset = begin % pr->cluster_size;
 
     uint64_t clusterend = 0;
+
+    if(!fd->addr) {
+        // the file is empty, no assicated cluster
+        // allocate the file's first cluster
+        fd->addr = allocFAT(fs->part, pr);
+    }
+    
     cluster_t cluster = fetch_cluster(fs, pr, fd, first_cluster, &clusterend);
 
+    assert(cluster);
 
     // the write operation is beyond file end.
     // allocate enough sectors and zero them
@@ -1436,6 +1446,8 @@ int fat32_write_file_sectors(
     unsigned written = 0;
 
     while(n > 0) {
+        // cluster 0 is reserved.
+        assert(cluster);
         uint64_t lba = cluster_begin(cluster, pr) 
                                 + cluster_offset;
 

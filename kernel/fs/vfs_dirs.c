@@ -730,7 +730,7 @@ fs_t *vfs_open(const char *path, fast_dirent_t *dir)
 
     // cache miss!
 
-    // log_warn("VFS cache miss for %s", path);
+    log_warn("VFS cache miss for %s", path);
 
 
     vdir_t *vdir = get_fs_vdir(pathbuf);

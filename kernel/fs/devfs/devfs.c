@@ -66,7 +66,7 @@ static int read(struct fs* restrict fs, const file_t* restrict fd,
 }
 
 
-static int write(struct fs* restrict fs, const file_t* restrict fd, 
+static int write(struct fs* restrict fs, file_t* restrict fd, 
         const void* restrict buf, uint64_t begin, size_t n) {
     struct devfs_priv* priv = (void *)(fs + 1);
 
@@ -277,6 +277,7 @@ fs_t* devfs_mount(void) {
     assert(!devfs);
 
     fs->name = strdup("devfs");
+    fs->part = NULL;
 
     return devfs = fs;
 }

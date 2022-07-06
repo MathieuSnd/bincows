@@ -686,8 +686,10 @@ int vfs_truncate_file(file_handle_t *handle, uint64_t size)
         invalidate_handlers_buffer(f, NULL);
         
         // the operation can fail
-        if(!size)
+        if(!size) {
             f->file_size = size;
+        }
+        f->addr = file.addr;
 
 
         f->accessed = 0;
@@ -950,6 +952,9 @@ size_t vfs_write_file(const void *ptr, size_t size, size_t nmemb,
     assert(stream->sector_offset + bsize <= write_buf_size);
 
     
+    // save file address in case it is updated
+    uint64_t file_addr = file_copy.addr;
+    
 
     // print file_copy
     // if the selected write is perfectly aligned,
@@ -1104,15 +1109,18 @@ size_t vfs_write_file(const void *ptr, size_t size, size_t nmemb,
     stream->file_offset += bsize;
     stream->sector_count = stream->file_offset / granularity;
     
-    if(file_copy.file_size < stream->file_offset) {
+    if(file_copy.file_size < stream->file_offset // size update
+        || file_addr != file_copy.addr           // address update
+    ) {
         file_copy.file_size = stream->file_offset;
         // update file size
         // we need to reaquire the vfile
         _cli();
         {
 
-                        struct file_ent *vfile = aquire_vfile(stream->vfile_id);
-                        vfile->file_size = stream->file_offset;
+            struct file_ent *vfile = aquire_vfile(stream->vfile_id);
+            vfile->file_size = stream->file_offset;
+            vfile->addr      = file_copy.addr;
             
             invalidate_handlers_buffer(vfile, stream);
             
