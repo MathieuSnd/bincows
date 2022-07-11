@@ -10,7 +10,7 @@ void __assert(const char* __restrict__ expression,
 
 #define assert_aligned(ADDR, ALIGNMENT) assert(((uint64_t)(ADDR) & ((ALIGNMENT)-1)) == 0)
 #else 
-#define assert(x) do { (void)sizeof(x);} while (0)
+#define assert(x)
 #define assert_aligned(ADDR, ALIGNMENT)
 #endif
 
