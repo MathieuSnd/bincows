@@ -836,7 +836,7 @@ void schedule(void) {
     // disable interrupts
     _cli();
 
-
+    
     assert(!kernel_process_running);
 
     assert(sched_running);
@@ -1036,6 +1036,38 @@ static void kernel_process_shutdown(int do_reboot) {
 }
 
 
+// in permile
+#define RECLAIM_MEMORY_THRESHOLD 100
+
+
+//static 
+void memory_check(void) {
+    uint64_t total = total_pages();
+    uint64_t available = available_pages();
+
+
+    if(available * 1000 / total < RECLAIM_MEMORY_THRESHOLD) {
+        
+
+        // reclaim memory from cache
+        int unit = available * 100 / total;
+        int tenth = available * 1000 / total - 10 * unit; 
+        log_info("critical amount of available memory: %u.%u percent.", unit, tenth);
+        log_info("reclaiming memory from block caches.");
+        block_cache_reclaim_pages(total);
+
+        total = total_pages();
+        available = available_pages();
+
+        unit = available * 100 / total;
+        tenth = available * 1000 / total - 10 * unit; 
+
+        log_info("available memory after reclaim: %u.%u percent.", unit, tenth);
+    }
+
+}
+
+
 
 void kernel_process_entry(void) {
 
@@ -1053,12 +1085,10 @@ void kernel_process_entry(void) {
 
         assert(!kernel_process_running);
 
-
-        //kernel_process_running = 1;
-
         vfs_lazy_flush();
 
-        //kernel_process_running = 0;
+        // check if reclaiming memory is needed
+        memory_check();
 
         
         if(lazy_shutdown) {
@@ -1067,7 +1097,8 @@ void kernel_process_entry(void) {
             kernel_process_shutdown(0);
         }
 
-        const uint64_t sleep_time = 100*1000*1000; // 100ms
+
+        const uint64_t sleep_time = 200*1000*1000; // 200ms
 
         sched_kernel_wait(sleep_time);
     }

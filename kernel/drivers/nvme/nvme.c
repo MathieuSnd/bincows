@@ -789,6 +789,10 @@ int nvme_install(driver_t* this) {
             .virt_size = data->namespaces[0].capacity << data->namespaces[0].block_size_shift,
         };
 
+        // align params to 512 GB boundary
+        params.virt_size = (params.virt_size + (1llu << 39) - 1) & ~((1llu << 39) - 1);
+
+
         block_cache_setup(&data->si, &data->cache_si, &params);
 
         gpt_scan(&data->cache_si);

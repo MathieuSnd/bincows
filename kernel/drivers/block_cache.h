@@ -16,6 +16,7 @@ struct block_cache_params {
     // lower bits are 1
     // in from 0x000000ffffff
     // or 0x0008ffffff
+    // it should be 512 GB aligned
     uint64_t virt_size;
 };
 
@@ -26,6 +27,7 @@ struct block_cache_params {
  * 
  * @param input 
  * @param output 
+ * @param the parameters of the cache.
  */
 void block_cache_setup(
         const struct storage_interface* input, 
@@ -42,6 +44,10 @@ void block_cache_free(struct storage_interface* cache_interface);
  * 
  */
 void block_cache_reclaim_pages(unsigned pages);
+
+
+
+uint64_t block_cache_used_pages(void);
 
 
 /**

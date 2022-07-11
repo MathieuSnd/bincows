@@ -47,7 +47,7 @@ struct page_cache_entry {
  * NVMe IO submission queue size
  * should be enough for all the requests
  */
-#define MAX_PAGE_FETCHES 64
+#define MAX_PAGE_FETCHES 128
 
 
 typedef struct page_fetch {
@@ -79,13 +79,13 @@ typedef struct block_page_cache {
     int   n_page_fetches;
     page_fetch_t page_fetches[MAX_PAGE_FETCHES];
 
+    uint64_t n_used_page;
+
 
     struct {
         pid_t locked;    // if non -1, contains the pid that currently uses the structure
         uint8_t padding[128 - sizeof(pid_t)];
     } __attribute__((packed)) __attribute__((aligned(128)));
-    volatile int pf; // if non 0, a page fault has occurred
-                     // during the current operation
 } block_page_cache_t;
 
 
@@ -100,9 +100,38 @@ static size_t n_block_caches = 0;
 
 static block_page_cache_t** block_caches = NULL;
 
+
 // lock for the block_caches structure
 // this lock is coarse grained
 static fast_spinlock_t block_caches_lock = {0};
+
+
+
+uint64_t block_cache_used_pages(void) {
+    // read only, no need to lock
+    // count the n_used_page of all the block caches
+    
+    // it can differ from the number of pages used by the block caches
+    // but not that mutch. It avoid taking every lock
+
+    uint64_t rf = get_rflags();
+
+    _cli();
+
+    spinlock_acquire(&block_caches_lock);
+
+    uint64_t n_used_pages = 0;
+    for (size_t i = 0; i < n_block_caches; i++) {
+        n_used_pages += block_caches[i]->n_used_page;
+    }
+
+    spinlock_release(&block_caches_lock);
+
+    set_rflags(rf);
+
+    return n_used_pages;
+}
+
 
 
 
@@ -112,28 +141,7 @@ static fast_spinlock_t block_caches_lock = {0};
 
 void block_cache_page_fault(uint64_t pf_address) {
     panic("block cache page fault");
-/*
-    assert(pf_address >= BLOCK_CACHE_BEGIN);
-    assert(pf_address < BLOCK_CACHE_END);
-
-    // get the block cache with a matching address range
-    block_page_cache_t* cache = NULL;
-
-    for(size_t i = 0; i < n_block_caches; i++) {
-        if(pf_address >= block_caches[i]->vaddr_base &&
-            pf_address < block_caches[i]->vaddr_base + block_caches[i]->virt_size) {
-            cache = block_caches[i];
-            break;
-        }
-    }
-
-    // let the process know that a page fault has occurred
-    assert(cache->locked == sched_current_pid());
-    cache->pf = 1;
-
-    alloc_pages(pf_address & ~0xfff, 1, PRESENT_ENTRY | PL_XD | PL_RW);
-    log_warn("alloc page %lx", pf_address & ~0xfff);
-*/
+    (void) pf_address;
 }
 
 
@@ -193,27 +201,90 @@ int check_present_page(void* vaddr) {
 
 static void lock_cache(block_page_cache_t* restrict cache) {
     // lock the cache
+    
+    uint64_t rf = get_rflags();
+
     while(1) {
         _cli();
         if(cache->locked == -1) {
             // @todo atomic lock
             // maybe switch back to fast spinlock
             cache->locked = sched_current_pid();
-            _sti();
             break;
         }
-        _sti();
+        
+        set_rflags(rf);
         assert(cache->locked != sched_current_pid());
         
         sched_yield();
-            
     }    
+
+    set_rflags(rf);
 }
 
 static void unlock_cache(block_page_cache_t* restrict cache) {
     // unlock the cache
     cache->locked = -1;
 }
+
+
+
+
+static
+void flush_cache(block_page_cache_t* cache) {
+    // flush the cache
+
+    // attempt to terminate the current operations
+    lock_cache(cache);
+    while(cache->n_page_fetches > 0) {
+        unlock_cache(cache);
+        sched_yield();
+        lock_cache(cache);
+    }
+
+    assert(cache->n_page_fetches == 0);
+    free_page_range((uint64_t)cache->vaddr_base, cache->virt_size);
+    // WT: nothing to write back
+    
+    cache->n_used_page = 0;
+
+
+    unlock_cache(cache);
+}
+
+
+void block_cache_reclaim_pages(unsigned pages) {
+    // this function actually flushes all caches
+    // so that no memory is used anymore
+    // @todo this may be a bit too aggressive
+
+    (void) pages;
+
+    assert(interrupt_enable());
+
+    _cli();
+    spinlock_acquire(&block_caches_lock);
+
+    volatile unsigned n_caches = n_block_caches;
+
+    for(unsigned i = 0; i < n_caches; i++) {
+        block_page_cache_t* cache = block_caches[i];
+        lock_cache(cache);
+    }
+    spinlock_release(&block_caches_lock);
+    _sti();
+
+
+    for(unsigned i = 0; i < n_caches; i++) {
+        block_page_cache_t* cache = block_caches[i];
+        unlock_cache(cache);
+        flush_cache(cache);
+    }
+
+
+
+}
+
 
 
 /**
@@ -234,11 +305,11 @@ static int is_fetching(block_page_cache_t* cache, uint64_t lba) {
     unsigned sectors_per_page = 0x1000 >> cache->cache_interface->lbashift;
     
     // first lba in the page: page identifier
-    uint64_t lba_begin = lba & (sectors_per_page - 1);
+    uint64_t lba_begin = lba & ~(sectors_per_page - 1);
 
 
     for(int i = 0; i < cache->n_page_fetches; i++) {
-        if(cache->page_fetches[i].lba == lba) {
+        if(cache->page_fetches[i].lba == lba_begin) {
             return 1;
         }
     }
@@ -261,10 +332,7 @@ void fetch_page(block_page_cache_t* restrict cache,
     
     assert(lbashift < 12);
 
-    // compute lba begin
     lba = lba & ~(sectors_per_page - 1);
-    
-    void* base = (void*)cache->vaddr_base + (lba << lbashift);
     
     if(is_fetching(cache, lba)) {
         // we are already fetching this page
@@ -279,7 +347,7 @@ void fetch_page(block_page_cache_t* restrict cache,
         lock_cache(cache);
     }
 
-    uint64_t paddr = physalloc_single();
+    void* paddr = (void *) physalloc_single();
 
 
     cache->page_fetches[cache->n_page_fetches++] = (struct page_fetch) {
@@ -287,7 +355,7 @@ void fetch_page(block_page_cache_t* restrict cache,
         .paddr = paddr,
     };
 
-    cache->target_interface->async_read(driver, lba, translate_address((void *)paddr), sectors_per_page); 
+    cache->target_interface->async_read(driver, lba, translate_address(paddr), sectors_per_page); 
 }
 
 
@@ -335,6 +403,9 @@ static void target_sync(block_page_cache_t* restrict cache) {
                         1, 
                         PRESENT_ENTRY | PL_XD | PL_RW
                     );
+
+                    cache->n_used_page++;
+
                 }
                 // remove the i first page fetches in the list 
                 // (as we are sure that they are ready)
@@ -460,7 +531,7 @@ static void read(block_page_cache_t* restrict cache,
                  size_t   count
 ) {
 
-    prefetch(cache, driver, lba, count);
+    //prefetch(cache, driver, lba, count);
 
     unsigned lbashift = cache->cache_interface->lbashift;
 
@@ -477,6 +548,7 @@ static void read(block_page_cache_t* restrict cache,
 
     // try to read one page at a time
     while(count > 0) {
+
 
         assert(lba < cache->cache_interface->capacity);
         assert(base >= cache->vaddr_base);
@@ -533,7 +605,13 @@ static void write_cache(block_page_cache_t* restrict cache,
         if(it_wr < sectors_per_page)
             // need to fetch the entier page.
             blocking_read_cache(cache, driver, lba,  base);
-
+        else {
+            // juste allocate a blank page
+            if(! check_present_page(base)) {
+                alloc_pages(base, 1, PRESENT_ENTRY | PL_XD | PL_RW);
+                cache->n_used_page++;
+            }
+        }
         
         memcpy(base, buf, it_wr << lbashift);
         
@@ -592,9 +670,10 @@ void block_cache_write(struct driver* driver,
             // this is to make sure that two writes to the same page
             // are not executed in parallel. 
             // it is terrible for performance, so @todo find a better way
-            //cache->target_interface->sync(driver);
+            cache->target_interface->sync(driver);
 
             // write through
+            // @todo maybe merge this with write_cache
             cache->target_interface->write(driver, lba, buf, count);
             return;
         }
@@ -614,6 +693,18 @@ void block_cache_setup(
         struct storage_interface* output,
         const struct block_cache_params* params
 ) {   
+    assert(params != NULL);
+    assert(input  != NULL);
+    assert(output != NULL);
+
+    // @tood maybe reduce vaddr granularity
+    // 512 GB aligned size
+    // this granularity is needed to easily free
+    // recursivelly the pages
+    assert(params->virt_size % (1llu << 39) == 0);
+    assert(params->virt_size > 0llu);
+
+
     _cli();
     spinlock_acquire(&block_caches_lock);
 
@@ -628,7 +719,7 @@ void block_cache_setup(
     cache->entries = NULL;
     cache->driver = input->driver;
     cache->locked = -1; // initially locked by no process
-    cache->pf = 0;
+    cache->n_used_page = 0;
 
     cache->n_page_fetches = 0;
     
