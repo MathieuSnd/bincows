@@ -456,12 +456,12 @@ static void* alloc_page_table(void) {
 
 
 static void free_page_table(uint64_t pt) {
+    
     // try to emplace pt in the allocator buffer
 
     // if the buffer is full already, we cannot store it
     // we need to free it
     if(page_table_allocator_buffer_size == PTAAB_SIZE) {
-        log_info("full");
         physfree(pt);
     }
 
@@ -878,11 +878,14 @@ static void deep_free_map(uint64_t page_table, int level) {
         if(present_entry(translated[i])) {
             uint64_t page_table_addr = (uint64_t)extract_pointer(translated[i]);
 
-            if(level == 1)
+            if(level == 1) {
                 // shortcut the last level
                 physfree(page_table_addr);
+            }
             else
                 deep_free_map(page_table_addr, level - 1);
+            
+            translated[i] = 0;
         }
     }
 
@@ -903,14 +906,6 @@ void free_user_page_map(uint64_t user_page_map) {
 }
 
 
-void unmap_user(void) {
-    pml4[0] = create_table_entry(
-            NULL,
-            0
-    );
-}
-
-
 
 static void* get_entry(void* table, unsigned index) {    
     assert(index < 512);
@@ -919,6 +914,58 @@ static void* get_entry(void* table, unsigned index) {
 
     return (void *)virtual_addr_table[index];
 }
+
+
+
+void free_page_range(uint64_t vaddr, size_t count) {
+    // 512 GB aligned
+    assert(vaddr % (1llu << 39) == 0);
+    assert(count % (1llu << 39) == 0);
+
+    // mutual exclusion
+    uint64_t rf = get_rflags();
+    _cli();
+
+
+    while(count) {
+        unsigned pml4i = pml4_offset(vaddr);
+        void* pml4entry = get_entry((void**)pml4, pml4i);
+
+        if(!present_entry(pml4entry)) {
+            // not present pml4 entry:
+            // increase vaddr to the next 512 GB range
+            vaddr = (vaddr & ~(1llu << 39 - 1)) + 1llu << 39;
+            continue;
+        }
+
+        uint64_t pdpt_paddr = (uint64_t)extract_pointer(pml4entry);
+        void** pdpt = translate_address((void *)pdpt_paddr);
+
+        assert(vaddr % (1llu << 39) == 0);
+        // vaddr is aligned on 512 GB
+        // let's free 512 GB
+        deep_free_map(pdpt_paddr, 3);
+        // unmap
+        pml4[pml4i] = 0;
+        vaddr += 1llu << 39;
+
+        count -= 1llu << (39);
+    }
+
+
+    set_rflags(rf);
+}
+
+
+
+void unmap_user(void) {
+    pml4[0] = create_table_entry(
+            NULL,
+            0
+    );
+}
+
+
 
 uint64_t get_phys_addr(const void* addr) {
     unsigned pml4i = pml4_offset((uint64_t)addr);

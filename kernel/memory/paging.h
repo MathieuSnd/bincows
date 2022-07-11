@@ -121,3 +121,17 @@ uint64_t get_phys_addr(const void* vaddr);
 
 
 void unmap_user(void);
+
+
+/**
+ * @brief free everything that is mapped within the 
+ * given virtual address range: unmap and call physfree
+ * vaddr and count must be 512 GB aligned
+ * 
+ * @param begin_vaddr the beginning of the range. 512 GB aligned
+ * @param count number bytes to unmap and free.  512 GB aligned
+ * 
+ */
+void free_page_range(uint64_t begin_vaddr, size_t count);
+
+
