@@ -4,27 +4,44 @@
 
 /**
  * general virtual memory map for Bincows:
- *  
- * 0                   ------------------
- *                     |      USER      |
+ * 
+ *                         LOWER HALF
+ * 0x0000000000000000  +----------------+
+ *       512 GB        |      USER      |
  *                     |     MEMORY     | 
- * 0x0000007fffffffff  |----------------| 
- *                     |                | 
- * 0xffff800000000000  |----------------|
- *                     |   TRANSLATED   |
+ * 0x0000008000000000  |----------------| 
+ *                     |                |
+ * 0x0000800000000000  |----------------| 
+ *                     +----------------+ 
+ * 
+ * 
+ *                         HIGHER HALF 
+ * 0xffff800000000000  +----------------+
+ *       512 GB        |   TRANSLATED   |
  *                     |     MEMORY     |
- * 0xffff807fffffffff  |----------------|
- *                     |                | 
+ * 0xffff808000000000  |----------------| 
+ *      31.5 TB        |  BLOCK  CACHE  | 
+ * 0xfffffff000000000  |----------------| 
+ *                     |                |
  * 0xffffffff00000000  |----------------|
- *                     |      MMIO      | 
+ *       512 MB        |      MMIO      | 
+ * 0xffffffff20000000  |----------------|
+ *                     |                | 
  * 0xffffffff40000000  |----------------|
- *                     |   KERNEL TEMP  | 
+ *        1 GB         |   KERNEL TEMP  | 
  * 0xffffffff80000000  |----------------|
- *                     |     KERNEL     |
+ *        3 MB         |     KERNEL     |
  *                     |      DATA      |
  * 0xffffffff80300000  |----------------|
- *                     |  KERNEL HEAP   |
- * 0xffffffffffffffff  |----------------|
+ *        2 GB         |  KERNEL HEAP   |
+ * 0xffffffffffffffff  +----------------+
+ * 
+ * 
+ * one pml4 entry is 512 GB: 0x0000008000000000.
+ * The block cache is exaclty 63 pml4 entries long,
+ * it is important to detect when a page has been 
+ * modified.
+ * 
  * 
  * 
  * the allocator and the page table manager
@@ -82,10 +99,14 @@
 
 #define USER_END            0x0000007fffffffff
 #define TRANSLATED_PHYSICAL_MEMORY_BEGIN 0xffff800000000000llu
+#define BLOCK_CACHE_BEGIN   0xffff808000000000llu
 #define MMIO_BEGIN          0xffffffff00000000llu
 #define KERNEL_TEMP_BEGIN   0xffffffff40000000llu
 #define KERNEL_DATA_BEGIN   0xffffffff80000000llu
 #define KERNEL_HEAP_BEGIN   0xffffffff80300000llu
+
+
+#define BLOCK_CACHE_END     0xfffffff000000000llu
 
 
 // Bincows segmentation
@@ -103,7 +124,7 @@
 /**
  *  user memory map for Bincows:
  * 
- * 0                   |----------------|
+ * 0x0000000000000000  |----------------|
  *                     |      USER      |
  *                     |     MEMORY     | 
  * 0x0000007fffffffff  |----------------|   
@@ -125,6 +146,10 @@ static inline int is_user(void* vaddr) {
 static inline int is_kernel_memory(uint64_t vaddr) {
     // kernel is in the 2 higher GB
     return (vaddr & KERNEL_DATA_BEGIN) == KERNEL_DATA_BEGIN;
+}
+
+static inline int is_block_cache(uint64_t vaddr) {
+    return vaddr > BLOCK_CACHE_BEGIN && vaddr < BLOCK_CACHE_END;
 }
 
 static inline int is_mmio(uint64_t vaddr) {

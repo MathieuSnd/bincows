@@ -44,3 +44,14 @@ void block_cache_free(struct storage_interface* cache_interface);
 void block_cache_reclaim_pages(unsigned pages);
 
 
+/**
+ * @brief page fault handler:
+ * it should be called when a pf occurs
+ * in kernel space (for a write or a read)
+ * in the block cache range.
+ * 
+ * @param pf_address 
+ */
+void block_cache_page_fault(uint64_t pf_address);
+
+
