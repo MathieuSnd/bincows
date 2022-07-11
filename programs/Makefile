@@ -11,7 +11,7 @@ CFLAGS := -O3 -fno-inline -mno-red-zone -mgeneral-regs-only \
 
 
 
-CFILES :=$(shell find -name "*.c")
+CFILES :=$(shell echo *.c)
 EFILES := $(CFILES:.c=.elf)
 BIN_DIR := ../disk_root/bin/
 
@@ -27,6 +27,8 @@ all: $(EFILES)
 	cp cat.elf $(BIN_DIR)/cat
 	cp clear.elf $(BIN_DIR)/clear
 	cp fibo.elf $(BIN_DIR)/fibo
+	cp write.elf $(BIN_DIR)/write
+
 
 %.elf: %.c ../blib/blib.a
 	$(CC) $(CFLAGS) -c $< -o $@.o

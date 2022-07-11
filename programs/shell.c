@@ -214,6 +214,7 @@ int main(int argc, char** argv) {
 
     print_cow();
 
+
     printf("%s\n", version_string);
 
 
@@ -222,7 +223,12 @@ int main(int argc, char** argv) {
 
     export((const char*[]){NULL,"PATH=/bin",0});
 
+
+    for(int i = 0; i < 500; i++)
+        execute("write");
+
     print_prompt();
+
 
     int cur = 0;
     char line[1024];

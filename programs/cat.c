@@ -4,14 +4,14 @@
 
 static void cat(FILE *f)
 {
+    
     int c;
     char buff[31];
 
     buff[30] = 0;
 
-    while (fread(buff, 1, 1, f)) {
+    while (fread(buff, 1, 1, f))
         write(1, buff, 1);
-    }
 }
 
 int main(int argc, char* argv[]) {
