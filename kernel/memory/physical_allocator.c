@@ -558,7 +558,9 @@ void physalloc(size_t size, void* virtual_addr, PHYSALLOC_CALLBACK callback) {
 
 
 uint64_t physalloc_single(void) {
-    uint64_t paddr = 0;
+    
+    // @todo this doesn't work in an smp system
+    static uint64_t paddr;
 
     void callback(
         uint64_t physical_address, 
@@ -570,12 +572,16 @@ uint64_t physalloc_single(void) {
         paddr = physical_address;
     }
 
+    _cli();
     physalloc(1, NULL, callback);
+    volatile uint64_t paddr_copy = paddr;
+    _sti();
+
 
     // check that it has actually
     // allocated something
-    assert(paddr != 0);
-    return paddr;
+    assert(paddr_copy != 0);
+    return paddr_copy;
 }
 
 
