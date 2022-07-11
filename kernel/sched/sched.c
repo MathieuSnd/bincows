@@ -626,7 +626,7 @@ static process_t* choose_next(void) {
     static unsigned current_process = 0;
 
     // chosen process
-    process_t* p = NULL;
+    volatile process_t* p = NULL;
 
     _cli();
 
@@ -642,7 +642,7 @@ static process_t* choose_next(void) {
     int i = current_process;
     
     while(1) {
-        p = processes[i];
+        p = (volatile process_t*)processes[i];
 
         if(   p->n_threads 
            && p->threads[0].state == READY
@@ -654,16 +654,18 @@ static process_t* choose_next(void) {
         i = (i + 1) % n_processes;
 
 
-
         if(i == current_process) {
             // we have looped around
             // and haven't found a process
             // to schedule
-            panic("no process to schedule");
+            asm volatile("hlt");
+            //panic("no process to schedule");
         }
     }
 
     //log_info("choosing process %d", p->pid);
+
+
 
     assert(p->threads[0].state == READY);
 
@@ -765,13 +767,46 @@ void sched_block(void) {
         return;
     }
 
+    // the kernel process must not be blocked
+    // because it the idle process
+    assert(current_pid != KERNEL_PID);
+
     asm volatile("int $" XSTR(BLOCK_IRQ));    
 }
 
 
+
+void sched_kernel_wait(uint64_t ns) {
+    // for now, only the kernel process does that
+    assert(current_pid == KERNEL_PID);
+
+
+    uint64_t sleep_begin = clock_ns();
+    
+    while(clock_ns() < sleep_begin + ns) {
+        assert(n_ready_processes >= 0);
+        if(n_ready_processes == 0) {
+            // we are the only ready process
+            asm volatile("hlt");
+        }
+        else {
+            // there is at least someone else,
+            // let him runs
+            sched_yield();
+        }
+        // spin
+    }
+}
+
+
+
 void sched_unblock(pid_t pid, tid_t tid) {
-    //if(!sched_running)
+    // at initialization, this function is called
+    // to unblock the kernel process
+    // BEFORE the scheduler is running
+    //if(!sched_running) {
     //    return;
+    //}
 
     //log_info("unblocking %d:%d %d", pid, tid,n_ready_processes);
 
@@ -990,18 +1025,13 @@ static void kernel_process_shutdown(int do_reboot) {
     // release p lock
     spinlock_release(&p->lock);
 
-    void shutdown_sequence(void) {
-        if(do_reboot)
-            reboot();
-        else
-            shutdown();
-        panic("unreachable");
-    };
-
-
     // change the stack
     // and shutdown
-    _change_stack(bs_stack_end, shutdown_sequence);
+    if(do_reboot)
+        _change_stack(bs_stack_end, reboot);
+    else
+        _change_stack(bs_stack_end, shutdown);
+
     panic("unreachable");
 }
 
@@ -1037,22 +1067,9 @@ void kernel_process_entry(void) {
             kernel_process_shutdown(0);
         }
 
-        uint64_t sleep_begin = clock_ns();
         const uint64_t sleep_time = 100*1000*1000; // 100ms
-        while(sleep_begin + 1000000000 > clock_ns()) {
-            assert(n_ready_processes >= 0);
-            //log_warn("SLEEP %d", n_ready_processes);
-            if(n_ready_processes == 0) {
-                // we are the only ready process
-                asm volatile("hlt");
-            }
-            else {
-                // there is at least someone else,
-                // let him runs
-                sched_yield();
-            }
-            // spin
-        }
+
+        sched_kernel_wait(sleep_time);
     }
 }
 

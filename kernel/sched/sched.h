@@ -62,6 +62,14 @@ void __attribute__((noreturn)) schedule(void);
  */
 void sched_block(void);
 
+
+/**
+ * wait: if some job can be done, yields.
+ * else: halt
+ * 
+ */
+void sched_kernel_wait(uint64_t ns);
+
 /**
  * @brief block a thread that has been blocked
  * 
