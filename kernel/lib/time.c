@@ -118,10 +118,12 @@ void wakeup_threads(void) {
 
     if(j != 0) {
         // wake up the threads
-        for(int i = 0; i < j; i++) {
-            sleeping_thread_t* t = sleeping_threads + i;
-            
-            sched_unblock(t->pid, t->tid);
+        if(sched_is_running()) {
+            for(int i = 0; i < j; i++) {
+                sleeping_thread_t* t = sleeping_threads + i;
+                
+                sched_unblock(t->pid, t->tid);
+            }
         }
 
         // remove the threads that have been waken up
@@ -149,7 +151,18 @@ void sleep(unsigned ms) {
 
     uint64_t wakeup_time = begin + ms * 1000 * 1000;
 
+
     if(sched_is_running()) {
+
+        // sleeping as the kernel process
+        // means to yield the cpu if some job can be done,
+        // or idle else
+        if(sched_current_pid() == KERNEL_PID) {
+            sched_kernel_wait(ms);
+            return;
+        }
+            //sched_yield();
+
         //stacktrace_print();
         do {
             _cli();
