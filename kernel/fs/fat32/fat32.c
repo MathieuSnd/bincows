@@ -600,7 +600,7 @@ static int parse_dir_entry(
     cur_entry->ino  = dir->cluster_low | 
                 ((uint32_t)dir->cluster_high << 16);
 
-    log_warn("%s: ino = %lu", cur_entry->name, cur_entry->ino);
+    // log_warn("%s: ino = %lu", cur_entry->name, cur_entry->ino);
     
     cur_entry->file_size  = dir->file_size;
 
