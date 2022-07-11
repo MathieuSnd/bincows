@@ -109,4 +109,15 @@ uint64_t get_user_page_map(void);
 void set_user_page_map(uint64_t paddr);
 
 
+/**
+ * @brief return physical address pointed by a
+ * given virtual address
+ * 
+ * @param vaddr the virtual address
+ * @return the physical address pointed by vaddr if
+ * it is mapped, 0 otherwise
+ */
+uint64_t get_phys_addr(const void* vaddr);
+
+
 void unmap_user(void);

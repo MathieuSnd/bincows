@@ -525,10 +525,9 @@ static void internal_map_pages(uint64_t physical_addr,
                 pdpti = pdpt_offset(virtual_addr),
                 pdi   = pd_offset(virtual_addr),
                 pti   = pt_offset(virtual_addr);
-
+        
         // those entries should exist
-        pml4e restrict pml4entry = extract_pointer(get_entry_or_panic   ((void**)pml4,      pml4i));
-
+        pml4e restrict pml4entry = extract_pointer(get_entry_or_allocate((void**)pml4,      pml4i));
         pdpte restrict pdptentry = extract_pointer(get_entry_or_allocate((void**)pml4entry, pdpti));
         pde   restrict pdentry   = extract_pointer(get_entry_or_allocate((void**)pdptentry, pdi));
 
@@ -909,5 +908,41 @@ void unmap_user(void) {
             NULL,
             0
     );
+}
+
+
+
+static void* get_entry(void* table, unsigned index) {    
+    assert(index < 512);
+
+    void** virtual_addr_table =  translate_address(table);
+
+    return (void *)virtual_addr_table[index];
+}
+
+uint64_t get_phys_addr(const void* addr) {
+    unsigned pml4i = pml4_offset((uint64_t)addr);
+    unsigned pdpti = pdpt_offset((uint64_t)addr);
+    unsigned pdi   = pd_offset  ((uint64_t)addr);
+    unsigned pti   = pt_offset  ((uint64_t)addr);
+
+    pml4e restrict pml4entry = get_entry((void**)pml4,      pml4i);
+    if(!present_entry(pml4entry))
+        return 0;
+
+    pdpte restrict pdptentry = get_entry((void**)extract_pointer(pml4entry), pdpti);
+    if(!present_entry(pdptentry))
+        return 0;
+
+    pde restrict pdentry    = get_entry((void**)extract_pointer(pdptentry), pdi);
+    if(!present_entry(pdentry))
+        return 0;
+
+    pte restrict ptentry    = get_entry((void**)extract_pointer(pdentry), pti);
+    if(!present_entry(ptentry))
+        return 0;
+
+    return (uint64_t) ptentry;
+
 }
 
