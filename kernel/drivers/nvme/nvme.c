@@ -28,6 +28,7 @@
 #include "../../memory/paging.h"
 #include "../../memory/vmap.h"
 #include "../../int/irq.h"
+#include "../../sched/sched.h"
 
 #include "../block_cache.h"
 
@@ -1153,8 +1154,12 @@ void nvme_sync(driver_t* this) {
         //data->io_queues.sq.head != data->io_queues.sq.tail
         !queue_empty(&data->io_queues.sq) 
         || !queue_empty(&data->io_queues.cq)
-    )
-        sleep(1);
+    ) {
+        if(sched_is_running())
+            sched_yield();
+        else
+            asm("hlt");
+    }
 }
 
 
