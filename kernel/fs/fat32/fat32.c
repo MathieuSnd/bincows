@@ -939,7 +939,6 @@ int fat32_update_dirent(fs_t* fs, uint64_t dir_cluster, const char* file_name,
     // for long name entries
     int long_entry = 0;
 
-
     // if we were to include the filename in the modifiable
     // metadata, we would need to be able to modify multiple clusters:
     // an entry can cross multiple sectors 
@@ -1249,7 +1248,6 @@ int trunc_file(fs_t* fs,
 
 
 
-
     // free the rest of the cluster chain
     for(int i = 0; i < trunc_clusters; i++) {
         // get the next one
@@ -1400,6 +1398,7 @@ int fat32_write_file_sectors(
         // the file is empty, no assicated cluster
         // allocate the file's first cluster
         fd->addr = allocFAT(fs->part, pr);
+        linkFAT(fs->part, pr, fd->addr, 0xfffffff);
     }
     
     cluster_t cluster = fetch_cluster(fs, pr, fd, first_cluster, &clusterend);
