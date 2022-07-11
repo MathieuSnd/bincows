@@ -3,6 +3,9 @@
 #include "../lib/panic.h"
 #include "idt.h"
 
+// for block cache page faults
+#include "../drivers/block_cache.h"
+
 // return the value of cr2
 extern uint64_t _cr2(void);
 
@@ -128,14 +131,29 @@ void ISR_page_fault_handler(struct IFrame* interrupt_frame,
                             uint64_t       _error_code
 ) {
     // trick to fix the stack
-    register volatile uint64_t error_code = _error_code;    
-    
+    register volatile uint64_t error_code = _error_code;
+
     *(volatile uint64_t*)(__builtin_frame_address(0) + 8) = interrupt_frame->RIP;
     
+
+    uint64_t pf_address = _cr2();
+
+    if((error_code & 0x17) == 0x00) {
+        // if the page is not present,
+        // the page fault happened in kernel space
+        // and not because of an instruction fetch
+
+        if(is_block_cache(pf_address)) {
+            // let the block cache handle the page fault
+            block_cache_page_fault(pf_address);
+            return;
+        }
+    }
+    // this is an error, panic
     char buff[128];
 
     // the content of cr2 is the illegal address
-    sprintf(buff, "PAGE FAULT. illegal address: %16lx, error code %x\n", _cr2(), error_code);
+    sprintf(buff, "PAGE FAULT. illegal address: %16lx, error code %x\n", pf_address, error_code);
     panic_handler(buff, interrupt_frame);
     __builtin_unreachable();
 }
