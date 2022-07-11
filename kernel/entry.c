@@ -47,7 +47,13 @@
 // accessible by other compilation units
 // like panic.c
 const size_t stack_size = KERNEL_STACK_SIZE;
-uint8_t stack_base[KERNEL_STACK_SIZE] __attribute__((section(".stack"))) __attribute__((aligned(16)));
+uint8_t stack_base[KERNEL_STACK_SIZE] 
+        __attribute__((section(".stack"))) 
+        __attribute__((aligned(16)));
+
+
+void* const bs_stack_end = stack_base + KERNEL_STACK_SIZE;
+
 
 #define INITIAL_STACK_PTR ((uintptr_t)(stack_base + KERNEL_STACK_SIZE))
 
@@ -58,6 +64,7 @@ static struct stivale2_header_tag_terminal terminal_hdr_tag = {
     },
     .flags = 0
 };
+
 
 static struct stivale2_header_tag_framebuffer framebuffer_hdr_tag = {
     // Same as above.
@@ -86,8 +93,11 @@ static const void *stivale2_get_tag(const struct stivale2_struct *stivale2_struc
     for (;;) {
         // We assert that these are not NULL afterwards, when the terminal
         // is successfully initialized
-        if(current_tag == NULL)
+        if(current_tag == NULL) {
+            // construct panic string: "stivale2: tag not found %s", id
+            log_warn("stivale2 bootloader: tag not found %lx", id);
             return NULL;
+        }
 
         if (current_tag->identifier == id) {
             return current_tag;
@@ -158,20 +168,30 @@ static void print_fun(const char* s, size_t len) {
  * @return disk_part_t* NULL if not found
  */
 static 
-disk_part_t* find_main_part(const struct stivale2_guid* part_guid) {
-    disk_part_t* part = NULL;//search_partition("Bincows2");//find_partition(*(GUID*)part_guid);
+disk_part_t* find_main_part(const struct stivale2_struct_tag_boot_volume* boot_volume_tag) {
+
+    const struct stivale2_guid* part_guid = boot_volume_tag = NULL ? &boot_volume_tag->part_guid: NULL;
+
+
+    disk_part_t* part = NULL; //search_partition("Bincows2");//find_partition(*(GUID*)part_guid);
     if(part)
         log_info("main partition found");
     if(!part) {
-        log_warn(
-            
-            "cannot find main partition! (boot volume GUID: "
-            "{%8x-%4x-%4x-%2x%2x-%2x%2x%2x%2x%2x%2x})",
-            part_guid->a,    part_guid->b,    part_guid->c,
-            part_guid->d[0], part_guid->d[1],
-            part_guid->d[2], part_guid->d[3], part_guid->d[4], 
-            part_guid->d[5], part_guid->d[6], part_guid->d[7]
-        );
+        if(!part_guid) {
+            log_warn(
+                "cannot find boot partition."
+            );
+        }
+        else {
+            log_warn(
+                "cannot find boot partition. (boot volume GUID: "
+                "{%8x-%4x-%4x-%2x%2x-%2x%2x%2x%2x%2x%2x})",
+                part_guid->a,    part_guid->b,    part_guid->c,
+                part_guid->d[0], part_guid->d[1],
+                part_guid->d[2], part_guid->d[3], part_guid->d[4], 
+                part_guid->d[5], part_guid->d[6], part_guid->d[7]
+            );
+        }
 
         part = search_partition("Bincows");
 
@@ -193,8 +213,32 @@ disk_part_t* find_main_part(const struct stivale2_guid* part_guid) {
 
 
 static inline
+void test_disk_write(void) {
+    file_handle_t* f = vfs_open_file("//////home//elyo//", VFS_WRITE);
+
+    const char* s = "Hello, world!";
+
+    vfs_write_file(s, 1, strlen(s), f);
+// check
+    //read
+    vfs_close_file(f);
+    
+    f = vfs_open_file("//////home//elyo//", VFS_READ);
+
+    // read and print file
+    char buf[2048];
+    size_t read = vfs_read_file(buf, 2048, f);
+    log_info("read %d bytes", read);
+    printf("%s", buf);
+
+    vfs_close_file(f);
+}
+
+
+
+static inline
 void test_disk_overflow(void) {
-    file_handle_t* f = vfs_open_file("/////fs/boot/bg.bmp//", VFS_READ);
+    file_handle_t* f = vfs_open_file("//////home//elyo//", VFS_READ);
 
     const int bsize = 1024 * 1024 * 8;
 
@@ -207,7 +251,7 @@ void test_disk_overflow(void) {
     uint64_t time = clock_ns();
 
     for(unsigned i = 0; i < size / bsize; i++) {
-        log_info("write %u (%u)", i * bsize, clock_ns() - time);
+        log_info("write %u (%u)", i * bsize, (clock_ns() - time) / 1000000);
         time = clock_ns();
         
         size_t r = vfs_write_file(buf, bsize, 1, f);
@@ -218,14 +262,14 @@ void test_disk_overflow(void) {
     //read
     vfs_close_file(f);
     
-    f = vfs_open_file("/////fs/boot/bg.bmp//", VFS_READ);
+    f = vfs_open_file("//////home//elyo//", VFS_READ);
 
     time = clock_ns();
     int rsize = bsize;
     int i = 0;
-    while(vfs_read_file(buf, rsize, 1, f) == 1) {
+    while(vfs_read_file(buf, rsize, f) == rsize) {
         int begin = i++ * rsize;
-        log_info("read %u (%u)", begin, clock_ns() - time);
+        log_info("read %u (%u)", begin, (clock_ns() - time) / 1000000);
         time = clock_ns();
 
         for(int j = begin; j < begin + rsize; j++)
@@ -235,6 +279,9 @@ void test_disk_overflow(void) {
     vfs_close_file(f);
     free(buf);
 }
+
+
+
 
 
 static inline 
@@ -264,7 +311,7 @@ void test_disk_read(void) {
 
         _sti();
         fd = vfs_open_file("/////bin/sh//", VFS_READ);
-        int r = vfs_read_file(buf, 1, size, fd);
+        int r = vfs_read_file(buf, size, fd);
 
         for(int i = 0; i < 10; i++)
             asm("hlt");
@@ -311,11 +358,13 @@ void launch_shell(void) {
     vfs_seek_file(f, 0, SEEK_END);
     size_t file_size = vfs_tell_file(f);
 
+    assert(file_size != 0);
+
     elf_file = malloc(file_size); 
 
     vfs_seek_file(f, 0, SEEK_SET);
 
-    size_t rd = vfs_read_file(elf_file, 1, file_size, f);
+    size_t rd = vfs_read_file(elf_file, file_size, f);
     //sleep(10);
     assert(rd == file_size);
 
@@ -341,9 +390,12 @@ void launch_shell(void) {
         argv, sizeof(argv), envp, sizeof(envp)
     );
 
+
+
     // release process lock
     spinlock_release(&proc->lock);
 
+    sched_unblock(pid, 1);
     _sti();
 
     assert(pid);
@@ -411,6 +463,7 @@ void _start(struct stivale2_struct *stivale2_struct) {
 
 // shutdown procedure
     atshutdown(sched_cleanup);
+    atshutdown(vfs_cleanup);
     atshutdown(gpt_cleanup);
     atshutdown(remove_all_drivers);
     atshutdown(free_all_devices);
@@ -424,6 +477,8 @@ void _start(struct stivale2_struct *stivale2_struct) {
 // so we need to load our gdt after our
 // terminal is successfully installed 
     init_gdt_table();
+
+    puts("\x1b[0m\x0c");
     
     puts(log_get());
 
@@ -442,7 +497,8 @@ void _start(struct stivale2_struct *stivale2_struct) {
     //ps2kb_set_event_callback(early_kbhandler);
     
 
-    disk_part_t* part = find_main_part(&boot_volume_tag->part_guid);
+    disk_part_t* part = find_main_part(boot_volume_tag);
+    
     assert(part);
     int r = vfs_mount(part, "/");
     assert(r != 0);
@@ -470,6 +526,9 @@ void _start(struct stivale2_struct *stivale2_struct) {
     //log_warn("test disk read");
     //test_disk_read();
 
+    //log_warn("test disk write");
+    //test_disk_overflow();
+    
 
     log_debug("launch shell");
     // everything should be correctly initialized
@@ -482,7 +541,7 @@ void _start(struct stivale2_struct *stivale2_struct) {
     //printf("\x0c");
     
     // start the scheduler
-    schedule();
+    sched_start();
     
     panic("unreachable");
 }
