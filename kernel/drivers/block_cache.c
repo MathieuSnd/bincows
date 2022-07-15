@@ -11,19 +11,6 @@
 #include "../sched/sched.h"
 
 
-// page cache
-
-struct page_cache_entry {
-    uint64_t lba;
-
-    uint8_t ready_bitmap;
-    uint8_t dirty_bitmap;
-
-    void* vaddr;
-};
-
-
-
 /**
  * @brief to avoid using coarse grained locking
  * for cache accesses (which would be slow in case
@@ -72,8 +59,6 @@ typedef struct block_page_cache {
 
           struct storage_interface* cache_interface;
     const struct storage_interface* target_interface;
-    
-    struct page_cache_entry* entries;
 
 
     int   n_page_fetches;
@@ -716,7 +701,6 @@ void block_cache_setup(
     cache->virt_size = params->virt_size;
     cache->cache_interface = output;
     cache->target_interface = input;
-    cache->entries = NULL;
     cache->driver = input->driver;
     cache->locked = -1; // initially locked by no process
     cache->n_used_page = 0;
@@ -774,7 +758,6 @@ void block_cache_free(struct storage_interface* cache_interface) {
     }
 
 
-    free(bc->entries);
     free(bc);
     // remove the cache from the list
 
@@ -784,11 +767,18 @@ void block_cache_free(struct storage_interface* cache_interface) {
         sizeof(block_page_cache_t) * (n_block_caches - i - 1)
     );
 
+
+    // realloc
+    block_caches = realloc(
+        block_caches, 
+        sizeof(block_page_cache_t) * (n_block_caches - 1)
+    );
+
     n_block_caches--;
 
 
-    _sti();
     spinlock_release(&block_caches_lock);
+    _sti();
 }
 
 

@@ -841,6 +841,8 @@ static void remove(driver_t* this) {
     shutdown(this);
     struct data* data = this->data;
     
+    block_cache_free(&data->cache_si);
+    
     // free all the initialized queues
     if(data->admin_queues.cq.base) {
         free_queue(&data->admin_queues.sq);
@@ -855,8 +857,11 @@ static void remove(driver_t* this) {
     for(unsigned i = 0; i < IO_QUEUE_SIZE; i++) {
         freePRP(data->prps[i]);
     }
+    
+
     // finally free the data structure
     free(this->data);
+
 }
 
 

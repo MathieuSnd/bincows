@@ -73,7 +73,6 @@ void register_sleeping_thread(tid_t tid, pid_t pid, uint64_t wakeup_time) {
         sizeof(sleeping_thread_t) * (n_sleeping_threads + 1)
     );
 
-    
 
     int i = insert_position(wakeup_time, tid, pid);
 
@@ -100,6 +99,19 @@ void register_sleeping_thread(tid_t tid, pid_t pid, uint64_t wakeup_time) {
     set_rflags(rf);
 }
 
+
+void cleanup_sleeping_threads(void) {
+    uint64_t rf = get_rflags();
+    _cli();
+    spinlock_acquire(&sleep_lock);
+
+    if(n_sleeping_threads)
+        free(sleeping_threads);
+    n_sleeping_threads = 0;
+    sleeping_threads = NULL;
+    spinlock_release(&sleep_lock);
+    set_rflags(rf);
+}
 
 
 void wakeup_threads(void) {
@@ -134,6 +146,12 @@ void wakeup_threads(void) {
         );
 
         n_sleeping_threads -= j;
+
+        // realloc
+        sleeping_threads = realloc(
+            sleeping_threads,
+            sizeof(sleeping_thread_t) * n_sleeping_threads
+        );
     }
 
 

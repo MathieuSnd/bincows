@@ -21,3 +21,6 @@ void wakeup_threads(void);
 
 // sleep for around ms miliseconds 
 void sleep(unsigned ms);
+
+
+void cleanup_sleeping_threads(void);
