@@ -573,6 +573,8 @@ void sched_cleanup(void) {
 
     spinlock_acquire(&sched_lock);
 
+    cleanup_sleeping_threads();
+
     for(unsigned i = 0; i < n_processes; i++) {
         process_t* p = processes[i];
 
