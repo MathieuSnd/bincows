@@ -60,12 +60,6 @@ extern int lchown (const char *__file, __uid_t __owner, __gid_t __group)
      __THROW __nonnull ((1)) __wur;
 
 
-/* Suspend the process until a signal arrives.
-   This always returns -1 and sets `errno' to EINTR.
-
-   This function is a cancellation point and therefore not marked with
-   __THROW.  */
-extern int pause (void);
 
 extern int fchdir (int __fd) __THROW __wur;
 
@@ -652,6 +646,15 @@ extern int fsync (int __fd);
 
 /* Make all changes done to all files actually appear on disk.  */
 extern void sync (void);
+
+
+
+/* Suspend the process until a signal arrives.
+   This always returns -1 and sets `errno' to EINTR.
+
+   This function is a cancellation point and therefore not marked with
+   __THROW.  */
+extern int pause (void);
 
 
 

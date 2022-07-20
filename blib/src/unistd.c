@@ -434,3 +434,9 @@ void __attribute__ ((__noreturn__)) _exit (int status) {
     syscall(SC_EXIT, &status, sizeof(sc_args));
     __builtin_unreachable();
 }
+
+
+int pause (void) {
+    syscall(SC_SIGPAUSE, NULL, 0);
+    return 0;
+}
