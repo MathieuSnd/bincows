@@ -47,6 +47,9 @@ int create_thread(
     };
 
 
+    thread->syscall_user_rsp = NULL;
+
+
 
     return 0;
 }

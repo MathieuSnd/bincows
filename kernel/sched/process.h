@@ -125,10 +125,10 @@ typedef struct process {
     // context before the signal handler was called
     // which is to be restored when the signal handler
     // returns (on receiving a SIGRETURN system call)
+    // it resides in the kernel thread stack
     struct gp_regs* sig_return_context;
 
     // address of the return context
-    void* sig_return_context_addr;
 
 
 } process_t;
@@ -142,7 +142,7 @@ int process_register_signal_setup(
 
 
 // returns 0 on success
-int trigger_process_signal(pid_t pid, int signal);
+int process_trigger_signal(pid_t pid, int signal);
 
 
 // returns 0 on success

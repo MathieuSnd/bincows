@@ -78,6 +78,13 @@ void sched_kernel_wait(uint64_t ns);
  */
 void sched_unblock(pid_t pid, tid_t tid);
 
+/**
+ * @brief block a thread that has been blocked
+ * 
+ */
+void sched_unblock_thread(thread_t *);
+
+
 
 void sched_launch_process(process_t* p);
 
@@ -116,6 +123,7 @@ void sched_register_process(process_t* process);
  * spinlock_release(&process->lock)
  */
 process_t* sched_current_process(void);
+
 
 
 

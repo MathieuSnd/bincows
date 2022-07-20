@@ -74,6 +74,15 @@ struct thread {
     stack_t stack;
     gp_regs_t* rsp;
 
+    // during a syscall, this field
+    // saves the user rsp value before
+    // the syscall. It is NULL otherwise.
+    // this is fpr signals to use a valid
+    // stack at anytime.
+    // The signal code goes bellow this field 
+    // value.
+    void* syscall_user_rsp;
+
     tstate_t state;
 
     // if this field is set, then the thread

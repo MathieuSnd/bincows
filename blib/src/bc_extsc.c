@@ -25,11 +25,13 @@ int sigsetup(signal_end_fun_t sigend, sighandler_t* handler_table) {
 
 void sigreturn(void) {
     syscall(SC_SIGRETURN, NULL, 0);
-    __builtin_unreachable();
+
+    printf("sigreturn: should never reach this point\n");
+    for(;;);
 }
 
 
-int sigend(int pid, int sig) {
+int sigsend(int pid, int sig) {
     struct sc_sigkill_args args = {
         .pid    = pid,
         .signal = sig,

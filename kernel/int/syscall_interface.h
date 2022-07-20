@@ -148,5 +148,10 @@ struct sc_sigsetup_args {
     void (*signal_end)(void);
 };
 
+struct sc_sigkill_args {
+    int pid;
+    int signal;
+};
+
 
 

@@ -49,7 +49,6 @@ syscall_entry:
     push rbp
     mov rbp, rsp
 
-    sti
 
 
     ; save the userstack pointer
@@ -59,6 +58,12 @@ syscall_entry:
 
     push rcx
     push r11
+
+
+    ; give the user stack pointer as the 4rth argument
+    ; to the syscall_main function
+    mov rcx, r9
+
 
     ; clear direction flag    
     cld

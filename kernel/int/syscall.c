@@ -40,7 +40,7 @@ static inline void sc_warn(const char* msg, void* args, size_t args_sz) {
 
 
 static int check_args_in_program(
-                process_t* proc, const void* args, size_t args_sz
+                const process_t* proc, const void* args, size_t args_sz
 ) {
 
     const uint64_t arg_begin = (uint64_t)args;
@@ -670,7 +670,6 @@ static uint64_t sc_seek(process_t* proc, void* args, size_t args_sz) {
         return -1;
     }
 
-uint64_t seek;
     switch(proc->fds[a->fd].type) {
         case FD_FILE:
             return vfs_seek_file(proc->fds[a->fd].file, a->offset, a->whence);
@@ -1029,16 +1028,6 @@ uint64_t sc_sigsetup(process_t* proc, void* args, size_t args_sz) {
 
 
 
-// returns 0 on success
-//int trigger_process_signal(pid_t pid, int signal);
-
-
-// returns 0 on success
-// should be executed when a thread reaches the
-// end of a signal handler: on receiving a SIGRETURN system call
-//int process_end_of_signal(process_t* process);
-
-
 uint64_t sc_sigretrn(process_t* proc, void* args, size_t args_sz) {
     if(args_sz != 0) {
         sc_warn("bad args_sz", args, args_sz);
@@ -1054,6 +1043,56 @@ uint64_t sc_sigretrn(process_t* proc, void* args, size_t args_sz) {
     }
     spinlock_release(&proc->lock);
     _sti();
+
+    return res;
+}
+
+
+uint64_t sc_kill(process_t* proc, void* args, size_t args_sz) {
+
+    (void) proc;
+
+
+    if(args_sz != sizeof(struct sc_sigkill_args)) {
+        sc_warn("bad args_sz", args, args_sz);
+        return -1;
+    }
+
+    struct sc_sigkill_args* a = args;
+    pid_t pid = a->pid;
+    int signal = a->signal;
+
+
+    if(signal < 0 || signal >= MAX_SIGNALS) {
+        sc_warn("bad signal", args, args_sz);
+        return -1;
+    }
+
+    if(pid == 0) {
+        // @todo maybe signal to kernel thraed to 
+        // shutdown / reboot / ...
+        sc_warn("bad pid", args, args_sz);
+        return -1;
+    }
+
+
+    return process_trigger_signal(pid, signal);
+}
+
+
+uint64_t sc_pause(process_t* proc, void* args, size_t args_sz) {
+
+    (void) proc;
+    (void) args;
+
+    if(args_sz != 0) {
+        sc_warn("bad args_sz", args, args_sz);
+        return -1;
+    }
+
+    thread_pause();
+
+    return 0;
 }
 
 
@@ -1070,23 +1109,26 @@ void syscall_init(void) {
     for(unsigned i = 0; i < SC_END; i++)
         sc_funcs[i] = sc_unimplemented;
 
-    sc_funcs[SC_SLEEP]  = sc_sleep;
-    sc_funcs[SC_SBRK]   = sc_sbrk;
-    sc_funcs[SC_EXIT]   = sc_exit;
-    sc_funcs[SC_OPEN]   = sc_open;
-    sc_funcs[SC_CLOSE]  = sc_close;
-    sc_funcs[SC_SEEK]   = sc_seek;
-    sc_funcs[SC_ACCESS] = sc_access;
-    sc_funcs[SC_READ]   = sc_read;
-    sc_funcs[SC_WRITE]  = sc_write;
-    sc_funcs[SC_EXEC]   = sc_exec;
-    sc_funcs[SC_CHDIR]  = sc_chdir;
-    sc_funcs[SC_GETCWD] = sc_getcwd;
-    sc_funcs[SC_CLOCK]  = sc_clock;
-    sc_funcs[SC_DUP]    = sc_dup;
-    sc_funcs[SC_GETPID] = sc_getpid;
-    sc_funcs[SC_GETPPID]= sc_getppid;
-    
+    sc_funcs[SC_SLEEP]     = sc_sleep;
+    sc_funcs[SC_SBRK]      = sc_sbrk;
+    sc_funcs[SC_EXIT]      = sc_exit;
+    sc_funcs[SC_OPEN]      = sc_open;
+    sc_funcs[SC_CLOSE]     = sc_close;
+    sc_funcs[SC_SEEK]      = sc_seek;
+    sc_funcs[SC_ACCESS]    = sc_access;
+    sc_funcs[SC_READ]      = sc_read;
+    sc_funcs[SC_WRITE]     = sc_write;
+    sc_funcs[SC_EXEC]      = sc_exec;
+    sc_funcs[SC_CHDIR]     = sc_chdir;
+    sc_funcs[SC_GETCWD]    = sc_getcwd;
+    sc_funcs[SC_CLOCK]     = sc_clock;
+    sc_funcs[SC_DUP]       = sc_dup;
+    sc_funcs[SC_GETPID]    = sc_getpid;
+    sc_funcs[SC_GETPPID]   = sc_getppid;
+    sc_funcs[SC_SIGSETUP]  = sc_sigsetup;
+    sc_funcs[SC_SIGRETURN] = sc_sigretrn;
+    sc_funcs[SC_SIGKILL]   = sc_kill;
+    sc_funcs[SC_SIGPAUSE]  = sc_pause;
 
 
     /*
@@ -1146,14 +1188,26 @@ char* scname[] = {
     "GETCWD", 
     "GETPID", 
     "GETPPID",
-    "SIGSETUP", 
-    "SIGRETURN",
+    "SC_SIGSETUP", 
+    "SC_SIGRETURN",
+    "SC_SIGKILL",
+    "SC_SIGPAUSE",
 };
 
+
 // called from syscall_entry
-uint64_t syscall_main(uint8_t scid, void* args, size_t args_sz) {
+uint64_t syscall_main(uint8_t scid, void* args, size_t args_sz, uint64_t* user_sp) {
+
 
     process_t* process = sched_current_process();
+
+
+    // save the user stack pointer of the thread
+    // while the irqs are still disable
+    thread_t* t = sched_get_thread_by_tid(process, sched_current_tid());
+
+    t->syscall_user_rsp = user_sp;
+
 
     assert(process->pid > 0 && process->pid <= MAX_PID);
 
@@ -1165,6 +1219,10 @@ uint64_t syscall_main(uint8_t scid, void* args, size_t args_sz) {
     // cannot change while we are in the syscall
     // as we are in the kernel stack 
     spinlock_release(&process->lock);
+
+    // this sti enables interrupts after releasing the lock
+    // but the interrupts were disabled before and need
+    // to be enabled again
     _sti();
 
 
@@ -1177,6 +1235,17 @@ uint64_t syscall_main(uint8_t scid, void* args, size_t args_sz) {
         // log_debug("%u.%u: %s", sched_current_pid(), sched_current_tid(), scname[scid]);
         uint64_t res = sc_funcs[scid](process, args, args_sz);
 
+
+        // disable interrupts again
+        // to swich to the user stack
+        _cli();
+        
+        spinlock_acquire(&process->lock);
+        t = sched_get_thread_by_tid(process, sched_current_tid());
+        
+        t->syscall_user_rsp = NULL;
+
+        spinlock_release(&process->lock);
 
         return res;
     }

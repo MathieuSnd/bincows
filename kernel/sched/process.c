@@ -157,7 +157,14 @@ int create_process(
         .ppid = ppid,
         .cwd  = cwd,
         .program = program,
-        .clock_begin = clock_ns()
+        .clock_begin = clock_ns(),
+
+
+        .sig_table = NULL,
+        .sig_current = NOSIG,
+        .sig_pending = 0,
+        .sig_return_context = NULL,
+        .sig_return_function = NULL,
     };
     
 
@@ -227,11 +234,11 @@ int create_kernel_process(process_t* process) {
         .cwd  = strdup("/"), // root directory
         .program = NULL,
         .clock_begin = clock_ns(),
+
         .sig_table = NULL,
-        .sig_current = -1,
+        .sig_current = NOSIG,
         .sig_pending = 0,
         .sig_return_context = NULL,
-        .sig_return_context_addr = NULL,
         .sig_return_function = NULL,
     };
 
@@ -516,7 +523,6 @@ int prepare_process_signal(process_t* process, int signal) {
 
     set_user_page_map(process->page_dir_paddr);
 
-    // @URGENT map process memory if not already
 
     process->sig_current = signal;
 
@@ -531,47 +537,74 @@ int prepare_process_signal(process_t* process, int signal) {
 
     assert(process->sig_return_context == NULL);
 
-    // saved context of the thread before the signal
-    // it cannot resides in the user space as if it did,
-    // the user could change its SS, CS, RFLAGS registers
-    // which is definitly NOT GOOD at all
-    // then, it is placed in kernel heap
-    process->sig_return_context = malloc(sizeof(gp_regs_t));
 
-    // copy context
-    memcpy(
-        process->sig_return_context, 
-        thread0->rsp, 
-        sizeof(gp_regs_t)
-    );
+    process->sig_return_context = thread0->rsp;
 
-    process->sig_return_context_addr = thread0->rsp;
 
+    ////////////////////////////////////////////////
+    //////////////// return address ////////////////
+    ////////////////////////////////////////////////
     // set return address. to do that, we must 
     // move the context a bit higher in the stack
-    memmove(
-         (void*)thread0->rsp, 
-        ((void*)thread0->rsp) - sizeof(void*), 
-        sizeof(gp_regs_t)
-    );
 
-    thread0->rsp->rsp -= sizeof(void*);
+    void* user_rsp;
 
-    uint64_t* stack_end = (uint64_t*)thread0->rsp->rsp;
 
-    *stack_end = (uint64_t)process->sig_return_function;
+    if(thread0->syscall_user_rsp) {
+        // the thread is currently in a system call. 
+        // the current stack resides in kernel space
 
+        user_rsp = thread0->syscall_user_rsp;
+    }
+    else {
+        user_rsp = (void*)thread0->rsp->rsp;
+    }
+
+
+    assert(is_user(user_rsp));
+
+
+    // allocate memory for return address
+    user_rsp -= sizeof(void*);
+
+    if(user_rsp < (void*)thread0->stack.base) {
+        // stack overflow!
+        log_warn("stackoverflow when signaling process %d", process->pid);
+
+        return -1;
+    }
+
+    *(void**)user_rsp = process->sig_return_function;
+
+
+    thread0->rsp --;
+
+    if(thread0->rsp < thread0->kernel_stack.base) {
+        // kernel space stack overflow
+        log_warn("kernel stack overflow");
+        return -1;
+    }
+
+
+
+    thread0->rsp->rsp = (gp_regs_t*)user_rsp;
+    
+    // don't execute the user code with CPL=1 :)
+    thread0->rsp->cs = USER_CS;
+    thread0->rsp->ss = USER_DS;
+    thread0->rsp->rflags = USER_RF;
+
+    // argument to function
+    thread0->rsp->rdi = signal;
 
 
     // jump to signal handler
     assert(process->sig_table[signal]);
     thread0->rsp->rip = (uint64_t)process->sig_table[signal];
 
-    
-    thread0->rsp++;
-
-    // unblock the thread
-    process->threads[0].state = READY;
+    // unblock the thread if blocked
+    if(process->threads[0].state == BLOCKED)
+        sched_unblock_thread(&process->threads[0]);
 
 
     return 0;
@@ -590,27 +623,26 @@ int process_end_of_signal(process_t* process) {
     //map_process_memory(process);
 
     // check that the process was indeed in a signal handler
-    if(process->sig_current == -1)
+    if(process->sig_current == NOSIG)
         return -1;
 
     assert(process->sig_return_context != NULL);
 
-    // restore context
-    memcpy(
-        process->sig_return_context_addr, 
-        process->sig_return_context, 
-        sizeof(gp_regs_t)
-    );
-    process->threads[0].rsp = (void *)process->sig_return_context_addr;
 
-    // free the saved context
-    free(process->sig_return_context);
+
+
+    process->threads[0].rsp = (void *)process->sig_return_context;
+
     process->sig_return_context = NULL;
 
 
     // the process is now back in a normal state:
     // clear the sig_current field
     process->sig_current = NOSIG;
+
+    spinlock_release(&process->lock);
+
+    _restore_context(process->threads[0].rsp);
 
     return 0;
 }
@@ -653,7 +685,7 @@ void unblock_sigwait_threads_and_release(process_t* process, uint64_t rflags) {
 }
 
 
-int trigger_process_signal(pid_t pid, int signal) {
+int process_trigger_signal(pid_t pid, int signal) {
 
     uint64_t rf = get_rflags();
 
@@ -662,7 +694,7 @@ int trigger_process_signal(pid_t pid, int signal) {
 
     if(!process) {
         set_rflags(rf);
-        return 1;
+        return -1;
     }
 
     if(!process->sig_table) {
@@ -672,7 +704,7 @@ int trigger_process_signal(pid_t pid, int signal) {
         // signal ignored
     }
     else {
-        if(process->sig_current != NOSIG) {
+        if(process->sig_current == NOSIG) {
             prepare_process_signal(process, signal);
         }
         else

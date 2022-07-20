@@ -29,6 +29,7 @@ OBJ :=  $(SFILES:.s=.s.o) \
 		$(CFILES:.c=.c.o)
 
 
+all: $(BIN_FILE)
 
 
 debug: CFLAGS += -g
@@ -36,7 +37,6 @@ debug: LDFLAGS += -g
 debug: all
 release: all
 
-all: $(BIN_FILE)
 
 %.c.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@

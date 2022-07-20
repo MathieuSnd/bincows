@@ -200,6 +200,9 @@ void sched_start(void) {
 }
 
 
+#define SIGCHLD 17
+
+
 static int add_killed_process(process_t* process) {
     assert(process->n_threads == 0);
     assert(sched_lock.val == 1);
@@ -228,12 +231,16 @@ static int remove_process(pid_t pid) {
 
     int found = 0;
 
+    pid_t ppid = 0;
+
     // sequential search
     for(unsigned i = 0; i < n_processes; i++) {
         if(processes[i]->pid == pid) {
             
             // free it
             spinlock_acquire(&processes[i]->lock);
+
+            ppid = processes[i]->ppid;
 
             // copy it to free it later on
             add_killed_process(processes[i]);
@@ -248,6 +255,11 @@ static int remove_process(pid_t pid) {
 
     // unlock the sched lock
     spinlock_release(&sched_lock);
+
+
+    // signal the parent process that a child has died
+    // if it exists
+    process_trigger_signal(ppid, SIGCHLD);
 
     return found;
 
@@ -654,7 +666,7 @@ static process_t* choose_next(void) {
         }
     }
 
-    //log_info("choosing process %d", p->pid);
+    // log_info("choosing process %d", p->pid);
 
 
 
@@ -791,6 +803,18 @@ void sched_kernel_wait(uint64_t ns) {
 
 
 
+void sched_unblock_thread(thread_t* t) {
+
+    if(t->state != BLOCKED) {
+        //log_info("unblocking unblocked thread");
+        return;
+    }
+
+    t->state = READY;
+
+    n_ready_processes++;
+}
+
 void sched_unblock(pid_t pid, tid_t tid) {
     // at initialization, this function is called
     // to unblock the kernel process
@@ -809,11 +833,7 @@ void sched_unblock(pid_t pid, tid_t tid) {
     thread_t* t = sched_get_thread_by_tid(p, tid);
     assert(t);
 
-    assert(t->state == BLOCKED);
-
-    t->state = READY;
-
-    n_ready_processes++;
+    sched_unblock_thread(t);
 
 
     spinlock_release(&p->lock);
@@ -924,9 +944,28 @@ void schedule(void) {
     if(p->pid != current_pid)
         set_user_page_map(p->saved_page_dir_paddr);
 
+
+
+    void* kernel_sp;
+
+    if(t->tid == 1 && p->sig_current != NOSIG) {
+        // currently, a signal is being handled
+        // it means that a context is saved in the kernel
+        // stack. we should then go bellow the saved context
+        assert(p->sig_return_context);
+        kernel_sp = p->sig_return_context;
+    }
+    else {
+        // kernel stack is completely empty
+        kernel_sp = t->kernel_stack.base + t->kernel_stack.size;
+        assert(kernel_sp);
+
+    }
+
+
     if(p->pid != current_pid || t->tid != current_tid) {
         // we should change the IRQ stack
-        set_tss_rsp((uint64_t)t->kernel_stack.base + t->kernel_stack.size);
+        set_tss_rsp((uint64_t)kernel_sp);
     }
 
     assert(t->state == READY);
@@ -944,7 +983,7 @@ void schedule(void) {
     // because the current thread is marked RUNNING
     spinlock_release(&p->lock);
 
-    syscall_stacks[get_lapic_id()] = (void*) t->kernel_stack.base + t->kernel_stack.size;
+    syscall_stacks[get_lapic_id()] = kernel_sp;
 
     if(!(t->rsp->cs == USER_CS || t->rsp->cs == KERNEL_CS)) {
         log_warn("wrong cs: %x", t->rsp->cs);

@@ -23,6 +23,11 @@ static void __sig_terminate(int sig) {
 
 static sighandler_t __sig_handler_table[MAX_SIGNALS] = {NULL};
 
+/*
+static void __sig_ignore(int sig) {
+    //printf("process %d: ignoring signal %d\n", getpid(),    sig); 
+}
+*/
 
 #define __sig_ignore NULL
 
