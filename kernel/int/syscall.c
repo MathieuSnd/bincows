@@ -39,6 +39,28 @@ static inline void sc_warn(const char* msg, void* args, size_t args_sz) {
 }
 
 
+static int check_args_in_program(
+                process_t* proc, const void* args, size_t args_sz
+) {
+
+    const uint64_t arg_begin = (uint64_t)args;
+    const uint64_t arg_end   = arg_begin + args_sz;
+
+    
+    // in the program
+    for(unsigned i = 0 ;i < proc->program->n_segs; i++) {
+        
+        const struct elf_segment* seg = &proc->program->segs[i];
+
+        if(arg_begin >= (uint64_t)seg->base 
+        && arg_end   <  (uint64_t)seg->base + seg->length)
+            // found
+            return 0;
+    }
+    return 1;
+}
+
+
 // check that the adddress is in
 // the process accessible range
 // 0: fine
@@ -68,17 +90,7 @@ static int check_args(const process_t* proc, const void* args, size_t args_sz) {
 
 
     // in the program
-    for(unsigned i = 0 ;i < proc->program->n_segs; i++) {
-        
-        const struct elf_segment* seg = &proc->program->segs[i];
-
-        if(arg_begin >= (uint64_t)seg->base 
-        && arg_end   <  (uint64_t)seg->base + seg->length)
-            // found
-            return 0;
-    }
-
-    return 1;
+    return check_args_in_program(proc, args, args_sz);
 }
 
 
@@ -535,7 +547,6 @@ static uint64_t sc_open(process_t* proc, void* args, size_t args_sz) {
 
         file_handle_t* h = vfs_open_file(path, a->flags);
 
-        
 
         if(a->flags & O_TRUNC) {
             vfs_truncate_file(h, 0);
@@ -985,6 +996,67 @@ static uint64_t sc_clock(process_t* proc, void* args, size_t args_sz) {
 
 
 
+////////////////////////////////////////
+//////// SIGNALSYSCALL HANDLERS ////////
+////////////////////////////////////////
+
+uint64_t sc_sigsetup(process_t* proc, void* args, size_t args_sz) {
+    if(args_sz != sizeof(struct sc_sigsetup_args)) {
+        sc_warn("bad args_sz", args, args_sz);
+        return -1;
+    }
+
+    struct sc_sigsetup_args* a = args;
+
+    // check that handler_table is mapped
+    check_args(proc, args, args_sz);
+    check_args_in_program(proc, a->handler_table, sizeof(void*) * MAX_SIGNALS);
+    
+    uint64_t res;
+
+    _cli();
+    spinlock_acquire(&proc->lock);
+    {
+        res = process_register_signal_setup(proc, a->signal_end, a->handler_table);
+    }
+    
+
+    spinlock_release(&proc->lock);
+    _sti();
+
+    return res;
+}
+
+
+
+// returns 0 on success
+//int trigger_process_signal(pid_t pid, int signal);
+
+
+// returns 0 on success
+// should be executed when a thread reaches the
+// end of a signal handler: on receiving a SIGRETURN system call
+//int process_end_of_signal(process_t* process);
+
+
+uint64_t sc_sigretrn(process_t* proc, void* args, size_t args_sz) {
+    if(args_sz != 0) {
+        sc_warn("bad args_sz", args, args_sz);
+        return -1;
+    }
+
+    uint64_t res;
+
+    _cli();
+    spinlock_acquire(&proc->lock);
+    {
+        res = process_end_of_signal(proc);
+    }
+    spinlock_release(&proc->lock);
+    _sti();
+}
+
+
 
 
 // defined in syscall.s
@@ -1050,6 +1122,7 @@ void syscall_init(void) {
 }
 
 
+
 char* scname[] = {
     "NULL",
     "SLEEP",            
@@ -1072,7 +1145,9 @@ char* scname[] = {
     "CHDIR", 
     "GETCWD", 
     "GETPID", 
-    "GETPPID", 
+    "GETPPID",
+    "SIGSETUP", 
+    "SIGRETURN",
 };
 
 // called from syscall_entry
@@ -1099,7 +1174,7 @@ uint64_t syscall_main(uint8_t scid, void* args, size_t args_sz) {
             asm ("hlt");
     }
     else {
-        //log_debug("%u.%u: %s", sched_current_pid(), sched_current_tid(), scname[scid]);
+        // log_debug("%u.%u: %s", sched_current_pid(), sched_current_tid(), scname[scid]);
         uint64_t res = sc_funcs[scid](process, args, args_sz);
 
 

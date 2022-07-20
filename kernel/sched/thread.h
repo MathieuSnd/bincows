@@ -63,8 +63,7 @@ enum thread_state {
 
 typedef void (*exit_hook_fun_t)(struct thread* thread, int status);
 
-
-typedef 
+typedef
 struct thread {
     pid_t pid;
 
@@ -85,6 +84,10 @@ struct thread {
     // if should_exit is set, this field
     // contains the exit status
     int exit_status;
+
+    // non 0 if the thread is currently
+    // waiting for a signal to be delivered
+    int sig_wait;
 
     // lapic id of the cpu this 
     // thread is running on
@@ -125,3 +128,7 @@ void thread_add_exit_hook(thread_t* thread, exit_hook_fun_t hook);
 //     and kernel stack
 void thread_terminate(thread_t* thread, int status);
 
+
+// wait for a signal to be delivered
+// to the current thread
+void thread_pause(void);

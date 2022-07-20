@@ -147,3 +147,16 @@ void sched_yield(void);
 // this function is to call in the syscall
 // routine to load the right stack 
 void* sched_task_kernel_stack(void);
+
+
+
+/**
+ * the process lock should be taken before 
+ * calling this function
+ * 
+ * if process == NULL or the tid is not found, 
+ * then return NULL
+ * 
+ */
+thread_t* sched_get_thread_by_tid(process_t* process, tid_t tid);
+

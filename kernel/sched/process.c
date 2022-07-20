@@ -194,6 +194,7 @@ int create_kernel_process(process_t* process) {
         },
     };
 
+
     void* stack_top = threads->kernel_stack.base 
                       + threads->kernel_stack.size;
 
@@ -225,7 +226,13 @@ int create_kernel_process(process_t* process) {
         .ppid = 0,
         .cwd  = strdup("/"), // root directory
         .program = NULL,
-        .clock_begin = clock_ns()
+        .clock_begin = clock_ns(),
+        .sig_table = NULL,
+        .sig_current = -1,
+        .sig_pending = 0,
+        .sig_return_context = NULL,
+        .sig_return_context_addr = NULL,
+        .sig_return_function = NULL,
     };
 
 
@@ -431,4 +438,253 @@ int set_process_entry_arguments(process_t* process,
     
     return 0;
 }
+
+
+
+
+int process_register_signal_setup(
+        process_t* process, 
+        void* function, 
+        sighandler_t* table
+) {
+    // the table should be in userspace
+    assert(!interrupt_enable());
+
+    if(!is_user(table) || !is_user(function))
+        return -1;
+
+    process->sig_table = table;
+    process->sig_return_function = function;
+
+    return 0;    
+}
+
+
+// interrupts should be disabled
+// process should be locked
+static
+int prepare_process_signal(process_t* process, int signal) {
+    /**
+     * 
+     * This function does two things.
+     * 1. it sets sig_current to the signal number to 
+     * keep track of what signal is executing
+     * 2. simulate a call to the signal handler.
+     * 
+     * While 1. is pretty easy, 2. is more tricky.
+     * 
+     * 2.: the idea is to prepare the stack to call:
+     * - signal_handler_fun[signal](signal);
+     * 
+     * - put a return address on the stack,
+     *   pointing to a cleanup function: sig_return_function
+     *   that should invoke a SIGRETURN syscall, that will
+     *   call process_end_of_signal(...).
+     * 
+     * to do that, we need to:
+     * - save the context to sig_return_context (which will 
+     *   be restored by process_end_of_signal)
+     * 
+     * - add the return address to the stack
+     *      - move the stack context downward in the stack
+     *        to put the return address
+     * 
+     *      - put the return address
+     * 
+     * - modify the context to simulate a function call to 
+     *   the handler
+     *      - set rip to the signal handler
+     * 
+     *      - change rsp to the match the moved stack context
+     * 
+     *      - set rdi to the argument of the handler
+     * 
+     * 
+     * 
+     * 
+     * the job of process_end_of_signal is to:
+     * - restore the context saved in sig_return_context (copy the 
+     *   context at the right address and change rsp value)
+     * 
+     * - free the context
+     * 
+     * - clear sig_current
+     * 
+     */
+    assert(!interrupt_enable());
+
+
+    set_user_page_map(process->page_dir_paddr);
+
+    // @URGENT map process memory if not already
+
+    process->sig_current = signal;
+
+    // disable pending bit
+    process->sig_pending ^= (1 << signal);
+
+    // @todo make sure thread0 is not running on any core
+    assert(process->n_threads >= 1);
+    assert(process->threads[0].state != RUNNING);
+
+    thread_t* thread0 = &process->threads[0];
+
+    assert(process->sig_return_context == NULL);
+
+    // saved context of the thread before the signal
+    // it cannot resides in the user space as if it did,
+    // the user could change its SS, CS, RFLAGS registers
+    // which is definitly NOT GOOD at all
+    // then, it is placed in kernel heap
+    process->sig_return_context = malloc(sizeof(gp_regs_t));
+
+    // copy context
+    memcpy(
+        process->sig_return_context, 
+        thread0->rsp, 
+        sizeof(gp_regs_t)
+    );
+
+    process->sig_return_context_addr = thread0->rsp;
+
+    // set return address. to do that, we must 
+    // move the context a bit higher in the stack
+    memmove(
+         (void*)thread0->rsp, 
+        ((void*)thread0->rsp) - sizeof(void*), 
+        sizeof(gp_regs_t)
+    );
+
+    thread0->rsp->rsp -= sizeof(void*);
+
+    uint64_t* stack_end = (uint64_t*)thread0->rsp->rsp;
+
+    *stack_end = (uint64_t)process->sig_return_function;
+
+
+
+    // jump to signal handler
+    assert(process->sig_table[signal]);
+    thread0->rsp->rip = (uint64_t)process->sig_table[signal];
+
+    
+    thread0->rsp++;
+
+    // unblock the thread
+    process->threads[0].state = READY;
+
+
+    return 0;
+}
+
+
+
+// interrupts should be disabled
+// process user memory should be mapped
+int process_end_of_signal(process_t* process) {
+    assert(!interrupt_enable());
+
+    assert(get_user_page_map() == process->page_dir_paddr);    
+
+    // map the right process memory
+    //map_process_memory(process);
+
+    // check that the process was indeed in a signal handler
+    if(process->sig_current == -1)
+        return -1;
+
+    assert(process->sig_return_context != NULL);
+
+    // restore context
+    memcpy(
+        process->sig_return_context_addr, 
+        process->sig_return_context, 
+        sizeof(gp_regs_t)
+    );
+    process->threads[0].rsp = (void *)process->sig_return_context_addr;
+
+    // free the saved context
+    free(process->sig_return_context);
+    process->sig_return_context = NULL;
+
+
+    // the process is now back in a normal state:
+    // clear the sig_current field
+    process->sig_current = NOSIG;
+
+    return 0;
+}
+
+
+// this function also releases the process lock
+static
+void unblock_sigwait_threads_and_release(process_t* process, uint64_t rflags) {
+
+    // construct a list of threads to unblock
+    unsigned n = 0;
+
+    int* tids = malloc(sizeof(int) * process->n_threads);
+
+
+    for(unsigned i = 0; i < process->n_threads; i++) {
+        if(process->threads[i].sig_wait) {
+            process->threads[i].sig_wait = 0;
+
+            tids[n++] = process->threads[i].tid;
+        }
+    }
+
+
+    unsigned pid = process->pid;
+
+    // release the process
+    spinlock_release(&process->lock);
+    set_rflags(rflags);
+
+
+    // actually unblock
+    // it can only be done without the process lock
+    for(unsigned i = 0; i < n; i++)
+        sched_unblock(pid, tids[i]);
+
+
+
+    free(tids);
+}
+
+
+int trigger_process_signal(pid_t pid, int signal) {
+
+    uint64_t rf = get_rflags();
+
+    // grab the process
+    process_t* process = sched_get_process(pid);
+
+    if(!process) {
+        set_rflags(rf);
+        return 1;
+    }
+
+    if(!process->sig_table) {
+        // no signal table: signal ignored
+    }
+    else if(process->sig_table[signal] == SIG_IGN) {
+        // signal ignored
+    }
+    else {
+        if(process->sig_current != NOSIG) {
+            prepare_process_signal(process, signal);
+        }
+        else
+            process->sig_pending |= (1 << signal);
+    }
+
+    // unblock threads that wait for a signal if necessary
+    unblock_sigwait_threads_and_release(process, rf);
+
+
+
+    return 0;
+}
+
 

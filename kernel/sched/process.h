@@ -7,6 +7,8 @@
 
 #include "../fs/vfs.h"
 
+#include "signal/signal.h"
+
 // this file describes what are processes
 
 typedef int pid_t;
@@ -40,6 +42,9 @@ typedef struct file_descriptor {
         };
     };  
 } file_descriptor_t;
+
+
+
 
 typedef struct process {
     pid_t pid;
@@ -87,7 +92,63 @@ typedef struct process {
     // size [MAX_FDS]
     file_descriptor_t* fds;
 
+    /////////////////////
+    /// signal fields ///
+    /////////////////////
+
+    /**
+     * this table contains the signal handlers
+     * for the process. It resides in userspace
+     * and is registered to the kernel using
+     * the REGISTER_SIGNALS system call.
+     * 
+     */
+    sighandler_t* sig_table;
+
+    // bitmask of pending signals
+    // if at least one bit is set, then
+    // thread 0 should be scheduled to handle the
+    // highest priority signal no matter his state
+    // (BLOCKED, RUNNING, etc)
+    // then, a system call is used to clear the mask bit
+    uint32_t sig_pending;
+
+    // NOSIG if no signal is currently being handled
+    // otherwise, the signal number
+    int sig_current;
+
+    // address of the beginning of the return function
+    // this function should be a non return function
+    // that simply invokes a SIGRETURN system call
+    void* sig_return_function;
+
+    // context before the signal handler was called
+    // which is to be restored when the signal handler
+    // returns (on receiving a SIGRETURN system call)
+    struct gp_regs* sig_return_context;
+
+    // address of the return context
+    void* sig_return_context_addr;
+
+
 } process_t;
+
+
+// 0 on success
+// the process is supposed to be locked,
+// interrupts are disabled
+int process_register_signal_setup(
+            process_t* process, void* function, sighandler_t* table);
+
+
+// returns 0 on success
+int trigger_process_signal(pid_t pid, int signal);
+
+
+// returns 0 on success
+// should be executed when a thread reaches the
+// end of a signal handler: on receiving a SIGRETURN system call
+int process_end_of_signal(process_t* process);
 
 
 /**

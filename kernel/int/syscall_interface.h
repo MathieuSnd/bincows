@@ -31,7 +31,11 @@ typedef unsigned fd_t;
 #define SC_GETCWD        19
 #define SC_GETPID        20
 #define SC_GETPPID       21
-#define SC_END           22
+#define SC_SIGSETUP      22
+#define SC_SIGRETURN     23
+#define SC_SIGKILL       24
+#define SC_SIGPAUSE      25
+#define SC_END           26
 
 
 
@@ -127,6 +131,21 @@ struct sc_dup_args {
     // if new == -1, this operation 
     // performs dup(fd)
     // else, it performs dup2(fd, fd2)
+};
+
+
+
+#ifndef SIG_HANDLER_T
+
+#define SIG_HANDLER_T
+typedef void (*sighandler_t)(int);
+
+#endif
+
+struct sc_sigsetup_args {
+    sighandler_t* handler_table;
+
+    void (*signal_end)(void);
 };
 
 

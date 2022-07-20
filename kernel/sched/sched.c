@@ -64,8 +64,6 @@ static int sched_running = 0;
 // want to be interrupted
 static _Atomic int kernel_process_running = 0;
 
-static 
-thread_t* get_thread_by_tid(process_t* process, tid_t tid);
 
 
 int sched_is_running(void) {
@@ -123,7 +121,7 @@ static void block_irq_handler(struct driver* unused) {
     process_t* p = sched_current_process();
     assert(p);
 
-    thread_t* t = get_thread_by_tid(p, current_tid);
+    thread_t* t = sched_get_thread_by_tid(p, current_tid);
 
     if(t->state == READY) {
         // the approch is optimistic
@@ -267,16 +265,7 @@ gp_regs_t* kernel_saved_rsp = NULL;
 void __attribute__((noreturn)) _restore_context(struct gp_regs* rsp);
 
 
-/**
- * the process lock should be taken before 
- * calling this function
- * 
- * if process == NULL or the tid is not found, 
- * then return NULL
- * 
- */
-static 
-thread_t* get_thread_by_tid(process_t* process, tid_t tid) {
+thread_t* sched_get_thread_by_tid(process_t* process, tid_t tid) {
 
     if(!process)
         return NULL;
@@ -494,7 +483,7 @@ void  sched_save(gp_regs_t* rsp) {
         // p's lock is taken there
         process_t* p = sched_get_process(current_pid);
         assert(p);
-        thread_t* t = get_thread_by_tid(p, current_tid);
+        thread_t* t = sched_get_thread_by_tid(p, current_tid);
 
         assert(t);
 
@@ -741,7 +730,7 @@ void sched_irq_ack(void) {
 
     if(!currenly_in_nested_irq && sched_running) {
         process_t* p = sched_current_process();
-        thread_t* t = get_thread_by_tid(p, current_tid);
+        thread_t* t = sched_get_thread_by_tid(p, current_tid);
 
         if(!t) {
             // no process or no thread
@@ -817,7 +806,7 @@ void sched_unblock(pid_t pid, tid_t tid) {
     process_t* p = sched_get_process(pid);
     assert(p);
 
-    thread_t* t = get_thread_by_tid(p, tid);
+    thread_t* t = sched_get_thread_by_tid(p, tid);
     assert(t);
 
     assert(t->state == BLOCKED);

@@ -1,4 +1,6 @@
 #include "thread.h"
+#include "sched.h"
+
 #include "../lib/registers.h"
 #include "../memory/vmap.h"
 #include "../memory/heap.h"
@@ -44,6 +46,8 @@ int create_thread(
         .size = THREAD_KERNEL_STACK_SIZE,
     };
 
+
+
     return 0;
 }
 
@@ -75,4 +79,29 @@ void thread_terminate(thread_t* thread, int status) {
 
     //unmap_pages(thread->stack.base, thread->stack.size << 12);
 
+}
+
+void thread_pause(void) {
+    assert(interrupt_enable());
+
+    process_t* pr = sched_current_process();
+    thread_t* thread = sched_get_thread_by_tid(pr, sched_current_tid());
+    thread->sig_wait = 1;
+
+    
+    do {
+        spinlock_release(&pr->lock);
+        _sti();
+
+        sched_block();
+
+
+        pr = sched_current_process();
+        thread = sched_get_thread_by_tid(pr, sched_current_tid());
+    }
+    while((volatile int)thread->sig_wait);
+
+
+    spinlock_release(&pr->lock);
+    _sti();
 }
