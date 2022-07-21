@@ -11,7 +11,7 @@ char** __environ = NULL;
 extern int main(int argc, char** argv);
 
 // defined in stdio.c
-extern void stio_init(void);
+extern void __stdio_init(void);
 
 
 // defined in signals.c
@@ -64,7 +64,7 @@ _start(int argc, char* args, int envrionc, char* input_environ) {
     __signals_init();
 
 
-    stio_init();
+    __stdio_init();
 
 
     int ret = main(argc, argv);

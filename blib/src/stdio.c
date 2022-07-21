@@ -26,7 +26,7 @@ FILE *stdin;
 FILE *stdout;
 FILE *stderr;
 
-void stio_init(void) {
+void __stdio_init(void) {
     FILE* std = (FILE*)malloc(sizeof(FILE) * 3);
     stdin  = std + 0;
     stdout = std + 1;
