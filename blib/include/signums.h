@@ -1,14 +1,6 @@
-#ifndef SIGNUMS_H
-#define SIGNUMS_H
-
-// @todo move this to a separate file
-typedef void (*__sighandler_t)(int);
-
-
-#define	SIG_ERR	 ((__sighandler_t) -1)	/* Error return.  */
-#define	SIG_DFL	 ((__sighandler_t)  0)	/* Default action.  */
-#define	SIG_IGN	 ((__sighandler_t)  1)	/* Ignore signal.  */
-
+#ifndef SIGNAL_H
+#error "include <signal.h> instead of signums.h"
+#endif // SIGNAL_H
 
 #define SIGHUP     1 
 #define SIGINT     2 
@@ -42,11 +34,11 @@ typedef void (*__sighandler_t)(int);
 #define SIGIO      29
 #define SIGPWR     30
 #define SIGSYS     31
-#define SIGUNUSED  31
+
+#define NSIG 32
 
 
 #define SIGPOLL SIGIO
 #define SIGINFO SIGPWR
 #define SIGCLD SIGCHLD
-
-#endif // SIGNUMS_H
+#define SIGUNUSED  SIGSYS
