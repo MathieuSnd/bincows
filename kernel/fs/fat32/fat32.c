@@ -1069,6 +1069,8 @@ fs_t* fat32_mount(disk_part_t* part) {
      * functions take file_t instead
      * of void*
      */
+    fs->open_file          = NULL;
+    fs->close_file         = NULL;
     fs->read_file_sectors  = fat32_read_file_sectors;
     fs->write_file_sectors = fat32_write_file_sectors;
     fs->read_dir           = fat32_read_dir;

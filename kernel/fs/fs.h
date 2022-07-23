@@ -254,6 +254,30 @@ typedef struct fs {
 
 
     /**
+     * notify the filesystem that the file with address addr
+     * is being opened. The openning is VFS wide,
+     * it is only called once if multiple processes open it
+     * concurrently.
+     * 
+     * this function can be NULL, in this case it won't be called
+     * 
+     */
+    void (*open_file)(struct fs* restrict fs, uint64_t addr);
+
+    /**
+     * notify the filesystem that the file with address addr
+     *  is being closed. The closing is VFS wide,
+     * it is only called once if multiple processes open it
+     * concurrently.
+     * 
+     * this function can be NULL, in this case it won't be called
+     * 
+     */
+    void (*close_file)(struct fs* restrict fs, uint64_t addr);
+
+
+
+    /**
      * @brief read a directory and return its
      * children. Complete the input dir data
      * structure
@@ -313,6 +337,8 @@ typedef struct fs {
 /*
     int remove_dirent(uint64_t addr, uint64_t src_parent_addr);
 */
+
+
 
 
     /**

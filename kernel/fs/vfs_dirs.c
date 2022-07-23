@@ -973,7 +973,42 @@ int vfs_mount_devfs(void) {
 
     if (!fs)
     {
-        log_warn("cannot mount %s, unrecognized format", path);
+        log_warn("cannot mount %s", path);
+        return 0;
+    }
+
+    new->fs = fs;
+
+    check_fs_struct(fs);
+
+    return 1;
+}
+
+
+
+int vfs_mount_pipefs(void) {
+
+    const char* path = "/pipe";
+
+    vdir_t* new = emplace_vdir(path);
+
+    // if it cannot be inserted
+    if (!new)
+    {
+        log_warn(
+            "cannot mount %s,"
+            "impossible to create virtual directory %s",
+            "pipefs",
+            path);
+
+        return 0;
+    }
+
+    fs_t *fs = pipefs_mount();
+
+    if (!fs)
+    {
+        log_warn("cannot mount %s", path);
         return 0;
     }
 

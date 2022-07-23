@@ -21,6 +21,10 @@ int vfs_mount(disk_part_t* part, const char* path);
 int vfs_mount_devfs(void);
 
 
+// mount the pipefs to /pipe
+int vfs_mount_pipefs(void);
+
+
 // for vfs_open
 #define FS_NO ((fs_t*)0)
 /**

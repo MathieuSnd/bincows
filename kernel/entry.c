@@ -505,10 +505,9 @@ void _start(struct stivale2_struct *stivale2_struct) {
 
     // init log file
     //log_init_file("/var/log/sys.log");
-    r = vfs_mount_devfs();
 
-
-    assert(r);
+    r = vfs_mount_devfs();      assert(r);
+    r = vfs_mount_pipefs();      assert(r);
 
     // /dev/term
     terminal_register_dev_file("term", terminal);

@@ -184,6 +184,10 @@ uint64_t search_or_insert_file(
     _sti();
 
 
+    if(fs->open_file)
+        fs->open_file(fs, addr);
+
+
     return id;
 }
 
@@ -540,6 +544,7 @@ void vfs_close_file(file_handle_t *handle) {
         free(open_file->path);
         free(open_file->fhs);
 
+
         // remove open_file from 
         // the table
         n_open_files--;
@@ -549,6 +554,11 @@ void vfs_close_file(file_handle_t *handle) {
         for(unsigned i = 0; i < n_open_files + 1; i++) {
             if(&open_files[i] == open_file) {
                 // found it!
+
+
+                if(fs->close_file)
+                    fs->close_file(fs, open_file->addr);
+
                 // now make sure to remove it:
                 unsigned to_move = n_open_files - i;
                 
@@ -600,6 +610,9 @@ void vfs_close_file(file_handle_t *handle) {
 
 
 
+    if(fs->close_file)
+        fs->close_file(fs, handle->vfile_id);
+    
     free(handle);
     fs->n_open_files--;
 
