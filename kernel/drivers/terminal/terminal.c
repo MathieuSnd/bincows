@@ -636,6 +636,9 @@ void write_string(driver_t* this, const char *string, size_t length) {
 /////////////      /dev/term0 driver      ////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
 
+#include "../../../blib/include/terminfo.h"
+#include "../../lib/math.h"
+
 static int terminal_devfile_read(
                 driver_t* this,
                 void*     buffer,
@@ -643,15 +646,30 @@ static int terminal_devfile_read(
                 size_t    count
 ) { 
 
-    (void)this;
-    (void)buffer;
     (void)begin;
-    (void)count;
 
-    assert("read from terminal device" == 0);
+
+    struct data* restrict d = this->data;
+
+    
+    terminfo_t terminfo = {
+        .cols = d->ncols,
+        .lines = d->term_nlines,
+        .stored_lines = d->nlines,
+        .cursor_x = d->cur_col,
+        .cursor_y = d->cur_line,
+        .first_line = d->first_line,
+    };
+
+    log_info("terminfo rd %d", count);
+
+    int rd = MIN(sizeof(terminfo_t), count);
+
+    memcpy(buffer, &terminfo, rd);
+
     
     // unreadable
-    return -1;
+    return rd;
 }
 
 
@@ -680,7 +698,7 @@ void terminal_register_dev_file(const char* filename, driver_t* this) {
         .arg   = this,
         .read  = (void*) terminal_devfile_read,
         .write = (void*) terminal_devfile_write,
-        .rights = {.read = 0, .write = 1, .seekable = 0},
+        .rights = {.read = 1, .write = 1, .seekable = 0},
         .file_size = ~0llu,
     }, filename);
 
