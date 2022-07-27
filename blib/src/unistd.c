@@ -440,3 +440,15 @@ int pause (void) {
     syscall(SC_SIGPAUSE, NULL, 0);
     return 0;
 }
+
+
+int pipe (int pipedes[2]) {
+    uint64_t res = syscall(SC_PIPE, NULL, 0);
+
+    if(res == (uint64_t)-1)
+        return -1;
+
+    pipedes[0] = res & 0xffffffff;
+    pipedes[1] = res >> 32;
+}
+

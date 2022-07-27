@@ -21,12 +21,6 @@ typedef int pid_t;
 // not implemented yet.....
 #if 0
 
-/* Create a one-way communication channel (pipe).
-   If successful, two file descriptors are stored in PIPEDES;
-   bytes written on PIPEDES[1] can be read from PIPEDES[0].
-   Returns 0 if successful, -1 if not.  */
-extern int pipe (int __pipedes[2]) __THROW __wur;
-
 
 /* Schedule an alarm.  In SECONDS seconds, the process will get a SIGALRM.
    If SECONDS is zero, any currently scheduled alarm will be cancelled.
@@ -635,6 +629,13 @@ extern int truncate (const char* file, off_t length);
 /* Truncate the file FD is open on to LENGTH bytes.  */
 extern int ftruncate (int fd, off_t length);
 
+
+
+/* Create a one-way communication channel (pipe).
+   If successful, two file descriptors are stored in PIPEDES;
+   bytes written on PIPEDES[1] can be read from PIPEDES[0].
+   Returns 0 if successful, -1 if not.  */
+extern int pipe (int pipedes[2]);
 
 
 
