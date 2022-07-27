@@ -199,6 +199,10 @@ static void execute(char* cmd) {
         else
             printf("command not found: %s\n", argv[0]);
     }
+    else {
+        // wait for the child to finish
+        pause();
+    }
 
     free(argv);
 }
@@ -224,8 +228,8 @@ int main(int argc, char** argv) {
     export((const char*[]){NULL,"PATH=/bin",0});
 
 
-    for(int i = 0; i < 500; i++)
-        execute("write");
+    //for(int i = 0; i < 500; i++)
+    //    execute("write");
 
     print_prompt();
 

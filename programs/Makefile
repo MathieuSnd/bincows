@@ -28,6 +28,7 @@ all: $(EFILES)
 	cp clear.elf $(BIN_DIR)/clear
 	cp fibo.elf $(BIN_DIR)/fibo
 	cp write.elf $(BIN_DIR)/write
+	cp test_pipe.elf $(BIN_DIR)/test_pipe
 
 
 %.elf: %.c ../blib/blib.a
