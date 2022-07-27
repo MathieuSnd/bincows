@@ -239,21 +239,28 @@ size_t fread (void *restrict ptr, size_t size,
         return 0;
     }
 
+    void* buf = malloc(size * n);
 
-    int64_t rd = read(stream->fd, ptr, size * n);
+    int64_t rd = read(stream->fd, buf, size * n);
 
     if(rd < 0) {
         return 0;
     }
 
 
-    if(rd != (int64_t)(size * n))
+    if(rd == 0)
         stream->eof = 1;
 
-    stream->pos += n;
+    rd /= size;
 
 
-    return rd / size;
+    memcpy(ptr, buf, rd * size);
+
+
+    stream->pos += n * size;
+
+
+    return rd;
 }
 
 
