@@ -199,6 +199,7 @@ int devfs_map_device(devfs_file_interface_t fi, const char* name) {
     file->file_size = fi.file_size;
     file->rights    = fi.rights;
 
+    log_warn("devfs: mapping device size %ld", fi.file_size);
 
     strncpy(file->name, name, DEVFS_MAX_NAME_LEN);
 

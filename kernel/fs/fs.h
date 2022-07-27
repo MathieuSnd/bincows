@@ -51,7 +51,7 @@ typedef struct file {
     
     // file size in bytes
     // 0 if it is a directory
-    uint32_t file_size;
+    uint64_t file_size;
 
     // file operation rights
     file_rights_t rights;

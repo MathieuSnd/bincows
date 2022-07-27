@@ -50,7 +50,7 @@ struct file_ent {
             // shortcuts for file fields
             uint64_t addr;
             struct fs* restrict fs;
-            uint32_t file_size;
+            uint64_t file_size;
         };
     };
 
@@ -291,7 +291,6 @@ file_handle_t* create_handler(
 
     handle->sector_buff = (void *)handle + sizeof(file_handle_t);
 
-
     uint64_t vfile_id = search_or_insert_file(
                             fs, dirent->ino, dirent->file_size, path);
 
@@ -385,6 +384,7 @@ file_handle_t* vfs_open_file(const char *path, int flags) {
     // virtual directory
     if (!fs || fs == FS_NO) 
         return NULL;
+
 
     return vfs_open_file_from(fs, &dirent, path, flags);
 }
@@ -768,7 +768,9 @@ size_t vfs_read_file(void *ptr, size_t size,
 
     unsigned cachable = fs->cacheable;
 
-    if(file_size <= stream->file_offset) {
+    
+    // file_size can be -1 for infinite files
+    if(file_size != (uint64_t)-1 && file_size <= stream->file_offset) {
         // EOF
         release_file_access(stream->vfile_id);
         return 0;
@@ -1140,9 +1142,10 @@ size_t vfs_write_file(const void *ptr, size_t size, size_t nmemb,
     stream->file_offset += bsize;
     stream->sector_count = stream->file_offset / granularity;
     
-    if(file_copy.file_size < stream->file_offset // size update
+    if((file_copy.file_size != ~0llu && file_copy.file_size < stream->file_offset) // size update
         || file_addr != file_copy.addr           // address update
     ) {
+        log_warn("file size or address updated %lu", file_copy.file_size);
         file_copy.file_size = stream->file_offset;
         // update file size
         // we need to reaquire the vfile

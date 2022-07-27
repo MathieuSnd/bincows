@@ -142,7 +142,7 @@ typedef struct dir_cache_ent {
 
     // file size in bytes
     // 0 if it is a directory
-    uint32_t file_size;
+    uint64_t file_size;
 
 
     // Linux complient
