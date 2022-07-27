@@ -7,6 +7,8 @@
 #include "../memory/vmap.h"
 #include "../memory/heap.h"
 #include "../memory/paging.h"
+#include "../memory/physical_allocator.h"
+#include "../drivers/block_cache.h"
 #include "../memory/gdt.h"
 #include "../smp/smp.h"
 
@@ -14,6 +16,7 @@
 #include "../lib/registers.h"
 #include "../lib/panic.h"
 #include "../lib/string.h"
+#include "../lib/time.h"
 
 // for the yield interrupt handler
 #include "../int/irq.h"
@@ -642,7 +645,7 @@ static process_t* choose_next(void) {
         current_process = 0;
     
 
-    int i = current_process;
+    unsigned i = current_process;
     
     while(1) {
         p = (volatile process_t*)processes[i];
@@ -681,12 +684,12 @@ static process_t* choose_next(void) {
     // unlock the process table
     spinlock_release(&sched_lock);
 
-    assert(is_in_heap(p));
+    assert(is_in_heap((void*)p));
     assert(is_in_heap(p->threads));
 
 
     // no process found
-    return p;
+    return (process_t*)p;
 }
 
 #define RR_TIME_SLICE_MS 10

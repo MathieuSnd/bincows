@@ -934,12 +934,13 @@ void free_page_range(uint64_t vaddr, size_t count) {
         if(!present_entry(pml4entry)) {
             // not present pml4 entry:
             // increase vaddr to the next 512 GB range
-            vaddr = (vaddr & ~(1llu << 39 - 1)) + 1llu << 39;
+            uint64_t _1_39 = 1llu << 39;
+
+            vaddr = (vaddr & ~(_1_39 - 1)) + _1_39;
             continue;
         }
 
         uint64_t pdpt_paddr = (uint64_t)extract_pointer(pml4entry);
-        void** pdpt = translate_address((void *)pdpt_paddr);
 
         assert(vaddr % (1llu << 39) == 0);
         // vaddr is aligned on 512 GB

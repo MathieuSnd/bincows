@@ -83,7 +83,6 @@ static size_t n_allocations = 0;
 // TODO: use this to unfragment the whole
 // heap when this number is too big
 
-//static size_t fragmented_available_size = 0;
 
 static seg_header* current_segment = NULL;
 
@@ -325,6 +324,8 @@ void* __attribute__((noinline)) malloc(size_t size) {
     uint64_t rf = get_rflags();
     _cli();
 
+    //heap_defragment();
+
     log_heap("malloc(%u)", size);
     //assert(current_segment->free == 1);
 
@@ -391,8 +392,15 @@ void* __attribute__((noinline)) malloc(size_t size) {
         // one allocation
         n_allocations++;
 
-        
+
         log_heap(" --> %lx", (void*)seg+sizeof(seg_header));
+/*
+        if(seg == 0xffffffff815975d8) {
+            log_warn("----------------------------------------");
+            stacktrace_print();
+            //for(;;);
+        }
+*/
         
         set_rflags(rf);
         return (void *)seg + sizeof(seg_header);
@@ -466,6 +474,10 @@ void __attribute__((noinline)) free(void *ptr) {
     heap_assert_seg(header);
 
     assert(header->free == 0);
+
+
+    // DEBUG
+    //memset(ptr, 0xFF, header->size);
 
 
     header->free = 1;

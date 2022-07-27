@@ -82,10 +82,11 @@ void irq_common_handler(uint8_t irq_n, gp_regs_t* context) {
 
     sched_save(context);
 
-    // debug thing
-    process_t* p = sched_current_process();
+    if(sched_is_running()) {
 
-    if(p) {
+        // debug thing
+        process_t* p = sched_current_process();
+
         assert(p->pid == sched_current_pid());
         
         // single thread
@@ -95,7 +96,6 @@ void irq_common_handler(uint8_t irq_n, gp_regs_t* context) {
 
         spinlock_release(&p->lock);
     }
-
 
     handler(driver);
 

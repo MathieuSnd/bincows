@@ -19,6 +19,10 @@ void atshutdown(void (*fun)(void)) {
 void shutdown(void) {
     // cannot shutdown anything yet.
     // need an AML interpreter.
+
+
+    log_debug("shuting sequence started");
+
     reboot();
 }
 
@@ -44,7 +48,7 @@ void reboot(void) {
     //panic("non");
     //_cli();
     
-    ps2_trigger_CPU_reset();
+    //ps2_trigger_CPU_reset();
 
     for(;;)
         asm("hlt"); 

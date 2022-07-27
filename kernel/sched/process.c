@@ -5,6 +5,7 @@
 #include "../lib/logging.h"
 #include "../lib/string.h"
 #include "../int/apic.h"
+#include "../int/idt.h"
 
 #include "sched.h"
 
@@ -579,7 +580,7 @@ int prepare_process_signal(process_t* process, int signal) {
 
     thread0->rsp --;
 
-    if(thread0->rsp < thread0->kernel_stack.base) {
+    if((void *)thread0->rsp < thread0->kernel_stack.base) {
         // kernel space stack overflow
         log_warn("kernel stack overflow");
         return -1;
@@ -587,7 +588,7 @@ int prepare_process_signal(process_t* process, int signal) {
 
 
 
-    thread0->rsp->rsp = (gp_regs_t*)user_rsp;
+    thread0->rsp->rsp = (uint64_t)user_rsp;
     
     // don't execute the user code with CPL=1 :)
     thread0->rsp->cs = USER_CS;
@@ -611,6 +612,9 @@ int prepare_process_signal(process_t* process, int signal) {
 }
 
 
+
+// defined in restore_context.s
+void __attribute__((noreturn)) _restore_context(struct gp_regs* rsp);
 
 // interrupts should be disabled
 // process user memory should be mapped
@@ -642,9 +646,11 @@ int process_end_of_signal(process_t* process) {
 
     spinlock_release(&process->lock);
 
+    // don't return from the system call,
+    // directly jump to the code
     _restore_context(process->threads[0].rsp);
 
-    return 0;
+    __builtin_unreachable();
 }
 
 

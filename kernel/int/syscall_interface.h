@@ -21,21 +21,22 @@ typedef unsigned fd_t;
 #define SC_SEEK          9
 #define SC_ACCESS        10
 #define SC_DUP           11
-#define SC_CREATE_THREAD 12
-#define SC_JOIN_THREAD   13
-#define SC_EXIT_THREAD   14
-#define SC_SBRK          15
-#define SC_FORK          16
-#define SC_EXEC          17
-#define SC_CHDIR         18
-#define SC_GETCWD        19
-#define SC_GETPID        20
-#define SC_GETPPID       21
-#define SC_SIGSETUP      22
-#define SC_SIGRETURN     23
-#define SC_SIGKILL       24
-#define SC_SIGPAUSE      25
-#define SC_END           26
+#define SC_PIPE          12
+#define SC_CREATE_THREAD 13
+#define SC_JOIN_THREAD   14
+#define SC_EXIT_THREAD   15
+#define SC_SBRK          16
+#define SC_FORK          17
+#define SC_EXEC          18
+#define SC_CHDIR         19
+#define SC_GETCWD        20
+#define SC_GETPID        21
+#define SC_GETPPID       22
+#define SC_SIGSETUP      23
+#define SC_SIGRETURN     24
+#define SC_SIGKILL       25
+#define SC_SIGPAUSE      26
+#define SC_END           27
 
 
 
@@ -152,6 +153,4 @@ struct sc_sigkill_args {
     int pid;
     int signal;
 };
-
-
 

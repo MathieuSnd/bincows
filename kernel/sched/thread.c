@@ -4,6 +4,7 @@
 #include "../lib/registers.h"
 #include "../memory/vmap.h"
 #include "../memory/heap.h"
+#include "../int/idt.h"
 
 // for freeing a thread stack
 #include "../memory/paging.h"

@@ -6,7 +6,7 @@
 
 static void ap_start(struct stivale2_smp_info* info) {
 
-    log_warn("ap_start (procid = %u, lapic_id = %u)", info->processor_id, info->lapic_id);
+    log_debug("ap_start (procid = %u, lapic_id = %u)", info->processor_id, info->lapic_id);
 
     for(;;) {
         asm("hlt");

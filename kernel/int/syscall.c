@@ -13,6 +13,7 @@
 #include "../lib/panic.h"
 #include "../lib/stacktrace.h"
 #include "../int/idt.h"
+#include "../fs/pipefs/pipefs.h"
 #include "apic.h"
 
 
@@ -454,7 +455,7 @@ static uint64_t sc_exec(process_t* proc, void* args, size_t args_sz) {
     return 0;
 }   
 
-
+// return the fd if found or -1 otherwise
 static fd_t find_available_fd(process_t* proc) {
     for(fd_t i = 0; i < MAX_FDS; i++) {
         if(proc->fds[i].type == FD_NONE)
@@ -995,6 +996,55 @@ static uint64_t sc_clock(process_t* proc, void* args, size_t args_sz) {
 
 
 
+static uint64_t sc_pipe(process_t* proc, void* args, size_t args_sz) {
+    if(args_sz != 0) {
+        sc_warn("bad args_sz", args, args_sz);
+        return -1;
+    }
+
+    file_handle_pair_t pair;
+
+    int res = create_pipe(&pair);
+
+    if(res)
+        return -1;
+    // if no error occurs, let's assign the fds
+
+
+    fd_t fd1 = find_available_fd(proc);
+
+    if(fd1 == (fd_t)-1) {
+        sc_warn("too many fds", args, args_sz);
+        
+        vfs_close_file(pair.in);
+        vfs_close_file(pair.out);
+
+        return -1;
+    }
+
+    proc->fds[fd1].type = FD_FILE;
+    proc->fds[fd1].file = pair.out;
+
+
+    fd_t fd2 = find_available_fd(proc);
+
+    if(fd2 == (fd_t)-1) {
+        sc_warn("too many fds", args, args_sz);
+
+        vfs_close_file(pair.in);
+        vfs_close_file(pair.out);
+
+        return -1;
+    }
+
+
+    proc->fds[fd2].type = FD_FILE;
+    proc->fds[fd2].file = pair.in;
+
+    return (uint64_t)fd2 << 32 | fd1;
+}
+
+
 ////////////////////////////////////////
 //////// SIGNALSYSCALL HANDLERS ////////
 ////////////////////////////////////////
@@ -1123,6 +1173,7 @@ void syscall_init(void) {
     sc_funcs[SC_GETCWD]    = sc_getcwd;
     sc_funcs[SC_CLOCK]     = sc_clock;
     sc_funcs[SC_DUP]       = sc_dup;
+    sc_funcs[SC_PIPE]      = sc_pipe;
     sc_funcs[SC_GETPID]    = sc_getpid;
     sc_funcs[SC_GETPPID]   = sc_getppid;
     sc_funcs[SC_SIGSETUP]  = sc_sigsetup;

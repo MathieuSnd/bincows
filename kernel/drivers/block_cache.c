@@ -516,7 +516,7 @@ static void read(block_page_cache_t* restrict cache,
                  size_t   count
 ) {
 
-    //prefetch(cache, driver, lba, count);
+    prefetch(cache, driver, lba, count);
 
     unsigned lbashift = cache->cache_interface->lbashift;
 

@@ -84,7 +84,13 @@ void stacktrace_print(void) {
         int interrupt_routine = 0;
         
         uint64_t rip = (uint64_t) *(ptr+1);
-        if(!is_kernel_memory(rip) && (rip < 0x4000b0 || rip > 0x405000)) {
+
+        if(!is_kernel_memory(rip) 
+        
+        // && (rip < 0x4000b0 || rip > 0x405000)
+        
+        
+        ) {
             printf("bad rip: %lx\n", rip);
             return;
         }

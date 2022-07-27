@@ -5,6 +5,9 @@
 #include "string.h"
 
 #include "../int/apic.h"
+#include "../int/idt.h"
+#include "../lib/panic.h"
+#include "../memory/heap.h"
 #include "../sched/sched.h"
 #include "../sync/spinlock.h"
 
@@ -28,8 +31,11 @@ static sleeping_thread_t* sleeping_threads = NULL;
 
 fast_spinlock_t sleep_lock = {0};
 
+
+// return the position to insert the thread in 
+// the sleeping_threads array
 static 
-unsigned insert_position(uint64_t wakeup_time, tid_t tid, pid_t pid) {
+unsigned insert_position(uint64_t wakeup_time) {
 
     if(n_sleeping_threads == 0) {
         return 0;
@@ -44,7 +50,7 @@ unsigned insert_position(uint64_t wakeup_time, tid_t tid, pid_t pid) {
     while(A <= B) {
         int mid = (A + B) / 2;
 
-        int t = sleeping_threads[mid].wakeup_time;
+        uint64_t t = sleeping_threads[mid].wakeup_time;
 
         if(t > wakeup_time) {
             B = mid - 1;
@@ -74,7 +80,7 @@ void register_sleeping_thread(tid_t tid, pid_t pid, uint64_t wakeup_time) {
     );
 
 
-    int i = insert_position(wakeup_time, tid, pid);
+    int i = insert_position(wakeup_time);
 
     // shift the array to the right
     memmove(
@@ -131,7 +137,7 @@ void wakeup_threads(void) {
     if(j != 0) {
         // wake up the threads
         if(sched_is_running()) {
-            for(int i = 0; i < j; i++) {
+            for(unsigned i = 0; i < j; i++) {
                 sleeping_thread_t* t = sleeping_threads + i;
                 
                 sched_unblock(t->pid, t->tid);
@@ -179,9 +185,7 @@ void sleep(unsigned ms) {
             sched_kernel_wait(ms);
             return;
         }
-            //sched_yield();
 
-        //stacktrace_print();
         do {
             _cli();
             register_sleeping_thread(
@@ -191,7 +195,6 @@ void sleep(unsigned ms) {
             );
             sched_block();
             _sti();
-            //sched_yield();
         }
         while (clock_ns() < wakeup_time);
     }

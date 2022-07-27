@@ -108,10 +108,6 @@ static const void *stivale2_get_tag(const struct stivale2_struct *stivale2_struc
 }
 
 
-// const char but represents a big string
-extern const char _binary_bootmessage_txt;
-
-
 static void read_modules(unsigned module_count, 
                         const struct stivale2_module* modules) {
     for(unsigned i = 0; i < module_count; i++) {
@@ -170,10 +166,11 @@ static void print_fun(const char* s, size_t len) {
 static 
 disk_part_t* find_main_part(const struct stivale2_struct_tag_boot_volume* boot_volume_tag) {
 
-    const struct stivale2_guid* part_guid = boot_volume_tag = NULL ? &boot_volume_tag->part_guid: NULL;
+    const struct stivale2_guid* part_guid = 
+        (boot_volume_tag != NULL) ? &boot_volume_tag->part_guid: NULL;
 
 
-    disk_part_t* part = NULL; //search_partition("Bincows2");//find_partition(*(GUID*)part_guid);
+    disk_part_t* part = find_partition(*(GUID*)part_guid);
     if(part)
         log_info("main partition found");
     if(!part) {
@@ -265,9 +262,9 @@ void test_disk_overflow(void) {
     f = vfs_open_file("//////home//elyo//", VFS_READ);
 
     time = clock_ns();
-    int rsize = bsize;
+    int rsize = (int) bsize;
     int i = 0;
-    while(vfs_read_file(buf, rsize, f) == rsize) {
+    while(vfs_read_file(buf, rsize, f) == (size_t)rsize) {
         int begin = i++ * rsize;
         log_info("read %u (%u)", begin, (clock_ns() - time) / 1000000);
         time = clock_ns();
@@ -463,6 +460,7 @@ void _start(struct stivale2_struct *stivale2_struct) {
 
 // shutdown procedure
     atshutdown(sched_cleanup);
+    atshutdown(log_cleanup);
     atshutdown(vfs_cleanup);
     atshutdown(gpt_cleanup);
     atshutdown(remove_all_drivers);
@@ -503,8 +501,9 @@ void _start(struct stivale2_struct *stivale2_struct) {
     int r = vfs_mount(part, "/");
     assert(r != 0);
 
+
     // init log file
-    //log_init_file("/var/log/sys.log");
+    log_init_file("/var/log/sys.log");
 
     r = vfs_mount_devfs();      assert(r);
     r = vfs_mount_pipefs();      assert(r);

@@ -74,6 +74,11 @@ elf_program_t* elf_load(const void* file, size_t file_size) {
     
     const ehdr_t* ehdr = file;
 
+    if(file_size == 0) {
+        log_debug("elf file size is 0");
+        return NULL;
+    }
+
     if(!check_elf_header(ehdr, file_size)) {
         log_debug("elf_load: invalid elf header. file_size: %d. ehdr dump:", file_size);
         dump(
