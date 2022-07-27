@@ -230,8 +230,8 @@ int devfs_unmap_device(const char* name) {
 
 
 static 
-void truncate_file(struct fs* restrict fs, 
-             const file_t*    restrict fd, 
+int truncate_file(struct fs* restrict fs, 
+                   file_t*    restrict fd, 
                    size_t            size
 ) {
     (void)fs;

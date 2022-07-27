@@ -142,9 +142,6 @@ void* read(
 ) {
     async_read(part, lba, buf, count);
     
-    //log_info("----------------------------");
-    //stacktrace_print();
-
     part->interface->sync(part->interface->driver);
     
     return buf;

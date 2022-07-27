@@ -9,10 +9,12 @@
 #include "../lib/registers.h"
 #include "../lib/math.h"
 #include "../acpi/power.h"
+#include "../int/idt.h"
 
 #include "../memory/heap.h"
 #include "fat32/fat32.h"
 #include "devfs/devfs.h"
+#include "pipefs/pipefs.h"
 
 typedef struct vdir
 {
@@ -121,9 +123,9 @@ uint16_t path_hash(const char *path)
 // does not remove the root path
 static void free_vtree(vdir_t *root)
 {
-    for (unsigned i = 0; i < root->n_children; i++)
-        free_vtree(root->children + i);
-
+    while(root->n_children) {
+        free_vtree(root->children);
+    }
 
     if(root->n_children) {
         free(root->children);
@@ -922,6 +924,9 @@ int vfs_mount(disk_part_t *part, const char *path)
 {
     vdir_t* new = emplace_vdir(path);
 
+    log_info("mounting %s from %s", path, part->sysname);
+
+
     // if it cannot be inserted
     if (!new)
     {
@@ -956,6 +961,9 @@ int vfs_mount_devfs(void) {
     const char* path = "/dev";
 
     vdir_t* new = emplace_vdir(path);
+
+    log_info("mounting %s", path);
+
 
     // if it cannot be inserted
     if (!new)
@@ -992,6 +1000,8 @@ int vfs_mount_pipefs(void) {
 
     vdir_t* new = emplace_vdir(path);
 
+    log_info("mounting %s", path);
+
     // if it cannot be inserted
     if (!new)
     {
@@ -1023,7 +1033,6 @@ int vfs_mount_pipefs(void) {
 
 int vfs_unmount(const char *path)
 {
-    log_info("vfs_unmount(%s)", path);
     // do stuf!
     char *pbuf = malloc(strlen(path) + 1);
     simplify_path(pbuf, path);
@@ -1206,7 +1215,6 @@ int vfs_update_metadata_cache(
     // update cache if hit
     dir_cache_ent_t *ent = get_cache_entry(pathbuf);
 
-    assert(ent);
 
     if (ent) {// hit
         // it should be a file

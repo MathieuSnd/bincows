@@ -10,6 +10,7 @@
 
 #include "../memory/heap.h"
 #include "../sync/spinlock.h"
+#include "../sched/sched.h"
 #include "../lib/time.h"
 #include "../int/idt.h"
 
@@ -273,7 +274,6 @@ file_handle_t* create_handler(
                     fast_dirent_t* dirent, 
                     const char* path
 ) {
-    
     // big allocation to allocate the
     // sector buffer too
     file_handle_t *handle = malloc(
@@ -337,46 +337,56 @@ void set_stream_offset(file_handle_t* stream,
 }
 
 
-
-
-file_handle_t* vfs_open_file(const char *path, int flags) {
-    fast_dirent_t dirent;
-
-    // this function asserts that interrupts
-    // are enabled
-    fs_t *restrict fs = vfs_open(path, &dirent);
-    
-    if (!fs || fs == FS_NO) 
-        return NULL;
-    // dirent not found or associated to a 
-    // virtual directory
+file_handle_t* vfs_open_file_from(fs_t* fs, fast_dirent_t* dirent, const char* path, int flags) {
 
     // file does not exist or isn't a file
-    if (dirent.type != DT_REG) {
+    if (dirent->type != DT_REG) {
         return NULL;
     }
 
     // file is not writable
-    if (flags & VFS_WRITE && !dirent.rights.write)
+    if (flags & VFS_WRITE && !dirent->rights.write)
         return NULL;
     
-    if (flags & VFS_READ && !dirent.rights.read)
+    if (flags & VFS_READ && !dirent->rights.read)
         return NULL;
     
-    file_handle_t* h = create_handler(fs, &dirent, path);
+
+    file_handle_t* h = create_handler(fs, dirent, path);
 
     if(flags & VFS_APPEND)
-        set_stream_offset(h, dirent.file_size);
+        set_stream_offset(h, dirent->file_size);
 
-    if(dirent.rights.seekable)
+    if(dirent->rights.seekable)
         flags |= VFS_SEEKABLE;
     
-    if(dirent.rights.truncatable)
+    if(dirent->rights.truncatable)
         flags |= VFS_TRUNCATABLE;
 
     h->flags = flags;
 
+
     return h;
+}
+
+
+
+file_handle_t* vfs_open_file(const char *path, int flags) {
+    fast_dirent_t dirent;
+    
+
+    // this function asserts that interrupts
+    // are enabled
+    fs_t *restrict fs = vfs_open(path, &dirent);
+
+
+    
+    // dirent not found or associated to a 
+    // virtual directory
+    if (!fs || fs == FS_NO) 
+        return NULL;
+
+    return vfs_open_file_from(fs, &dirent, path, flags);
 }
 
 
@@ -519,6 +529,7 @@ void vfs_flush_file(file_handle_t *handle) {
  */
 void vfs_close_file(file_handle_t *handle) {
 
+
     fs_t *fs = handle->fs;
 
     _cli();
@@ -544,6 +555,9 @@ void vfs_close_file(file_handle_t *handle) {
         free(open_file->path);
         free(open_file->fhs);
 
+        uint64_t addr = open_file->addr;
+
+
 
         // remove open_file from 
         // the table
@@ -554,10 +568,6 @@ void vfs_close_file(file_handle_t *handle) {
         for(unsigned i = 0; i < n_open_files + 1; i++) {
             if(&open_files[i] == open_file) {
                 // found it!
-
-
-                if(fs->close_file)
-                    fs->close_file(fs, open_file->addr);
 
                 // now make sure to remove it:
                 unsigned to_move = n_open_files - i;
@@ -575,7 +585,20 @@ void vfs_close_file(file_handle_t *handle) {
         open_files = realloc(open_files, n_open_files * sizeof(struct file_ent));
         assert(found);
 
+
+        spinlock_release(&vfile_lock);
+        _sti();
+
+
+        if(fs->close_file)
+            fs->close_file(fs, addr);
     }
+    else {
+
+        spinlock_release(&vfile_lock);
+        _sti();
+    }
+    /*
     else {
         int found = 0;
         // remove the handle from the list
@@ -604,14 +627,9 @@ void vfs_close_file(file_handle_t *handle) {
         // the handle is in the file list
         assert(found);
     }
-
-    spinlock_release(&vfile_lock);
-    _sti();
+    */
 
 
-
-    if(fs->close_file)
-        fs->close_file(fs, handle->vfile_id);
     
     free(handle);
     fs->n_open_files--;
@@ -858,7 +876,7 @@ size_t vfs_read_file(void *ptr, size_t size,
 
     // if we have read less than we wanted,
     // we have reached the end of the file
-    if(rd < read_blocks) {
+    if(rd < (int)read_blocks) {
         // reading less than we wanted
         // is only possible on special files,
         // with granularity = 1 (non block fs)

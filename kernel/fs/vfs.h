@@ -90,7 +90,7 @@ int vfs_create(const char* path, int type);
  * make the underlying fs know
  * what we are doing with this structure
  */
-typedef struct file_handler {
+typedef struct file_handle {
 
     // file associated fs
     fs_t* fs;
@@ -276,6 +276,20 @@ void vfs_lazy_flush(void);
  * Otherwise, the file handler
  */
 file_handle_t* vfs_open_file(const char* filename, int flags);
+
+
+/**
+ * @brief 
+ * 
+ * @param fs 
+ * @param dirent 
+ * @param path 
+ * @param flags 
+ * @return file_handle_t* 
+ */
+file_handle_t* vfs_open_file_from(fs_t* fs, fast_dirent_t* dirent, 
+                                const char* path, int flags);
+
 
 /**
  * @brief create a file handle

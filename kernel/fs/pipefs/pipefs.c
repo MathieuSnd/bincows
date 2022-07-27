@@ -89,6 +89,8 @@ id_t create_file(void) {
     file->head = 0;
     file->waiters = NULL;
     file->n_waiters = 0;
+    file->broken = 0;
+    spinlock_init(&file->lock);
 
 
     id_t id = file->id = cur_id++;
@@ -128,40 +130,50 @@ void remove_file(struct pipefs_priv* priv,  pipefs_file_t* file) {
 }
 
 
-int create_pipe(file_pair_t* ends) {
+int create_pipe(file_handle_pair_t* ends) {
     assert(ends);
     assert(pipefs);
 
-    //struct pipefs_priv* priv = (void *)(pipefs + 1);
-
 
     id_t id = create_file();
-    
 
-    *ends = (file_pair_t){
-        .in = (file_t){
-            .fs = pipefs,
-            .addr = id,
-            .file_size = ~0u,
-            .rights = (file_rights_t){
-                .read = 1,
-                .write = 0,
-                .truncatable = 0,
-                .seekable = 0,
-            },
-        },
-        .out = (file_t){
-            .fs = pipefs,
-            .addr = id,
-            .file_size = ~0u,
-            .rights = (file_rights_t){
-                .read  = 0,
-                .write = 1,
-                .truncatable = 0,
-                .seekable = 0,
-            },
-        },
+    ///////////////////////////
+    /// out end of the pipe ///
+    ///////////////////////////
+
+    fast_dirent_t dirent = {
+        .file_size = -1,
+        .type = DT_REG,
+        .rights.value = 1, // read only
+        .ino = id,
     };
+
+    
+    char path[256];
+
+    // @todo forbit mounting pipe on another mount point
+    sprintf(path, "/pipe/out/%u", id);
+
+    ends->out = vfs_open_file_from(pipefs, &dirent,  path, VFS_READ);
+
+    assert(ends->out);
+
+
+
+    ///////////////////////////
+    //// in end of the pipe ///
+    ///////////////////////////
+
+
+    dirent.rights.value = 2; // write only
+    dirent.ino |= 1llu << 63;
+
+    sprintf(path, "/pipe/out/%u", id);
+
+    ends->in = vfs_open_file_from(pipefs, &dirent,  path, VFS_WRITE);
+
+    assert(ends->in);
+
 
     return 0;
 }
@@ -187,7 +199,6 @@ static pipefs_file_t* get_file(struct pipefs_priv* priv, id_t id) {
 
     _cli();
     spinlock_acquire(&priv->lock);
-
 
     for (size_t i = 0; i < priv->n_files; i++) {
         if (priv->files[i].id == id) {
@@ -237,7 +248,9 @@ static int read(struct fs* restrict fs, const file_t* restrict fd,
 
     uint64_t rf = get_rflags();
 
-    assert(fs->type == FS_TYPE_DEVFS);
+    assert(fs->type == FS_TYPE_PIPEFS);
+
+    assert(fd->addr >> 63 == 0);
 
     struct pipefs_priv* priv = (void *)(fs + 1);
 
@@ -264,7 +277,7 @@ static int read(struct fs* restrict fs, const file_t* restrict fd,
 
 
         // buffer capacity limit
-        if(file->head + batch_rd > file->tail) {
+        if(file->head < file->tail && file->head + batch_rd > file->tail) {
             batch_rd = file->tail - file->head;
             block = 1;
         }
@@ -295,14 +308,22 @@ static int read(struct fs* restrict fs, const file_t* restrict fd,
 
         remaining -= batch_rd;
 
-        if(block)
-            wait_for_buffer(file);
+        if(block) {
+            // there is not enough available data in the buffer.
+            // if we read something, we should not block, juste signal 
+            // the caller that there is not enough data.
+
+            if(n == remaining) // actually block
+                wait_for_buffer(file);
+            else
+                break;
+        }
     }
 
     spinlock_release(&file->lock);
     set_rflags(rf);
 
-    return n;
+    return n - remaining;
 }
 
 
@@ -315,7 +336,9 @@ static int write(struct fs* restrict fs, file_t* restrict fd,
     uint64_t rf = get_rflags();
 
     
-    assert(fs->type == FS_TYPE_DEVFS);
+    assert(fs->type == FS_TYPE_PIPEFS);
+    assert(fd->addr >> 63 == 1);
+
     
     struct pipefs_priv* priv = (void *)(fs + 1);
     
@@ -342,7 +365,7 @@ static int write(struct fs* restrict fs, file_t* restrict fd,
         
         
         // buffer capacity limit
-        if(file->tail + batch_wr >= file->head) {
+        if(file->tail < file->head && file->tail + batch_wr >= file->head) {
             // buffer full condition: file->tail - file->head = 1 
             batch_wr = file->head - file->tail - 1;
             block = 1;
@@ -386,7 +409,7 @@ static int write(struct fs* restrict fs, file_t* restrict fd,
 
 
 static void close_file(struct fs* restrict fs, uint64_t addr) {
-    assert(fs->type == FS_TYPE_DEVFS);
+    assert(fs->type == FS_TYPE_PIPEFS);
 
     uint64_t rf = get_rflags();
 
@@ -397,20 +420,32 @@ static void close_file(struct fs* restrict fs, uint64_t addr) {
 
 
     id_t file_id = addr & ~(1llu << 63);
-    int in_end = addr & (1llu << 63);
+    int in_end = addr >> 63;
 
     pipefs_file_t* file = get_file(priv, file_id);
 
+
     assert(file);
 
+
     if(file->broken) {
-        if(in_end == 0) // closing the out end, in end already closed
-            assert(file->broken == 2); 
+        if(in_end == 0) // closing the out (read) end, in end already closed
+            assert(file->broken == 1); 
         if(in_end == 1) // closing the in end, out end already closed
             assert(file->broken == 2); 
 
         // already broken: close the file
         remove_file(priv, file);
+    }
+    else {
+        if(in_end == 0) {
+            // closing the out (read) end 
+            file->broken = 2;
+        }
+        else {
+            // closing the in (write) end
+            file->broken = 1;
+        }
     }
 
     spinlock_release(&file->lock);
@@ -525,13 +560,26 @@ void init_priv(struct pipefs_priv* priv) {
     priv->files = NULL;
     priv->n_files = 0;
 
-    spinlock_init((spinlock_t*)&priv->lock);
+    spinlock_init((spinlock_t*)&priv->lock.val);
+}
+
+
+void unmount(struct fs* fs) {
+    struct pipefs_priv* priv = (void *)(fs + 1);
+
+    spinlock_acquire(&priv->lock);
+    assert(priv->n_files == 0);
+
+    free(pipefs);
+    pipefs = NULL;
+
 }
 
 
 fs_t* pipefs_mount(void) {
     fs_t* fs = malloc(sizeof(fs_t) + sizeof(struct pipefs_priv));
 
+    struct pipefs_priv* priv = (void *)(fs + 1);
     init_priv((void *)(fs + 1));
 
     fs->type = FS_TYPE_PIPEFS;
@@ -545,6 +593,7 @@ fs_t* pipefs_mount(void) {
     fs->read_file_sectors  = read;
     fs->write_file_sectors = write;
     fs->truncate_file      = truncate_file;
+    fs->unmount            = unmount;
     fs->n_open_files = 0;
     fs->part = NULL;
     fs->cacheable = 0;
@@ -554,5 +603,7 @@ fs_t* pipefs_mount(void) {
 
     pipefs = fs;
 
+
+    assert(priv->lock.val == 0);
     return fs;
 }
