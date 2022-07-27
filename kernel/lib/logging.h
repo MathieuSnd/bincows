@@ -45,6 +45,13 @@ const char* log_get(void);
 void log_flush(int force);
 
 
+// flush logs and close the file
+// this function should be called at exit
+// before unmounting /var/log/
+void log_cleanup(void);
+
+
+
 // after this call, every log call will write to the file.
 // the function also writes the registered logs to the file.
 void log_init_file(const char* filename);

@@ -23,7 +23,8 @@
 
 #define BUFFER_SIZE 4096
 
-static file_handle_t* logfile = NULL;
+
+static const char* logfile_path = NULL;
 
 static char logs_buffer[BUFFER_SIZE];
 static unsigned current_level;
@@ -96,7 +97,7 @@ void log(unsigned level, const char* string) {
     append_string(buffer);
 
     static int i = 0;
-    if(logfile && i++ % 5 == 0)
+    if(logfile_path && i++ % 5 == 0)
         log_flush(0);
 }
 
@@ -127,7 +128,7 @@ const char* log_get(void) {
 }
 
 void log_flush(int force) {
-    if(logfile) {
+    if(logfile_path) {
 
         if(!interrupt_enable()) {
             // we cannot use the write 
@@ -136,28 +137,31 @@ void log_flush(int force) {
             if(!force)
                 return;
         }
-        else
-            vfs_write_file(logs_buffer, i, 1, logfile);
+        else {
+            file_handle_t* file = vfs_open_file(
+                            logfile_path, VFS_WRITE | VFS_APPEND);
+        
+            assert(file);
+
+            vfs_write_file(logs_buffer, i, 1, file);
+
+            vfs_close_file(file);
+        }
     }
     i = 0;
 }
 
 
+
 void log_cleanup(void) {
-    if(logfile) {
-        vfs_close_file(logfile);
-        logfile = NULL;
-    }
+    log_flush(0);
 }
 
 void log_init_file(const char* filename) {
-    logfile = vfs_open_file(filename, VFS_WRITE | VFS_APPEND);
+    logfile_path = filename;
 
-    assert(logfile);
 
     log_flush(0);
-
-    atshutdown(log_cleanup);
 }
 
 
