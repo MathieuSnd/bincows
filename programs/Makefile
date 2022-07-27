@@ -6,7 +6,7 @@
 CC := x86_64-elf-gcc
 LD := x86_64-elf-ld
 
-CFLAGS := -O3 -fno-inline -mno-red-zone -mgeneral-regs-only \
+CFLAGS := -O1 -fno-inline -mno-red-zone -mgeneral-regs-only \
 		  -I../blib/include -fno-omit-frame-pointer -fno-pie
 
 

@@ -33,7 +33,14 @@ int main(int argc, char** argv) {
     }
 
     while ((ent = readdir(dir)) != NULL) {
-        printf("%s\t", ent->d_name);
+        char* color_seq = "\x1b[0m";
+
+        if(ent->d_type == DT_DIR) {
+            color_seq = "\x1b[36m";
+        }
+
+
+        printf("%s%s\x1b[0m\t", color_seq, ent->d_name);
     }
 
     printf("\n");

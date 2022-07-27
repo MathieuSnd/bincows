@@ -79,7 +79,7 @@ void print_cow(void) {
 
     buf[n] = '\0';
 
-    printf("%s", buf);
+    printf("%s\n", buf);
 
     free(buf);
 
@@ -96,14 +96,25 @@ static void cd(const char* path) {
     cwd = getcwd(NULL, 0);
 }
 
+
+extern char** __environ;
+
+static void list_env(void) {
+    char** ptr = __environ;
+
+    while(*ptr) {
+        printf("%s\n", *ptr);
+        ptr++;
+    }
+} 
+
 static void export(const char** argv) {
     if(argv[1] == NULL) {
-        printf("export: missing argument\n");
+        list_env();        
         return;
     }
 
     char* dup = strdup(argv[1]);
-
 
     putenv(dup);
 }
@@ -172,19 +183,108 @@ static char** convert_cmdline(char* cmdline) {
 }
 
 
+char* env_end(char* begin) {
+    char* end = begin;
+    while(*end) {
+        
+        if(end == begin && *end >= '0' && *end <= '9')
+            return end;
+
+
+        if((*end >= 'a' && *end <= 'z')
+            || (*end >= 'A' && *end <= 'Z')
+            || (*end >= '0' && *end <= '9')
+            || (*end == '_')
+        )
+            end++;
+        else
+            return end;
+    }
+    return end;
+}
+
+char* eval_env(char* cmd) {
+    // replace $VAR with the value of VAR
+
+    char* ptr = cmd;
+    char* var;
+
+    char* dest = malloc(strlen(cmd) + 1);
+
+    char* dptr = dest;
+
+    int dest_sz = strlen(cmd) + 1;
+
+
+    while(1) {
+        var = (char*)strchr(ptr, '$');
+
+        if(var) {
+            memcpy(dptr, ptr, var - ptr);
+            dptr += var - ptr;
+
+
+            char* end = env_end(var + 1);
+
+
+
+            int len = end - var;
+        
+
+            char* var_name = malloc(len);
+
+            memcpy(var_name, var + 1, len - 1);
+
+            var_name[len - 1] = '\0';
+
+            // get the value of the variable
+            char* var_value = getenv(var_name);
+
+
+            if(var_value) {
+                dest_sz += strlen(var_value);
+
+                int i = dptr - dest;
+                dest = realloc(dest, dest_sz);
+
+                dptr = dest + i;
+
+                strcpy(dptr, var_value);
+
+                
+                dptr += strlen(var_value);
+            }
+
+            ptr = end;
+        }
+        else {
+            strcpy(dptr, ptr);
+            break;
+        }
+    }
+
+    return dest;
+}
+
+
 static void execute(char* cmd) {
     // convert to argv
-    char** argv = convert_cmdline(cmd);
+
+    char* final = eval_env(cmd);
+
+    char** argv = convert_cmdline(final);
+
+    free(final);
 
     if(!argv[0])
         return;
-    
-    if(builtin_cmd(argv))
+
+    if(builtin_cmd((const char**) argv))
         return;
 
 
     // execute
-    int ret = forkexec(argv);
+    int ret = forkexec((const char* const*)argv);
 
 
     if(ret) 
@@ -213,19 +313,56 @@ void print_prompt(void) {
     printf("%s > _\b", cwd);
 }
 
+
+void script_exec(char* line) {
+
+    int isspace(int c) {
+        return c == ' ' || c == '\t';
+    }
+
+    // remove spaces
+    while(isspace(*line))
+        line++;
+
+    if(*line == '#') // comment
+        return;
+
+    execute(line);
+}
+
+void exec_script(const char* path) {
+    FILE* file = fopen(path, "r");
+    if(!file) {
+        printf("couldn't open file '%s'\n", path);
+        return;
+    }
+
+
+    char line[2048];
+
+    const int len = sizeof(line);
+
+
+    while(fgets(line, len, file) != NULL) {
+        line[len-1] = '\0';
+        script_exec(line);
+    }
+
+    fclose(file);
+}
+
 int main(int argc, char** argv) {
     init_stream();
 
-    print_cow();
 
+
+    exec_script("/home/.shrc");
 
     printf("%s\n", version_string);
 
 
     // current working directory
     cwd = getcwd(NULL, 0);
-
-    export((const char*[]){NULL,"PATH=/bin",0});
 
 
     //for(int i = 0; i < 500; i++)
