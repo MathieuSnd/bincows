@@ -33,10 +33,18 @@ extern char** __environ;
 int putenv(char *string) {
     char* name  = string;
 
+    char* eq = strchr(name, '=');
+
+    if(eq == NULL)
+        return -1;
+
+
     size_t envs = 0;
 
+    int namelen = eq - name;
+
     for(char** p = __environ; *p; p++) {
-        if(strcmp(name, *p) == 0) {
+        if(strncmp(name, *p, namelen + 1) == 0) {
             *p = string;
             return 0;
         }

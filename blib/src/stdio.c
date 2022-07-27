@@ -125,8 +125,8 @@ FILE *fopen (const char *restrict filename,
 
 
     file->fd = fd;
-    file->flags = 0;
-    file->mode = 0;
+    file->flags = flags;
+    file->mode = _IONBF;
     file->ungetc = 0;
     file->error = 0;
     file->eof = 0;
@@ -350,15 +350,22 @@ char* fgets(char* restrict s, int n, FILE* restrict stream) {
         }
         case _IONBF: {
             int i = 0;
+            int eof = 0;
+            n--;
             while(i < n) {
                 char c = fgetc(stream);
-                if(c == EOF) {
-                    return NULL;
-                }
+                if(c == EOF)
+                    eof = 1;
+
+                if(eof|| c == '\n')
+                    break;
+
                 s[i] = c;
                 i++;
             }
-            return s;
+
+            s[i] = '\0';
+            return (eof && i == 0) ? NULL : s;
         }
         default:
             return NULL;
