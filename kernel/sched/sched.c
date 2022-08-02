@@ -338,7 +338,8 @@ process_t* sched_get_process(pid_t pid) {
 
 
 
-pid_t sched_create_process(pid_t ppid, const void* elffile, size_t elffile_sz) {
+pid_t sched_create_process(pid_t ppid, const void* elffile, 
+                size_t elffile_sz, fd_mask_t fd_mask) {
     process_t new;
 
     // NULL: no parent
@@ -357,7 +358,7 @@ pid_t sched_create_process(pid_t ppid, const void* elffile, size_t elffile_sz) {
         return -1;
     }
 
-    int ret = create_process(&new, parent, elffile, elffile_sz);
+    int ret = create_process(&new, parent, elffile, elffile_sz, fd_mask);
 
     // unlock process 
 

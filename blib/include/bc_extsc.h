@@ -6,6 +6,8 @@
  */
 
 
+#include <stdint.h>
+
 
 #ifndef SIG_HANDLER_T
 
@@ -16,9 +18,8 @@ typedef void (*sighandler_t)(int);
 typedef void (*signal_end_fun_t)(void) __attribute__((noreturn));
 #endif
 
-#ifndef MAX_SIGNALS
 #define MAX_SIGNALS 32
-#endif
+#define MAX_FDS 32
 
 /**
  * setup the signal handlers and the signal end function.
@@ -43,6 +44,20 @@ extern void sigreturn(void) __attribute__((noreturn));
  * 0 on success, -1 on error.
  */
 extern int sigsend(int sig, int pid);
+
+
+typedef uint32_t fd_mask_t;
+
+_Static_assert(MAX_SIGNALS % 8 == 0, "MAX_SIGNALS must be a multiple of 8");
+
+/** 
+ * executes a new task with the given argv.
+ * cmdline should be a null terminated array of strings.
+ * 
+ * mask is a bitmask of file descriptors that are not
+ * to inherit to the new process.
+*/
+extern int forkexec(char const * const cmdline[], fd_mask_t mask);
 
 
 

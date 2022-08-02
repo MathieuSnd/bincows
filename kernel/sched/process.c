@@ -78,7 +78,8 @@ int create_process(
         process_t*  process, 
         process_t*  pparent, 
         const void* elffile, 
-        size_t      elffile_sz
+        size_t      elffile_sz,
+        fd_mask_t  fd_mask
 ) {
 
     // assert that no userspace is mapped
@@ -698,6 +699,11 @@ int process_trigger_signal(pid_t pid, int signal) {
     // grab the process
     process_t* process = sched_get_process(pid);
 
+    // map the process memory into lower half
+    uint64_t saved_proc_page_map = get_user_page_map();
+    set_user_page_map(process->page_dir_paddr);
+
+
     if(!process) {
         set_rflags(rf);
         return -1;
@@ -720,7 +726,8 @@ int process_trigger_signal(pid_t pid, int signal) {
     // unblock threads that wait for a signal if necessary
     unblock_sigwait_threads_and_release(process, rf);
 
-
+    // restore the process memory map
+    set_user_page_map(saved_proc_page_map);
 
     return 0;
 }

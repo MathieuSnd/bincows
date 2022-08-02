@@ -501,12 +501,6 @@ extern int brk (void *__addr);
 extern void *sbrk (uint64_t __delta);
 
 
-/*
-return 0 if successfull, -1 if error
-*/
-extern int forkexec(char const * const cmdline[]);
-
-
 /* Execute PATH with arguments ARGV and environment from `environ'.  */
 extern int execv (const char *__path, char const *const __argv[]);
 

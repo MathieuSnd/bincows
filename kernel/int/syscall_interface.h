@@ -113,6 +113,10 @@ struct sc_exec_args {
     // if 0, the syscall will 
     // behave like the unix one
     int new_process;
+
+    // bit i = 1 means that FD i will not
+    // inherit from the parent process
+    uint32_t fd_mask;
 };
 
 

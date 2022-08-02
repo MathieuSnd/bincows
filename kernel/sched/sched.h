@@ -101,7 +101,8 @@ pid_t alloc_pid(void);
 // in order to create a process, no process should
 // initially mapped in memory.
 // the created process is mapped and is not unmapped
-pid_t sched_create_process(pid_t ppid, const void* elffile, size_t elffile_sz);
+pid_t sched_create_process(pid_t ppid, const void* elffile, 
+                        size_t elffile_sz, fd_mask_t fd_mask);
 
 
 // kill and remove the process with pid pid

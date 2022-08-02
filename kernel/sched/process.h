@@ -16,6 +16,7 @@ typedef int pid_t;
 typedef unsigned fd_t;
 
 #define MAX_FDS 32
+typedef uint32_t fd_mask_t;
 
 #define FD_NONE 0
 #define FD_FILE 1
@@ -168,7 +169,8 @@ int process_end_of_signal(process_t* process);
  * @param elf_file input file
  * @return int 0 if failure, non-0 otherwise
  */
-int create_process(process_t* process, process_t* pparent, const void* elffile, size_t elffile_sz);
+int create_process(process_t* process, process_t* pparent, 
+            const void* elffile, size_t elffile_sz, fd_mask_t fd_mask);
 
 
 /**

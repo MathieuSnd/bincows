@@ -358,10 +358,24 @@ static uint64_t sc_exec(process_t* proc, void* args, size_t args_sz) {
 
     if(!exec_args->new_process) {
         assert(0);
-        // regular UNIX exec
+        // UNIX-like exec
         replace_process(proc, elf_data, file_sz);
         new_proc = proc;
         free(elf_data);
+
+        // close masked fds
+
+        fd_mask_t mask = exec_args->fd_mask;
+
+        for(int i = 0; i < MAX_FDS; i++) {
+            int masked = mask & 1;
+            mask >>= 1;
+
+            if(masked && proc->fds[i].type != FD_NONE) {
+                log_warn("closed unmasked fd %d", i);
+                close_fd(&proc->fds[i]);
+            }
+        }
     }
     else {
         unmap_user();
@@ -369,7 +383,8 @@ static uint64_t sc_exec(process_t* proc, void* args, size_t args_sz) {
         // sched_create_process needs the user to be unmaped
         pid_t p = sched_create_process(
                         proc->pid, // PPID
-                        elf_data, file_sz);
+                        elf_data, file_sz, exec_args->fd_mask);
+
         free(elf_data);
 
         if(p == -1) {
@@ -379,6 +394,9 @@ static uint64_t sc_exec(process_t* proc, void* args, size_t args_sz) {
             // still need to remap the process
             set_user_page_map(proc->page_dir_paddr);
 
+            free(args_copy);
+            free(env_copy);
+            
             return -1;
         }
     
@@ -452,7 +470,7 @@ static uint64_t sc_exec(process_t* proc, void* args, size_t args_sz) {
 
     //sched_yield();
 
-    return 0;
+    return new_pid;
 }   
 
 // return the fd if found or -1 otherwise
@@ -966,8 +984,7 @@ static uint64_t sc_dup(process_t* proc, void* args, size_t args_sz) {
         }
 
         if(proc->fds[fd2].type != FD_NONE) {
-            sc_warn("fd2 already in use", args, args_sz);
-            return -1;
+            close_fd(&proc->fds[fd2]);
         }
     }
     else {

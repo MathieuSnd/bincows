@@ -194,7 +194,7 @@ int fgetc(FILE* stream) {
         case _IOLBF:
             return EOF;
         case _IONBF: {
-            char c;
+            int c;
             stream->pos++;
             int n = read(stream->fd, &c, 1);
             if(n == 1) {
