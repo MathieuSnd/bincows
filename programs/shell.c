@@ -4,23 +4,8 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-
-
-int x = 8;
-const char* rodata = " zefgrbefvzegr ";
-
-int g = 0;
-
-int fibo(int v) {
-    if(v < 2)
-        return v;
-    else
-        return fibo(v - 1) + fibo(v - 2);
-}
-
-int f(int x) {
-    return x+1;
-}
+#include <bc_extsc.h>
+#include <signal.h>
 
 
 #define VERSION "0.1"
@@ -41,6 +26,9 @@ int print_input_end() {
     return 0;
 }
 */
+
+
+static int execute(char* cmd);
 
 void init_stream(void) {
     int __stdin  = open("/dev/ps2kb", 0,0);
@@ -267,7 +255,67 @@ char* eval_env(char* cmd) {
 }
 
 
-static void execute(char* cmd) {
+
+void type_character(char ch) {
+
+
+    static int cur = 0;
+    static char line[1024];
+
+    switch(ch) {
+        default:
+            line[cur++] = ch;
+            printf("%c_\b", ch);
+            break;
+        case '\b':
+            if(cur > 0) {
+                printf(" \b\b_\b");
+                cur--;
+            }
+            break;
+        case '\n':
+            printf("\n");
+            line[cur] = 0;
+            cur = 0;
+
+            if(execute(line) == -1) {
+                print_prompt();
+            }
+            break;
+    }
+}
+
+
+
+// is set everytime a SIGCHLD signal occurs
+static volatile int sigchld_flag = 0;
+
+void sigchld_handler(int s) {
+    if(s != SIGCHLD) {
+        printf("error: sigchld_handler received signal %d != %d", 
+                        s, SIGCHLD);
+        return;
+    }
+
+    sigchld_flag = 1;
+    print_prompt();
+}
+
+
+int tolower(int c) {
+    if(c >= 'A' && c <= 'Z')
+        return c + 32;
+    return c;
+}
+
+int toupper(int c) {
+    if(c >= 'a' && c <= 'z')
+        return c - 32;
+    return c;
+}
+
+
+static int execute(char* cmd) {
     // convert to argv
 
     char* final = eval_env(cmd);
@@ -277,17 +325,49 @@ static void execute(char* cmd) {
     free(final);
 
     if(!argv[0])
-        return;
+        return -1;
 
     if(builtin_cmd((const char**) argv))
-        return;
+        return -1;
 
+
+
+    // 1 - stdin
+    // 2 - stdout
+    // 3 - stderr
+    // all the others are to be masked
+    const fd_mask_t fdmask = ~7llu;
+
+
+    // setup pipe
+    int pipe_ends[2];
+    int r = pipe(pipe_ends);
+
+    if(r) {
+        printf("couldn't create a pipe\n");
+        free(argv);
+        return -1;
+    }
+
+    const int term_in = 31;
+
+    dup2(0, term_in);
+
+    dup2(pipe_ends[0], 0);
+
+
+    sigchld_flag = 0;
 
     // execute
-    int ret = forkexec((const char* const*)argv);
+    int pid = forkexec((const char* const*)argv, fdmask);
 
 
-    if(ret) 
+    dup2(term_in, 0);
+    close(term_in);
+    close(pipe_ends[0]);
+
+
+    if(pid == -1) 
     {
         // couldn't execute
         
@@ -298,13 +378,58 @@ static void execute(char* cmd) {
         }
         else
             printf("command not found: %s\n", argv[0]);
+
     }
     else {
-        // wait for the child to finish
-        pause();
+        
+        while(1) {
+            int r = fgetc(stdin);
+
+            if(r <= 0) {
+                printf("broken terminal %lu\n", r);
+                break;
+            }
+
+
+            if(r == 0xff) {
+                // control character
+                r = fgetc(stdin);
+
+                r = toupper(r);
+
+                printf("^%c\n", r);
+
+                switch(r) {
+                    case 'D': // CTRL-D
+                    // eof: close pipe
+                        close(pipe_ends[1]);
+                        if(sigchld_flag)
+                            pause();
+                        free(argv);
+                        return pid;
+                    case 'C': // CTRL-C
+                        // kill the child process
+                        kill(pid, SIGINT);
+                        break;
+                }
+            } else {
+                int w = write(pipe_ends[1], &r, 1);
+
+                if(w <= 0) {
+                    type_character(r);
+                    break;
+                }
+                else
+                    fputc(r, stdout);
+            }
+        }
+
+        close(pipe_ends[1]);
     }
 
     free(argv);
+
+    return pid;
 }
 
 
@@ -353,8 +478,8 @@ void exec_script(const char* path) {
 
 int main(int argc, char** argv) {
     init_stream();
-
-
+    
+    signal(SIGCHLD, sigchld_handler);
 
     exec_script("/home/.shrc");
 
@@ -365,41 +490,17 @@ int main(int argc, char** argv) {
     cwd = getcwd(NULL, 0);
 
 
-    //for(int i = 0; i < 500; i++)
-    //    execute("write");
-
     print_prompt();
 
-
-    int cur = 0;
-    char line[1024];
 
 
     while(1) {
         char ch;
 
         if(read(STDIN_FILENO, &ch, 1) <= 0)
-            break;
+            break; // eof
 
-        switch(ch) {
-            default:
-                line[cur++] = ch;
-                printf("%c_\b", ch);
-                break;
-            case '\b':
-                if(cur > 0) {
-                    printf(" \b\b_\b");
-                    cur--;
-                }
-                break;
-            case '\n':
-                printf("\n");
-                line[cur] = 0;
-                execute(line);
-                print_prompt();
-                cur = 0;
-                break;
-        }
+        type_character(ch);
     }
 
     close(STDIN_FILENO);

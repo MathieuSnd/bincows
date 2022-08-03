@@ -12,6 +12,7 @@
 
 
 static char lshift_state, rshift_state, altgr_state; 
+static char ctrl_state;
 
 static uint8_t get_byte(void) {
     // wait for the output bufer
@@ -46,10 +47,23 @@ static void append_event(const struct kbevent* ev) {
     
     else if(ev->type == KEYPRESSED && ev->keycode != 0) {
         if((buff_head + 1) % BUFFER_SIZE == buff_tail) {
-            // buffer is full
+            log_warn("ps2 keyboard overrun");
             return;
         }
         else {
+            if(ctrl_state) {
+                // insert the shifted escape code
+                file_buffer[buff_head] = 0xff;
+
+                buff_head = (buff_head + 1) % BUFFER_SIZE;
+
+                if((buff_head + 1) % BUFFER_SIZE == buff_tail) {
+                    log_warn("ps2 keyboard overrun");
+                    return;
+                }
+                   
+            }
+
             file_buffer[buff_head] = ev->keycode;
             buff_head = (buff_head + 1) % BUFFER_SIZE;
         }
@@ -157,6 +171,11 @@ static void process_byte(uint8_t b) {
     else if(ev.scancode == 56) {
         altgr_state =  ev.type;
     }
+
+    else if(ev.scancode == 0x1d) {
+        ctrl_state = ev.type;        
+    }
+
 
     if(altgr_state)
         ev.keycode = ps2_azerty_table_altgr    [ev.scancode];
