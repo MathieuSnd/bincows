@@ -15,6 +15,7 @@
 #include "../fs/vfs.h"
 #include "../acpi/power.h"
 #include "../lib/registers.h"
+#include "../sched/sched.h"
 
 #include "logging.h"
 
@@ -130,7 +131,7 @@ const char* log_get(void) {
 void log_flush(int force) {
     if(logfile_path) {
 
-        if(!interrupt_enable()) {
+        if(!interrupt_enable() || !sched_is_running()) {
             // we cannot use the write 
             // function.
 
