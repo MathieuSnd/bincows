@@ -372,7 +372,6 @@ static uint64_t sc_exec(process_t* proc, void* args, size_t args_sz) {
             mask >>= 1;
 
             if(masked && proc->fds[i].type != FD_NONE) {
-                log_warn("closed unmasked fd %d", i);
                 close_fd(&proc->fds[i]);
             }
         }
