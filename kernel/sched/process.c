@@ -110,8 +110,15 @@ int create_process(
     // inherit parent file handlers
     ppid = pparent->pid;
 
-    for(unsigned i = 0; i < MAX_FDS; i++)
-        dup_fd(pparent->fds + i, fds + i);
+    for(unsigned i = 0; i < MAX_FDS; i++) {
+        if((fd_mask & 1) == 0) {
+            dup_fd(pparent->fds + i, fds + i);
+        }
+        else {
+            fds[i].type = FD_NONE;
+        }
+        fd_mask >>= 1;
+    }
 
 
     // inherit parent directory

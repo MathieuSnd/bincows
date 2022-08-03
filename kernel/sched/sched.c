@@ -319,7 +319,7 @@ process_t* sched_get_process(pid_t pid) {
         // unlock the process table
         spinlock_release(&sched_lock);
 
-        log_debug("process %d not found, over %d processes", pid, n_processes);
+        // log_debug("process %d not found, over %d processes", pid, n_processes);
         // restore rflags
         set_rflags(rf);
 
@@ -832,10 +832,16 @@ void sched_unblock(pid_t pid, tid_t tid) {
     uint64_t rf = get_rflags();
     _cli();
     process_t* p = sched_get_process(pid);
-    assert(p);
+    
+    
+    //assert(p);
+
+    if(!p)
+        return;
 
     thread_t* t = sched_get_thread_by_tid(p, tid);
-    assert(t);
+    
+    //assert(t);
 
     sched_unblock_thread(t);
 
