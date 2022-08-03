@@ -45,7 +45,7 @@ typedef struct pipefs_file {
     thread_id_t* waiters;
     unsigned n_waiters;
 
-    spinlock_t* lock;
+    spinlock_t lock;
 
 } pipefs_file_t;
 
@@ -218,15 +218,28 @@ static pipefs_file_t* get_file(struct pipefs_priv* priv, id_t id) {
 }
 
 
-// add the common thread to the list of waiters and block
-static void wait_for_buffer(pipefs_file_t* file) {
+// add the common thread to the list of waiters, release the file
+static pipefs_file_t* wait_for_buffer(struct pipefs_priv* priv, pipefs_file_t* file) {
     file->waiters = realloc(file->waiters, sizeof(thread_id_t) * (file->n_waiters + 1));
+
+    id_t id = file->id;
 
     file->waiters[file->n_waiters++] = (thread_id_t) {
         .pid = sched_current_pid(),
         .tid = sched_current_tid(),
     };
+
+    // release file
+    spinlock_release(&file->lock);
+    _sti();
+
+
+    // wait for the buffer to be filled
     sched_block();
+
+    // may be filled
+    // reaquire file
+    return get_file(priv, id);
 }
 
 // unblock all threads waiting for the buffer and clear the list
@@ -263,11 +276,12 @@ static int read(struct fs* restrict fs, const file_t* restrict fd,
     unsigned remaining = n;
 
     while(remaining) {
+        //log_warn("remaining: %u, head = %u, tail = %u", remaining, file->head, file->tail);
         if(file->broken) {
             // UNIX semantics:
             // if the pipe is broken,
             // the read will return EOF (0)
-            return 0;
+            break;
         }
 
         unsigned batch_rd = remaining;
@@ -277,7 +291,7 @@ static int read(struct fs* restrict fs, const file_t* restrict fd,
 
 
         // buffer capacity limit
-        if(file->head < file->tail && file->head + batch_rd > file->tail) {
+        if(file->head <= file->tail && file->head + batch_rd > file->tail) {
             batch_rd = file->tail - file->head;
             block = 1;
         }
@@ -314,14 +328,17 @@ static int read(struct fs* restrict fs, const file_t* restrict fd,
             // the caller that there is not enough data.
 
             if(n == remaining) // actually block
-                wait_for_buffer(file);
-            else
+                wait_for_buffer(priv, file);
+            else  {
                 break;
+            }
         }
     }
 
     spinlock_release(&file->lock);
     set_rflags(rf);
+    //  log_warn("readed");
+
 
     return n - remaining;
 }
@@ -355,7 +372,11 @@ static int write(struct fs* restrict fs, file_t* restrict fd,
             // UNIX semantics:
             // if the pipe is broken,
             // the write will return EOF (0)
-            return 0;
+
+
+            spinlock_release(&file->lock);
+            set_rflags(rf);
+            return -1;
         }
         
         unsigned batch_wr = remaining;
@@ -398,7 +419,7 @@ static int write(struct fs* restrict fs, file_t* restrict fd,
         remaining -= batch_wr;
         
         if(block)
-            wait_for_buffer(file);
+            wait_for_buffer(priv, file);
     }
     
     spinlock_release(&file->lock);
@@ -446,6 +467,9 @@ static void close_file(struct fs* restrict fs, uint64_t addr) {
             // closing the in (write) end
             file->broken = 1;
         }
+
+        // notify the other end
+        broadcast_waiters(file);
     }
 
     spinlock_release(&file->lock);
@@ -568,8 +592,12 @@ void unmount(struct fs* fs) {
     struct pipefs_priv* priv = (void *)(fs + 1);
 
     spinlock_acquire(&priv->lock);
-    assert(priv->n_files == 0);
 
+    assert(priv->n_files == 0);
+    assert(fs == pipefs);
+
+    if(priv->files)
+        free(priv->files);
     free(pipefs);
     pipefs = NULL;
 
@@ -583,7 +611,7 @@ fs_t* pipefs_mount(void) {
     init_priv((void *)(fs + 1));
 
     fs->type = FS_TYPE_PIPEFS;
-    fs->name = strdup("devfs");
+    fs->name = strdup("pipefs");
     fs->add_dirent         = add_dirent;
     fs->read_dir           = read_dir;
     fs->free_dirents       = free_dirents;

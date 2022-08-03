@@ -6,6 +6,7 @@
 #include "../../lib/assert.h"
 #include "../../lib/panic.h"
 #include "../../memory/heap.h"
+#include "../../lib/registers.h"
 #include "devfs.h"
 
 
@@ -58,7 +59,11 @@ static int read(struct fs* restrict fs, const file_t* restrict fd,
         devfs_file_t* f = &priv->files[i];
         if (f->id == fd->addr) {
             assert(f->rights.read);
-            return f->read(f->arg, buf, begin, n);
+            int r = f->read(f->arg, buf, begin, n);
+            
+            assert(interrupt_enable());
+
+            return r;
         }
     }
 
@@ -78,7 +83,11 @@ static int write(struct fs* restrict fs, file_t* restrict fd,
         devfs_file_t* f = &priv->files[i];
         if (f->id == fd->addr) {
             assert(f->rights.write);
-            return f->write(f->arg, buf, begin, n);
+            int r = f->write(f->arg, buf, begin, n);
+
+            assert(interrupt_enable());
+
+            return r;
         }
     }
 

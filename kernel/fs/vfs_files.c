@@ -543,7 +543,6 @@ void vfs_close_file(file_handle_t *handle) {
     if(handle->flags & VFS_WRITE)
         open_file->modified = 1;
 
-
     if(!open_file->n_insts) {
         // @todo do not remove the file every time
         // let the kernel process do it
@@ -987,19 +986,24 @@ size_t vfs_write_file(const void *ptr, size_t size, size_t nmemb,
     
     // save file address in case it is updated
     uint64_t file_addr = file_copy.addr;
+
+    int error = 0;
     
 
     // print file_copy
     // if the selected write is perfectly aligned,
     // the we don't need another buffer
     if(stream->sector_offset == 0 && end_offset == 0) {
-        fs->write_file_sectors(
+        int w = fs->write_file_sectors(
             fs,
             &file_copy,
             ptr,
             stream->sector_count,
             write_blocks
         );
+
+        if(w < 0)
+            error = 1;
     }
     /*     
         sc = stream->sector_count
@@ -1167,6 +1171,9 @@ size_t vfs_write_file(const void *ptr, size_t size, size_t nmemb,
     
 
     release_file_access(stream->vfile_id);
+
+    if(error)
+        return -1;
 
     return nmemb;
 }
