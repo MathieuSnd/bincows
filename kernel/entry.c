@@ -372,7 +372,7 @@ void launch_shell(void) {
 
     _cli();
 
-    pid_t pid= sched_create_process(KERNEL_PID, elf_file, file_size);
+    pid_t pid= sched_create_process(KERNEL_PID, elf_file, file_size, 0);
     free(elf_file);
 
     assert(pid != -1);
@@ -502,9 +502,6 @@ void _start(struct stivale2_struct *stivale2_struct) {
     assert(r != 0);
 
 
-    // init log file
-    log_init_file("/var/log/sys.log");
-
     r = vfs_mount_devfs();      assert(r);
     r = vfs_mount_pipefs();      assert(r);
 
@@ -517,6 +514,7 @@ void _start(struct stivale2_struct *stivale2_struct) {
 
     log_debug("init sched");
     sched_init();
+
 
     log_debug("init syscalls");
     syscall_init();
@@ -537,6 +535,10 @@ void _start(struct stivale2_struct *stivale2_struct) {
 
     // clear the terminal
     //printf("\x0c");
+
+    
+    // init log file
+    //log_init_file("/var/log/sys.log");
     
     // start the scheduler
     sched_start();
