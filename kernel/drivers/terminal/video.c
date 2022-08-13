@@ -425,7 +425,7 @@ void blitchar(void* pixels, unsigned pitch,
               uint16_t dstx, uint16_t dsty
 ) {
 
-    const uint64_t colormap[] = {
+    const uint64_t colormap[4] = {
         ((uint64_t) bg_color << 32) | bg_color,
         ((uint64_t) bg_color << 32) | fg_color,
         ((uint64_t) fg_color << 32) | bg_color,
@@ -455,6 +455,7 @@ void blitchar(void* pixels, unsigned pitch,
         
         for(size_t n_col2 = TERMINAL_FONTWIDTH / 2 ; n_col2 > 0 ; n_col2--) {
             uint16_t index = lines & 0b11;
+            
 
             *(dst_ptr++) = colormap[index];
             lines >>= 2;

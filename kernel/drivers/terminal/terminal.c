@@ -26,9 +26,6 @@ struct Char {
 
 static_assert_equals(sizeof(struct Char), 8);
 
-static struct Char make_Char(driver_t* this, char c);
-static void print_char      (driver_t* this, const struct Char* restrict c, int line, int col);
-static void flush_screen    (driver_t* this);
 
 
 struct data {
@@ -58,17 +55,23 @@ struct data {
     {
         uint32_t escape_flags;
         struct {
-            unsigned seq: 1;
-            unsigned color: 1;
+            unsigned ESC: 1; // last char was ESC ('\x1b')
+            unsigned seq: 1; // last chars were ESC+[ ('\x1b[')
 
             uint8_t idx;
         } esc;
     };
 
-    uint8_t esc_seq[4];
+    uint8_t esc_seq[10];
 
     // this buffer keeps a copy of the framebuffer
 };
+
+
+
+static struct Char make_Char(struct data* restrict d, char c);
+static void print_char      (driver_t* this, const struct Char* restrict c, int line, int col);
+static void flush_screen    (driver_t* this);
 
 
 static driver_t* active_terminal = NULL;
@@ -240,7 +243,7 @@ static void terminal_clear(driver_t* this) {
     struct Char* ptr = d->char_buffer;
 
     for(;buffer_len > 0; --buffer_len)
-        *(ptr++) = make_Char(this, 0);
+        *(ptr++) = make_Char(d, 0);
     
     flush_screen(this);
 }
@@ -264,7 +267,7 @@ static void move_buffer(driver_t* this, int lines) {
 
         // cannot touch the first one: it is already written
         for(unsigned i = 1; i < px; i++)
-            d->char_buffer[i+buff_px - px] = make_Char(this,0);
+            d->char_buffer[i+buff_px - px] = make_Char(d,0);
     }
 }
 
@@ -284,8 +287,7 @@ static void next_line(driver_t* this) {
 }
 
 // create the char struct
-static struct Char make_Char(driver_t* this, char c) {
-    struct data* restrict d = this->data;
+static struct Char make_Char(struct data* restrict d, char c) {
     
     return (struct Char) {
         .fg_color = d->current_fgcolor,
@@ -298,7 +300,7 @@ static struct Char make_Char(driver_t* this, char c) {
 static void emplace_normal_char(driver_t* this, char c) {
     struct data* restrict d = this->data;
     
-    d->char_buffer[d->ncols * d->cur_line + d->cur_col] = make_Char(this, c);
+    d->char_buffer[d->ncols * d->cur_line + d->cur_col] = make_Char(d, c);
     
     struct Char* ch = &d->char_buffer[d->ncols * d->cur_line + d->cur_col];
     
@@ -359,65 +361,159 @@ static void set_color(struct data* restrict d, unsigned tenth, unsigned unit) {
 }
 
 
+// 0 if missing
+static int parse_esc_number_single(struct data* restrict d) {
+    int num = 0;
+    for(unsigned i = 0; i < d->esc.idx; i++) {
+        int n = d->esc_seq[i];
+
+        if(n == 0xff)
+            break;
+
+        num = num * 10 + n;
+    }
+
+    return num;
+}
+
+
+// Cursor Position
+static void esc_cup(struct data* restrict d) {
+    int vals[2];
+    vals[0] = vals[1] = 0;
+
+    int j = 0;
+
+    for(unsigned i = 0; i < d->esc.idx; i++) {
+        int n = d->esc_seq[i];
+
+        if(n == (uint8_t)-1) {
+            if(j > 1) {
+                // invalid escape sequence
+                return;
+            }
+            j++;
+        }
+        else
+            vals[j] = vals[j] * 10 + n;
+    }
+
+    d->cur_col = (vals[0] - 1) < 0 ? 0 : (vals[0] - 1);
+    d->cur_line = (vals[1] - 1) < 0 ? 0 : (vals[1] - 1)  + d->first_line;
+
+    if(d->cur_col >= d->ncols)
+        d->cur_col = d->ncols - 1;
+    if(d->cur_line >= d->nlines)
+        d->cur_line = d->nlines - 1 + d->first_line;
+}
+
+// Erase in Line
+static void esc_el(struct data* restrict d) {
+
+    int num = parse_esc_number_single(d);
+
+    unsigned line_begin = d->ncols * d->cur_line;
+    unsigned line_end   = (d->ncols+1) * d->cur_line;
+    unsigned line_cur   = line_begin + d->cur_col;
+
+    switch(num) {
+        case 0: // cursor -> end
+            for(unsigned x = line_cur; x < line_end; x++)
+                d->char_buffer[x] = make_Char(d, ' ');
+            break;
+        case 1: // begin -> cursor
+            for(unsigned x = line_begin; x < line_cur; x++)
+                d->char_buffer[x] = make_Char(d, ' ');
+            break;
+        case 2: // begin -> end
+            for(unsigned x = line_begin; x < line_end; x++)
+                d->char_buffer[x] = make_Char(d, ' ');
+            break;
+    }
+
+}
+
+
+// 	Select Graphic Rendition
+static void esc_sgr(struct data* restrict d) {
+    if(d->esc.idx == 2) {
+        // invalid escape sequence
+        set_color(d, d->esc_seq[0], d->esc_seq[1]);
+    }
+    else if(d->esc.idx == 5 && d->esc_seq[2] == 0xff) {
+        set_color(d, d->esc_seq[0], d->esc_seq[1]);
+        set_color(d, d->esc_seq[3], d->esc_seq[4]);
+    }
+    else if(d->esc.idx == 1 && d->esc_seq[0] == 0) {
+        set_color(d, 3,7); // fg: white
+        set_color(d, 4,0); // bg: black
+    }
+
+        // reset colors
+    // else, the sequence is invalid
+
+    d->esc.seq = 0;
+    d->esc.idx = 0;
+}
 
 // emplace the char in the buffer, and maybe draw 
 static void emplace_char(driver_t* this, char c) {
     struct data* restrict d = this->data;
 
 
-    // color escape
-    if(d->esc.color) {
+    // escape sequence
+    if(d->esc.seq) {
         if(c <= '9' && c >= '0') {
             if(d->esc.idx > sizeof(d->esc_seq)) {
                 // invalid escape sequence
-                d->esc.color = 0;
+                d->esc.seq = 0;
                 return;
             }
                 
             d->esc_seq[d->esc.idx] = c - '0';
             d->esc.idx++;
         }
+        else if(c == ';') {
+            d->esc_seq[d->esc.idx] = -1;
+            d->esc.idx++;
+
+            if(d->esc.idx >= sizeof(d->esc_seq)) {
+                // invalid escape sequence
+                d->esc.seq = 0;
+                d->esc.idx = 0;
+            }
+        }
         else {
             switch(c) {
                 case 'm':
-                    if(d->esc.idx == 2) {
-                        // invalid escape sequence
-                        set_color(d, d->esc_seq[0], d->esc_seq[1]);
-                    }
-                    else if(d->esc.idx == 4) {
-                        set_color(d, d->esc_seq[0], d->esc_seq[1]);
-                        set_color(d, d->esc_seq[2], d->esc_seq[3]);
-                    }
-                    else if(d->esc.idx == 1 && d->esc_seq[0] == 0) {
-                        set_color(d, 3,7); // fg: white
-                        set_color(d, 4,0); // bg: black
-                    }
-
-                        // reset colors
-                    // else, the sequence is invalid
-
-                    d->esc.color = 0;
-                    d->esc.idx = 0;
+                    esc_sgr(d);
                     break;
-                case ';':
+                case 'H':
+                    esc_cup(d);
+                    break;
+                case 'K':
+                    esc_el(d);
                     break;
                 default:
                     // invalid escape sequence
-                    d->esc.color = 0;
                     break;
             }
+
+            d->esc.idx = 0;
+            d->esc.seq = 0;
         }
         return;
     }
 
 
-    if(d->esc.seq && c == '[') {
-        d->esc.color = 1;
-        d->esc.seq = 0;
+    if(d->esc.ESC && c == '[') {
+        d->esc.seq = 1;
+        d->esc.seq = 1;
+        d->esc.ESC = 0;
         return;
     }
 
-    d->esc.seq = 0;
+    d->esc.ESC = 0;
 
 
     switch(c) {
@@ -428,7 +524,7 @@ static void emplace_char(driver_t* this, char c) {
     // escape color
 
     case '\x1b':
-        d->esc.seq = 1;
+        d->esc.ESC = 1;
         break;
     case '\n':
         for(unsigned i=d->cur_col;i < d->ncols; i++) 
@@ -462,12 +558,23 @@ static void emplace_char(driver_t* this, char c) {
 }
 
 
+int error = 0;
 
 static void print_char(driver_t* this, 
                        const struct Char* restrict c, 
-                       int line, int col) {
+                       volatile int line, volatile int col) {
+
 
     struct data* restrict d = this->data;
+
+    if(line > d->term_nlines) {
+        for(;;)
+            error = 1;
+    }
+    if(col > d->ncols) {
+        for(;;)
+            error = 2;
+    }
 
     struct framebuffer_dev * dev = (struct framebuffer_dev *)this->device;
 
@@ -482,15 +589,28 @@ static void print_char(driver_t* this,
                 d->margin_top  + 2 * line * TERMINAL_LINE_HEIGHT);
     
 #else
+
+    int y = d->margin_top + line * TERMINAL_LINE_HEIGHT;
+    int x = d->margin_left + col * TERMINAL_FONTWIDTH;
+
+    if(y > dev->height) {
+        for(;;)
+            error = 3;
+    }
+
+    if(x > dev->width) {
+        for(;;)
+            error = 4;
+    }
+        
+
     blitchar(px, pitch, 
              &charmap, c->c, c->fg_color, c->bg_color,
-             d->margin_left + col  * TERMINAL_FONTWIDTH, 
-             d->margin_top  + line * TERMINAL_LINE_HEIGHT);
+             x, y);
              
     blitchar(px_buffer, pitch, 
              &charmap, c->c, c->fg_color, c->bg_color,
-             d->margin_left + col  * TERMINAL_FONTWIDTH, 
-             d->margin_top  + line * TERMINAL_LINE_HEIGHT);
+             x, y);
 #endif
 
 }
@@ -660,8 +780,6 @@ static int terminal_devfile_read(
         .cursor_y = d->cur_line,
         .first_line = d->first_line,
     };
-
-    log_info("terminfo rd %d", count);
 
     int rd = MIN(sizeof(terminfo_t), count);
 
