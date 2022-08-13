@@ -627,6 +627,21 @@ void remap_pages(void*    vaddr_ptr,
 
 
 
+// @todo do better
+// private to alloc_pages
+static uint64_t cpu_private_flags[64];
+
+
+void alloc_pages_callback(
+        uint64_t physical_address, 
+        uint64_t virtual_address,
+        size_t   c) {
+    internal_map_pages(physical_address,
+                virtual_address,
+                c,
+                cpu_private_flags[get_smp_count()]);
+};
+
 void alloc_pages(void*  virtual_addr_begin, 
                size_t   count,
                uint64_t flags) {
@@ -637,20 +652,9 @@ void alloc_pages(void*  virtual_addr_begin,
     // don't allow recusion
     alloc_page_table_realloc = 0;
 
-    // @todo do better
-    static uint64_t cpu_private_flags[64];
 
     cpu_private_flags[get_smp_count()] = flags;
 
-    void callback(
-            uint64_t physical_address, 
-            uint64_t virtual_address,
-            size_t   c) {
-        internal_map_pages(physical_address,
-                  virtual_address,
-                  c,
-                  cpu_private_flags[get_smp_count()]);
-    };
     while(count > 0) {
         unsigned size = count;
         if(size > MAX_ALLOC)
@@ -658,7 +662,7 @@ void alloc_pages(void*  virtual_addr_begin,
 
         fill_page_table_allocator_buffer(PTAAB_REFILL);
 
-        physalloc(size, virtual_addr_begin, callback);
+        physalloc(size, virtual_addr_begin, alloc_pages_callback);
 
         count -= size;
         virtual_addr_begin += size * 0x1000;

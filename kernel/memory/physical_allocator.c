@@ -557,24 +557,24 @@ void physalloc(size_t size, void* virtual_addr, PHYSALLOC_CALLBACK callback) {
 }
 
 
+// @todo this doesn't work in an smp system
+static uint64_t physalloc_single_paddr;
+
+void physalloc_single_callback(
+    uint64_t physical_address, 
+    uint64_t virtual_address, 
+    size_t size
+) {
+    (void)(virtual_address + size);
+
+    physalloc_single_paddr = physical_address;
+}
+
 uint64_t physalloc_single(void) {
-    
-    // @todo this doesn't work in an smp system
-    static uint64_t paddr;
-
-    void callback(
-        uint64_t physical_address, 
-        uint64_t virtual_address, 
-        size_t size
-    ) {
-        (void)(virtual_address + size);
-
-        paddr = physical_address;
-    }
 
     _cli();
-    physalloc(1, NULL, callback);
-    volatile uint64_t paddr_copy = paddr;
+    physalloc(1, NULL, physalloc_single_callback);
+    volatile uint64_t paddr_copy = physalloc_single_paddr;
     _sti();
 
 
