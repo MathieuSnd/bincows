@@ -1,11 +1,10 @@
 #include <terminfo.h>
 #include <stdio.h>
+#include <unistd.h>
 
 int terminfo_read(terminfo_t* info) {
 
-    int rd = fread(info, sizeof(terminfo_t), 1, stdout);
+    int rd = read(1, info, sizeof(terminfo_t));
 
-    printf("rd = %d", rd);
-
-    return (rd == 1) ? 0 : -1;
+    return (rd == sizeof(terminfo_t)) ? 0 : -1;
 }

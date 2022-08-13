@@ -2,6 +2,7 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 
 struct FILE {
     int    fd;
@@ -34,7 +35,7 @@ void __stdio_init(void) {
 
     *stdin = (FILE){
         .fd = STDIN_FILENO,
-        .flags = 0,
+        .flags = O_RDONLY,
         .mode = _IONBF,
         .ungetc = -1,
         .error = 0,
@@ -49,7 +50,7 @@ void __stdio_init(void) {
 
     *stdout = (FILE){
         .fd = STDOUT_FILENO,
-        .flags = 0,
+        .flags = O_WRONLY,
         .mode = _IONBF,
         .ungetc = -1,
         .error = 0,
@@ -64,7 +65,7 @@ void __stdio_init(void) {
 
     *stderr = (FILE){
         .fd = STDERR_FILENO,
-        .flags = 0,
+        .flags = O_WRONLY,
         .mode = _IONBF,
         .ungetc = -1,
         .error = 0,
@@ -184,14 +185,19 @@ int fclose (FILE* stream) {
 
 
 int fgetc(FILE* stream) {
-    if(stream->flags & O_WRONLY) {
+    if((stream->flags & O_RDONLY) == 0) {
+        printf("fgetc on write only\n");
         return EOF;
     }
 
+    //printf("fgetc fd %u\n", stream->fd);
+
     switch(stream->mode) {
         case _IOFBF: 
+        printf("fgetc on _IOFBF\n");
             return EOF;
         case _IOLBF:
+        printf("fgetc on _IOLBF\n");
             return EOF;
         case _IONBF: {
             int c;
@@ -200,6 +206,7 @@ int fgetc(FILE* stream) {
             if(n == 1) {
                 return c;
             }
+        printf("fgetc on n = %u\n", n);
             return EOF;
         }
         default:
@@ -235,7 +242,8 @@ int puts (const char *s) {
 size_t fread (void *restrict ptr, size_t size,
 		     size_t n, FILE *restrict stream
 ) {
-    if(stream->flags & O_WRONLY) {
+    if((stream->flags & O_RDONLY) == 0) {
+        printf("ERROR: FREAD ON WRITE ONLY\n");
         return 0;
     }
 
@@ -267,7 +275,7 @@ size_t fread (void *restrict ptr, size_t size,
 size_t fwrite (const void *restrict ptr, size_t size,
               size_t _n, FILE *restrict stream
 ) {
-    if(stream->flags & O_RDONLY) {
+    if((stream->flags & O_WRONLY) == 0) {
         return 0;
     }
 
@@ -319,15 +327,18 @@ int feof (FILE *stream) {
 
 
 int fputs(const char* restrict s, FILE* restrict stream) {
-    if(stream->flags & O_RDONLY) {
+    if((stream->flags & O_WRONLY) == 0) {
+        printf("ERROR: FPUTS ON READ ONLY\n");
         return EOF;
     }
 
     switch(stream->mode) {
         case _IOFBF: {
+            printf("ERROR: FPUTS ON _IOFBF\n");
             return EOF;
         }
         case _IOLBF: {
+            printf("ERROR: FPUTS ON _IOFBF\n");
             return EOF;
         }
         case _IONBF: {
@@ -343,8 +354,53 @@ int fputs(const char* restrict s, FILE* restrict stream) {
     }
 }
 
+// impl of getline using fgetc
+ssize_t getline(char **restrict lineptr, size_t *restrict n,
+                       FILE *restrict stream
+) {
+
+    if((stream->flags & O_RDONLY) == 0) {
+        return -1;
+    }
+
+    char* buf = malloc(BUFSIZ);
+    if(!buf) {
+        return -1;
+    }
+
+    char* p = buf;
+    size_t size = BUFSIZ;
+    size_t len = 0;
+    int c = 0;
+    while((c = fgetc(stream)) != EOF) {
+        if(len == size) {
+            size *= 2;
+            char* new_buf = realloc(buf, size);
+            if(!new_buf) {
+                free(buf);
+                return -1;
+            }
+            buf = new_buf;
+            p = buf + len;
+        }
+        *p++ = c;
+        len++;
+        if(c == '\n') {
+            break;
+        }
+    }
+    if(c == EOF && len == 0) {
+        free(buf);
+        return -1;
+    }
+    *p = '\0';
+    *lineptr = buf;
+    *n = len;
+    return len;
+}
+
 char* fgets(char* restrict s, int n, FILE* restrict stream) {
-    if(stream->flags & O_WRONLY) {
+    if((stream->flags & O_RDONLY) == 0) {
         return NULL;
     }
 
@@ -433,3 +489,9 @@ int printf(const char* restrict format, ...) {
     return n;
 }
 
+void perror (const char* s) {
+    write(2, s, strlen(s));
+    write(2, ": ", 2);
+    write(2, strerror(errno), strlen(strerror(errno)));
+    write(2, "\n", 1);
+}

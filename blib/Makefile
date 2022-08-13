@@ -12,7 +12,7 @@ ASM:=nasm
 
 
 CFLAGS := -O3 -mgeneral-regs-only -Wall -Wextra \
-		  -ffreestanding -Iinclude/ -fno-pie -fno-stack-protector -fno-pic
+		  -ffreestanding -Iinclude/ -fno-pie -fno-stack-protector -fno-pic -g
 
 LDFLAGS := -shared -fno-pie -fno-pic
 

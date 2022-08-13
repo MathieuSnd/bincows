@@ -3,6 +3,7 @@
 #include <bc_extsc.h>
 #include <string.h>
 #include <stdlib.h>
+#include <sprintf.h>
 
 
 #include "../../kernel/int/syscall_interface.h"

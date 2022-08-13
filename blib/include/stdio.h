@@ -26,6 +26,8 @@
 #include <stddef.h>
 #include <stdarg.h>
 #include <stdint.h>
+#include <ssize_t.h>
+
 
 typedef struct FILE FILE;
 typedef unsigned long long fpos_t;
@@ -260,6 +262,11 @@ extern void setlinebuf (FILE *__stream);
    marked with __THROW.  */
 extern int fgetc (FILE *__stream);
 
+
+ssize_t getline(char **restrict lineptr, size_t *restrict n,
+                       FILE *restrict stream);
+
+
 #define getc fgetc
 
 
@@ -373,7 +380,7 @@ extern int ferror (FILE *__stream);
 
    This function is a possible cancellation point and therefore not
    marked with __THROW.  */
-extern void perror (const char *__s);
+extern void perror (const char* s);
 
 
 /* Return the system file descriptor for STREAM.  */

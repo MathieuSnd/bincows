@@ -16,6 +16,8 @@
 
 typedef int pid_t;
 
+#include <ssize_t.h>
+
 
 
 // not implemented yet.....

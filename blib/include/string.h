@@ -28,9 +28,9 @@ size_t strlen (const char* str)  __ATTR_PURE__;
 size_t strnlen(const char* str, size_t n)  __ATTR_PURE__;
 int    strcmp (const char* str1, const char* str2)  __ATTR_PURE__;
 int    strncmp(const char* str1, const char* str2, size_t n) __ATTR_PURE__; 
-const char*  strchr (const char *s, int c)  __ATTR_PURE__;
-const char*  strrchr(const char *s, int c)  __ATTR_PURE__;
-const char*  strstr(const char *haystack, const char *needle)  __ATTR_PURE__;
+char*  strchr (const char *s, int c)  __ATTR_PURE__;
+char*  strrchr(const char *s, int c)  __ATTR_PURE__;
+char*  strstr(const char *haystack, const char *needle)  __ATTR_PURE__;
 
 
 char*  strcpy (char* __restrict__ dst, const char* __restrict__ src);
@@ -41,6 +41,9 @@ char*  strncat(char * __restrict__ dest, const char * __restrict__ src, size_t n
 char* strtok(char* __restrict__ str, const char* __restrict__ delim);
 
 char* strtok_r(char* __restrict__ str, const char* __restrict__ delim, char** __restrict__ saveptr);
+
+
+char *strerror(int errnum);
 
 
 #endif//KSTRING_H

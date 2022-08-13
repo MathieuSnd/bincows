@@ -1,4 +1,5 @@
 #include <signal.h>
+#include <string.h>
 
 
 
@@ -31,6 +32,8 @@ sig_ignore,    sig_ignore,    sig_terminate, sig_terminate,
 sighandler_t signal(int sig, sighandler_t handler) {
     if(sig < 0 || sig >= MAX_SIGNALS)
         return SIG_ERR;
+
+    printf("signal %d, %lx\n", sig, handler);
     
     sighandler_t old = sig_handler_table[sig];
 

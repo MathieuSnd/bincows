@@ -92,7 +92,7 @@ int   strncmp(const char* str1, const char* str2, size_t n) {
 }
 
 
-const char* strchr (const char *_s, int c) {
+char* strchr (const char *_s, int c) {
     const char* s=_s;
     char curr;
 
@@ -111,7 +111,7 @@ const char* strchr (const char *_s, int c) {
 }
 
 
-const char* strrchr(const char *s, int c) {
+char* strrchr(const char *s, int c) {
     char curr;
 
     const char* found = NULL;
@@ -131,7 +131,7 @@ const char* strrchr(const char *s, int c) {
 }
 
 
-const char *strstr(const char *haystack, const char *needle) {
+char *strstr(const char *haystack, const char *needle) {
 
     int i = 0;
     char c, ci;
@@ -357,4 +357,11 @@ char *strndup(const char *s, size_t n) {
     memcpy(ret, s, len+1);
     return ret;
 }
+
+
+
+char *strerror(int errnum) {
+    return "error";
+}
+
 
