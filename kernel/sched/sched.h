@@ -158,6 +158,18 @@ void sched_yield(void);
 void* sched_task_kernel_stack(void);
 
 
+/**
+ * This function should only be called in 
+ * interrupt handlers (exception or irq). 
+ * 
+ * It returns the context of the interrupted thread.
+ * The interrupted thread can be either kernel or user.
+ * 
+ * The lifetime of the returned context is the interrupt
+ * scope.
+ * 
+ */
+gp_regs_t* sched_saved_context(void);
 
 /**
  * the process lock should be taken before 

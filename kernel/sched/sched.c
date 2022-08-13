@@ -56,9 +56,9 @@
 static pid_t current_pid = KERNEL_PID;
 static tid_t current_tid = 0;
 
-// 1 iif currenly in irq
-static int currenly_in_irq = 0;
-static int currenly_in_nested_irq = 0;
+// 1 iif currently in irq
+static int currently_in_irq = 0;
+static int currently_in_nested_irq = 0;
 
 static int sched_running = 0;
 
@@ -483,10 +483,10 @@ int sched_kill_process(pid_t pid, int status) {
 
 
 void  sched_save(gp_regs_t* rsp) {
-    currenly_in_nested_irq += currenly_in_irq;
-    currenly_in_irq = 1;
+    currently_in_nested_irq += currently_in_irq;
+    currently_in_irq = 1;
 
-    assert(!currenly_in_nested_irq);
+    //assert(!currently_in_nested_irq);
 
     //log_info("sched_save rsp = %lx", rsp);
 
@@ -518,8 +518,34 @@ void  sched_save(gp_regs_t* rsp) {
 
 
 
+gp_regs_t* sched_saved_context(void) {
+    assert(currently_in_irq);
+    assert(!interrupt_enable());
+
+    if(!sched_running) {
+        return kernel_saved_rsp;
+    }
+
+    process_t* p = sched_get_process(current_pid);
+    assert(p);
+    thread_t* t = sched_get_thread_by_tid(p, current_tid);
+    assert(t);
+    gp_regs_t* context = t->rsp;
+
+    // release process lock
+    spinlock_release(&p->lock);
+
+    // here, context is assured to be valid
+    // until the end of the interrupt handler
+
+
+    return context;
+}
+
+
+
 void sched_free_killed_processes(void) {
-    assert(!currenly_in_nested_irq);
+    assert(!currently_in_nested_irq);
     
     if(n_killed_processes == 0)
         return;
@@ -703,10 +729,10 @@ int timer_irq_should_schedule(void) {
     // round robin
     static uint64_t c = 0;
 
-    assert(!currenly_in_nested_irq);
+    assert(!currently_in_nested_irq);
 
     // don't schedule if we are in an irq
-    if(currenly_in_nested_irq || !sched_running)
+    if(currently_in_nested_irq || !sched_running)
         return 0;
 
     // don't schedule if the kernel process
@@ -728,23 +754,23 @@ int timer_irq_should_schedule(void) {
 static void irq_end(void) {
 
     assert(!interrupt_enable());
-    assert(currenly_in_irq);
+    assert(currently_in_irq);
 
-    if(currenly_in_nested_irq)
-        currenly_in_nested_irq--;
+    if(currently_in_nested_irq)
+        currently_in_nested_irq--;
     else {
-        currenly_in_irq = 0;
+        currently_in_irq = 0;
     }
 }
 
 
 
 void sched_irq_ack(void) {
-    assert(currenly_in_irq);
-    assert(!currenly_in_nested_irq);
+    assert(currently_in_irq);
+    assert(!currently_in_nested_irq);
     _cli();
 
-    if(!currenly_in_nested_irq && sched_running) {
+    if(!currently_in_nested_irq && sched_running) {
         process_t* p = sched_current_process();
         thread_t* t = sched_get_thread_by_tid(p, current_tid);
 
@@ -767,7 +793,7 @@ void sched_irq_ack(void) {
 
 void sched_block(void) {
 
-    assert(!currenly_in_irq);
+    assert(!currently_in_irq);
 
     if(!sched_running) {
         asm volatile("hlt");
@@ -864,7 +890,7 @@ void schedule(void) {
 
 
 /*
-    if(currenly_in_irq && current_pid == KERNEL_PID) {
+    if(currently_in_irq && current_pid == KERNEL_PID) {
         // do not schedule if the interrupted task
         // was the kernel
         assert(kernel_saved_rsp);
@@ -875,7 +901,7 @@ void schedule(void) {
 */
     //log_info("schedule");
 
-    assert(!currenly_in_nested_irq);
+    assert(!currently_in_nested_irq);
 
     // next process
     process_t* p;
@@ -1005,7 +1031,7 @@ void schedule(void) {
         panic("wrong ss");
     }
 
-    if(currenly_in_irq)
+    if(currently_in_irq)
         irq_end();
 
 
@@ -1112,7 +1138,7 @@ void memory_check(void) {
 void kernel_process_entry(void) {
 
     assert(current_pid == KERNEL_PID);
-    assert(!currenly_in_irq);
+    assert(!currently_in_irq);
     assert(interrupt_enable());
 
     kernel_process_running = 0;
