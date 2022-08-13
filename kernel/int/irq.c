@@ -10,11 +10,13 @@
 
 typedef struct {
     struct driver* driver;
-    irq_handler_t handler;
+    void* handler;
 } irq_data_t;
 
 // handler == NULL:     no irq is mapped
-static irq_data_t irqs[IRQ_END - IRQ_BEGIN + 1] = {0};
+// ints[0] = int handler for irq 0
+// int[IRQ_BEGIN] = int handler for first irq
+static irq_data_t ints[IRQ_END + 1] = {0};
 
 
 extern __attribute__((interrupt)) 
@@ -30,24 +32,41 @@ void register_irq(
     assert(irq_number <= IRQ_END);
     assert(irq_number >= IRQ_BEGIN);
 
-    irq_number -= IRQ_BEGIN;
     // assert that no handler is already 
     // installed
-    assert(!irqs[irq_number].handler);
+    assert(!ints[irq_number].handler);
 
-    irqs[irq_number].handler = handler;
-    irqs[irq_number].driver  = driver;
+    ints[irq_number].handler = handler;
+    ints[irq_number].driver  = driver;
 
+}
+
+unsigned register_exception_handler(
+    unsigned exception_number,
+    exc_handler_t handler
+) {
+    // exceptions are 0 -> 31,
+    // IRQs come right after
+    assert(exception_number < IRQ_BEGIN);
+    assert(handler);
+    // there can only be one exception handler.
+    // if there is already one, it is probably 
+    // an error.
+    assert(!ints[exception_number].handler);
+
+
+    ints[exception_number].handler = handler;
+    return exception_number;
 }
 
 unsigned install_irq(irq_handler_t  handler,
                      struct driver* driver) {
-    for(int i = 0; i < IRQ_END - IRQ_BEGIN + 1; i++) {
-        if(!irqs[i].handler) {
-            irqs[i].handler = handler;
-            irqs[i].driver  = driver;
+    for(int i = IRQ_BEGIN; i < IRQ_END + 1; i++) {
+        if(!ints[i].handler) {
+            ints[i].handler = handler;
+            ints[i].driver  = driver;
             // the i-th idt entry isn't used
-            return i+IRQ_BEGIN;
+            return i;
         }
     }
     panic("install_irq: no available IRQ");
@@ -57,21 +76,26 @@ unsigned install_irq(irq_handler_t  handler,
 void release_irq(unsigned n) {
     assert(n <= IRQ_END);
     assert(n >= IRQ_BEGIN);
-    
-    // replace the handler by the dummy one
 
+    // assert that a handler is installed
+    assert(ints[n].handler);
+    
     // mark it as free
-    irqs[n - IRQ_BEGIN].handler = NULL;
+    ints[n].handler = NULL;
 }
 
 
 // called from irq.s
-void irq_common_handler(uint8_t irq_n, gp_regs_t* context) {
+// if the handler is called from an exception with error code,
+// the error code is passed as the third argument.
+// Otherwise the error_code field is reserved.
+void int_common_handler(uint8_t irq_n, gp_regs_t* context, uint32_t error_code) {
     assert(irq_n <= IRQ_END);
-    assert(irq_n >= IRQ_BEGIN);
+
+    
     // the irq_n th irq just fired
-    void*         driver  = irqs[irq_n - IRQ_BEGIN].driver;
-    irq_handler_t handler = irqs[irq_n - IRQ_BEGIN].handler;
+    void*         driver  = ints[irq_n].driver;
+    irq_handler_t handler = ints[irq_n].handler;
 
     if(!handler) {
         char buff[64];
@@ -97,8 +121,16 @@ void irq_common_handler(uint8_t irq_n, gp_regs_t* context) {
         spinlock_release(&p->lock);
     }
 
-    handler(driver);
+    if(irq_n < IRQ_BEGIN) {
 
-    sched_irq_ack();
+        log_warn("EXCEPTION %u fired", irq_n);
+        // exception
+        ((exc_handler_t)handler)(error_code);
+    } else {
+        // irq
+        ((irq_handler_t)handler)(driver);
+        sched_irq_ack();
+    }
+
 }
 
