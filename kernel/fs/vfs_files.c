@@ -750,6 +750,9 @@ size_t vfs_read_file(void *ptr, size_t size,
     fs_t *fs = stream->fs;
 
 
+//    if(fs->type == FS_TYPE_FAT && sched_current_pid() == 2)
+//        log_warn("read %u from file", size);
+//        stacktrace_print();
 
 
 
