@@ -919,8 +919,9 @@ size_t vfs_read_file(void *ptr, size_t size,
 
     release_file_access(stream->vfile_id);
     
+    assert(bsize <= file_size);
     
-    return size;
+    return bsize;
 }
 
 
