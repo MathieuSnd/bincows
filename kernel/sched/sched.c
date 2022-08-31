@@ -724,8 +724,6 @@ static process_t* choose_next(void) {
 
 int timer_irq_should_schedule(void) {
 
-    return 0;
-
     // round robin
     static uint64_t c = 0;
 
