@@ -398,13 +398,20 @@ static void esc_cup(struct data* restrict d) {
             vals[j] = vals[j] * 10 + n;
     }
 
-    d->cur_col = (vals[0] - 1) < 0 ? 0 : (vals[0] - 1);
-    d->cur_line = (vals[1] - 1) < 0 ? 0 : (vals[1] - 1)  + d->first_line;
+
+
+    d->cur_col  = (vals[0] - 1) < 0 ? 0 : (vals[0] - 1);
+    d->cur_line = (vals[1] - 1) < 0 ? 0 : (vals[1] - 1);
+
+    d->cur_line += d->first_line;
 
     if(d->cur_col >= d->ncols)
         d->cur_col = d->ncols - 1;
     if(d->cur_line >= d->nlines)
         d->cur_line = d->nlines - 1 + d->first_line;
+
+    assert(d->cur_line >= d->first_line);
+
 }
 
 // Erase in Line
