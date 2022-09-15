@@ -92,7 +92,7 @@ void release_irq(unsigned n) {
 void int_common_handler(uint8_t irq_n, gp_regs_t* context, uint32_t error_code) {
     assert(irq_n <= IRQ_END);
 
-    
+
     // the irq_n th irq just fired
     void*         driver  = ints[irq_n].driver;
     irq_handler_t handler = ints[irq_n].handler;
@@ -112,11 +112,13 @@ void int_common_handler(uint8_t irq_n, gp_regs_t* context, uint32_t error_code) 
         process_t* p = sched_current_process();
 
         assert(p->pid == sched_current_pid());
+
+
         
         // single thread
-        assert(p->threads[0].tid == sched_current_tid());
-        assert(p->threads[0].pid == sched_current_pid());
-        assert(p->threads[0].state == READY);
+        //assert(p->threads[0].tid == sched_current_tid());
+        //assert(p->threads[0].pid == sched_current_pid());
+        //assert(p->threads[0].state == READY);
 
         spinlock_release(&p->lock);
     }

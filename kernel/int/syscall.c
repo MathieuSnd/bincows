@@ -54,10 +54,12 @@ static int check_args_in_program(
         const struct elf_segment* seg = &proc->program->segs[i];
 
         if(arg_begin >= (uint64_t)seg->base 
-        && arg_end   <  (uint64_t)seg->base + seg->length)
+        && arg_end   <  (uint64_t)seg->base + seg->length) {
             // found
             return 0;
+        }
     }
+
     return 1;
 }
 
@@ -89,7 +91,6 @@ static int check_args(const process_t* proc, const void* args, size_t args_sz) {
         return 0;
         // found
 
-
     // in the program
     return check_args_in_program(proc, args, args_sz);
 }
@@ -118,6 +119,9 @@ static char* get_absolute_path(const char* cwd, const char* path) {
 
 static uint64_t sc_unimplemented(process_t* proc, void* args, size_t args_sz) {
     (void) proc;
+
+    // @todo remove panic
+    panic("sc_unimplemented");
     sc_warn("unimplemented syscall", args, args_sz);
     return -1;
 }
@@ -186,9 +190,12 @@ static uint64_t sc_sbrk(process_t* proc, void* args, size_t args_sz) {
         );
     }
     else {
+        // free pages
+
         unmap_pages(
             (uint64_t)new_brk,
-            -needed_pages
+            -needed_pages,
+            1 // actually free the memory
         );
     }
 
@@ -244,6 +251,41 @@ char* parse_cmdline(const char* cmdline, size_t cmdline_sz) {
     return cmdline_copy;
 }
 */
+
+
+// close_fd() is not thread safe.
+static int atomic_close_fd(process_t* proc, int i) {
+    assert(i > 0);
+    assert(i < MAX_FDS);
+
+    assert(interrupt_enable());
+    
+    _cli();
+    spinlock_acquire(&proc->lock);
+
+    file_descriptor_t fd = proc->fds[i];
+
+    proc->fds[i].type = FD_NONE;
+
+    spinlock_release(&proc->lock);
+    _sti();
+
+    if(fd.type == -1)
+        return -1;
+
+    switch(fd.type) {
+        case FD_FILE:
+            vfs_close_file(fd.file);
+            break;
+        case FD_DIR:
+            vfs_closedir(fd.dir);
+            break;
+        default:
+            assert(0);
+    }
+
+    return 0;
+}
 
 static uint64_t sc_exec(process_t* proc, void* args, size_t args_sz) {
     if(args_sz != sizeof(struct sc_exec_args)) {
@@ -372,6 +414,7 @@ static uint64_t sc_exec(process_t* proc, void* args, size_t args_sz) {
             mask >>= 1;
 
             if(masked && proc->fds[i].type != FD_NONE) {
+                // @toodo atomic_close_fd?
                 close_fd(&proc->fds[i]);
             }
         }
@@ -491,8 +534,10 @@ static uint64_t sc_open(process_t* proc, void* args, size_t args_sz) {
 
     struct sc_open_args* a = args;
 
-    check_args(proc, a->path, a->path_len);
-
+    if(check_args(proc, a->path, a->path_len)) {
+        sc_warn("bad arg", args, args_sz);
+        return -1;
+    }
 
     char* path = get_absolute_path(proc->cwd, a->path);
 
@@ -638,13 +683,7 @@ static uint64_t sc_close(process_t* proc, void* args, size_t args_sz) {
         return -1;
     }
 
-    if(proc->fds[fd].file == NULL) {
-        sc_warn("bad fd", args, args_sz);
-        return -1;
-    }
-
-
-    return close_fd(&proc->fds[fd]);
+    return atomic_close_fd(proc, fd);
 }
 
 
@@ -714,8 +753,10 @@ static uint64_t sc_access(process_t* proc, void* args, size_t args_sz) {
 
     struct sc_access_args* a = args;
 
-    check_args(proc, a->path, a->path_len);
-
+    if(check_args(proc, a->path, a->path_len)) {
+        sc_warn("bad arg", args, args_sz);
+        return -1;
+    }
     char* path = get_absolute_path(proc->cwd, a->path);
 
     if(strlen(path) > MAX_PATH) {
@@ -793,13 +834,15 @@ static uint64_t sc_read(process_t* proc, void* args, size_t args_sz) {
     }
 
     // check that the buffer is mapped
-    check_args(proc, a->buf, a->count);
+    if(check_args(proc, a->buf, a->count)) {
+        sc_warn("bad arg", args, args_sz);
+        return -1;
+    }
 
     switch(proc->fds[a->fd].type) {
         case FD_FILE:
         {
             size_t rd = vfs_read_file(a->buf, a->count, proc->fds[a->fd].file);
-
             return rd;
         }
             break;
@@ -833,7 +876,10 @@ static uint64_t sc_write(process_t* proc, void* args, size_t args_sz) {
 
 
     // check that the buffer is mapped
-    check_args(proc, a->buf, a->count);
+    if(check_args(proc, a->buf, a->count)) {
+        sc_warn("bad arg", args, args_sz);
+        return -1;
+    }
 
 
     switch(proc->fds[a->fd].type) {
@@ -858,8 +904,10 @@ static uint64_t sc_chdir(process_t* proc, void* args, size_t args_sz) {
 
     struct sc_chdir_args* a = args;
 
-    check_args(proc, a->path, a->path_len);
-
+    if(check_args(proc, a->path, a->path_len)) {
+        sc_warn("bad arg", args, args_sz);
+        return -1;
+    }
 
     if(a->path[a->path_len-1] != 0) {
         sc_warn("invalid path", args, args_sz);
@@ -918,8 +966,10 @@ static uint64_t sc_getcwd(process_t* proc, void* args, size_t args_sz) {
     if(a->buf_sz == 0 && a->buf == NULL)
         return strlen(proc->cwd) + 1;
 
-    check_args(proc, a->buf, a->buf_sz);
-
+    if(check_args(proc, a->buf, a->buf_sz)) {
+        sc_warn("bad arg", args, args_sz);
+        return -1;
+    }
     if(a->buf_sz < strlen(proc->cwd) + 1) {
         sc_warn("path buf too short", args, args_sz);
 
@@ -958,6 +1008,8 @@ static uint64_t sc_dup(process_t* proc, void* args, size_t args_sz) {
         sc_warn("bad args_sz", args, args_sz);
         return -1;
     }
+
+    // @todo make this atomic for SMP
 
     struct sc_dup_args* a = args;
 
@@ -1074,8 +1126,12 @@ uint64_t sc_sigsetup(process_t* proc, void* args, size_t args_sz) {
     struct sc_sigsetup_args* a = args;
 
     // check that handler_table is mapped
-    check_args(proc, args, args_sz);
-    check_args_in_program(proc, a->handler_table, sizeof(void*) * MAX_SIGNALS);
+    if(check_args(proc, args, args_sz) 
+    || check_args_in_program(proc, a->handler_table, sizeof(void*) * MAX_SIGNALS)
+    ) {
+        sc_warn("bad arg", args, args_sz);
+        return -1;
+    }    
     
     uint64_t res;
 
@@ -1161,6 +1217,20 @@ uint64_t sc_pause(process_t* proc, void* args, size_t args_sz) {
     return 0;
 }
 
+uint64_t sc_thread_create(process_t* proc, void* args, size_t args_sz) {
+    if(args_sz != sizeof(struct sc_thread_create_args)) {
+        sc_warn("bad args_sz", args, args_sz);
+        return -1;
+    }
+    struct sc_thread_create_args* a = args;
+
+    void* entry    = a->entry;
+    void* argument = a->argument;
+
+    uint64_t res;
+    return sched_create_thread(proc->pid, entry, argument);
+}
+
 
 
 
@@ -1176,20 +1246,22 @@ void syscall_init(void) {
         sc_funcs[i] = sc_unimplemented;
 
     sc_funcs[SC_SLEEP]     = sc_sleep;
-    sc_funcs[SC_SBRK]      = sc_sbrk;
+    sc_funcs[SC_CLOCK]     = sc_clock;
     sc_funcs[SC_EXIT]      = sc_exit;
     sc_funcs[SC_OPEN]      = sc_open;
     sc_funcs[SC_CLOSE]     = sc_close;
-    sc_funcs[SC_SEEK]      = sc_seek;
-    sc_funcs[SC_ACCESS]    = sc_access;
     sc_funcs[SC_READ]      = sc_read;
     sc_funcs[SC_WRITE]     = sc_write;
+    sc_funcs[SC_TRUNCATE]  = sc_truncate;
+    sc_funcs[SC_SEEK]      = sc_seek;
+    sc_funcs[SC_ACCESS]    = sc_access;
+    sc_funcs[SC_DUP]       = sc_dup;
+    sc_funcs[SC_PIPE]      = sc_pipe;
+    sc_funcs[SC_THREAD_CREATE] = sc_thread_create;
+    sc_funcs[SC_SBRK]      = sc_sbrk;
     sc_funcs[SC_EXEC]      = sc_exec;
     sc_funcs[SC_CHDIR]     = sc_chdir;
     sc_funcs[SC_GETCWD]    = sc_getcwd;
-    sc_funcs[SC_CLOCK]     = sc_clock;
-    sc_funcs[SC_DUP]       = sc_dup;
-    sc_funcs[SC_PIPE]      = sc_pipe;
     sc_funcs[SC_GETPID]    = sc_getpid;
     sc_funcs[SC_GETPPID]   = sc_getppid;
     sc_funcs[SC_SIGSETUP]  = sc_sigsetup;
@@ -1245,7 +1317,7 @@ char* scname[] = {
     "SEEK", 
     "ACCESS",
     "DUP", 
-    "CREATE_THREAD", 
+    "THREAD_CREATE", 
     "JOIN_THREAD", 
     "EXIT_THREAD", 
     "SBRK", 
@@ -1299,8 +1371,12 @@ uint64_t syscall_main(uint8_t scid, void* args, size_t args_sz, uint64_t* user_s
             asm ("hlt");
     }
     else {
-        // log_debug("%u.%u: %s", sched_current_pid(), sched_current_tid(), scname[scid]);
-        uint64_t res = sc_funcs[scid](process, args, args_sz);
+        //log_debug("%u.%u: %s", sched_current_pid(), sched_current_tid(), scname[scid]);
+
+        sc_fun_t fun = sc_funcs[scid];
+
+        assert(fun);
+        uint64_t res = fun(process, args, args_sz);
 
 
         // disable interrupts again

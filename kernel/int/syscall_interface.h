@@ -22,9 +22,9 @@ typedef unsigned fd_t;
 #define SC_ACCESS        10
 #define SC_DUP           11
 #define SC_PIPE          12
-#define SC_CREATE_THREAD 13
-#define SC_JOIN_THREAD   14
-#define SC_EXIT_THREAD   15
+#define SC_THREAD_CREATE 13
+#define SC_THREAD_JOIN   14
+#define SC_THREAD_EXIT   15
 #define SC_SBRK          16
 #define SC_FORK          17
 #define SC_EXEC          18
@@ -156,5 +156,12 @@ struct sc_sigsetup_args {
 struct sc_sigkill_args {
     int pid;
     int signal;
+};
+
+
+
+struct sc_thread_create_args {
+    void* entry;
+    void* argument;
 };
 
