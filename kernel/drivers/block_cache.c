@@ -34,7 +34,7 @@
  * NVMe IO submission queue size
  * should be enough for all the requests
  */
-#define MAX_PAGE_FETCHES 128
+#define MAX_PAGE_FETCHES (128 * 2)
 
 
 typedef struct page_fetch {
@@ -72,6 +72,11 @@ typedef struct block_page_cache {
         uint8_t padding[128 - sizeof(pid_t)];
     } __attribute__((packed)) __attribute__((aligned(128)));
 } block_page_cache_t;
+
+
+static void target_sync(block_page_cache_t* restrict cache);
+
+
 
 
 static size_t n_block_caches = 0;
@@ -323,12 +328,13 @@ void fetch_page(block_page_cache_t* restrict cache,
         // we are already fetching this page
         return;
     }
-    
 
     while(cache->n_page_fetches >= MAX_PAGE_FETCHES) {
-        log_warn("block cache: too many page fetches");
+        // the fetch buffer is full.
+        // I/O wait for the completion of all
+        // read requests
         unlock_cache(cache);
-        sched_yield();
+        target_sync(cache);
         lock_cache(cache);
     }
 
@@ -356,7 +362,7 @@ static void target_sync(block_page_cache_t* restrict cache) {
         unlock_cache(cache);        
         
         // unlock the cache while synchronizing:
-        // we don'map_pages want to block the cache while synchronizing
+        // we don't want to block the cache while synchronizing
 
         cache->target_interface->sync(cache->driver);
 
@@ -399,7 +405,7 @@ static void target_sync(block_page_cache_t* restrict cache) {
                     cache->page_fetches + i, 
                     (cache->n_page_fetches - i) * sizeof(struct page_fetch)
                 );
-                
+
                 cache->n_page_fetches = cache->n_page_fetches - i;
             }
 
