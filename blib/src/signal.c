@@ -33,8 +33,6 @@ sighandler_t signal(int sig, sighandler_t handler) {
     if(sig < 0 || sig >= MAX_SIGNALS)
         return SIG_ERR;
 
-    printf("signal %d, %lx\n", sig, handler);
-    
     sighandler_t old = sig_handler_table[sig];
 
     if(old == sig_dfl_table[sig])

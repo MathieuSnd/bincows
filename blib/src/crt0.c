@@ -66,6 +66,7 @@ _start(int argc, char* args, int envrionc, char* input_environ) {
 
     __stdio_init();
 
+    //printf("main(%u, %lx)", argc, argv);
 
     int ret = main(argc, argv);
 

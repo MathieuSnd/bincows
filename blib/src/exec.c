@@ -39,10 +39,12 @@ static char* create_string_list(char const* const* arr, size_t* size) {
 
     *size = bufsize;
 
+
     // allocate the buffer
     char* list = malloc(bufsize);
 
-    
+    if(!list)
+        return NULL;
 
     // fill the buffer
     char* p = list;
@@ -50,6 +52,8 @@ static char* create_string_list(char const* const* arr, size_t* size) {
         int slen = strlen(arr[i]);
         memcpy(p, arr[i], slen);
         p += slen;
+        if(p >= list + bufsize)
+            for(;;);
         *p++ = '\0';
     }
 
@@ -68,20 +72,42 @@ int exec(const char* file,
     // replace argv[0] by file
     int size = 0;
     
-    for(unsigned i = 0; argv[i]; i++)
+    for(unsigned i = 0; argv[i] != NULL; i++)
         size ++;
     
 
     const char** _argv = malloc(sizeof(char*) * (size + 1));
 
-    memcpy(_argv + 1, argv + 1, sizeof(char*) * size);
+    if(!_argv) {
+        return -1;
+    }
 
     _argv[0] = file;
+    for(int i = 1; i < size; i++)
+        _argv[i] = argv[i];
+    _argv[size] = 0;
+
+    
+/*
+    for(int i = 1; i < size; i++) {
+        if(strcmp(_argv[i], argv[i])) {
+            for(;;);
+        }
+        if(!strlen(argv[i])) {
+            for(;;);
+        }
+    }
+    */
 
     size_t args_sz = 0, env_sz = 0;
 
     char* args = create_string_list(_argv, &args_sz);
     char* env  = create_string_list(envp, &env_sz);
+
+    if(!args || !env) {
+        free(_argv);
+        return -1;
+    }
 
 
     struct sc_exec_args sc_args = {

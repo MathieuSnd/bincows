@@ -91,6 +91,7 @@ FILE *fopen (const char *restrict filename,
     int flags = 0;
     int fd;
 
+
     // compute flags
     if(modes[0] == 'r')
         flags |= O_RDONLY;
@@ -136,6 +137,7 @@ FILE *fopen (const char *restrict filename,
     file->bufsize = BUFSIZ;
     file->buf_off = 0;
     file->buffer = malloc(BUFSIZ);
+
 
     return file;                 
 }
@@ -204,9 +206,9 @@ int fgetc(FILE* stream) {
             stream->pos++;
             int n = read(stream->fd, &c, 1);
             if(n == 1) {
-                return c;
+                return (unsigned char)c;
             }
-        printf("fgetc on n = %u\n", n);
+        //printf("fgetc on n = %u\n", n);
             return EOF;
         }
         default:
@@ -229,10 +231,16 @@ int putchar(int c) {
 }
 
 int puts (const char *s) {
-    if(write(STDOUT_FILENO, s, strlen(s)) == 0) {
-        return EOF;
-    }
-    else if(write(STDOUT_FILENO, "\n", 1) == 0) {
+    char* buf = malloc(strlen(s) + 1);
+
+    memcpy(buf, s, strlen(s));
+    buf[strlen(s)] = '\n';
+
+    int res =  write(STDOUT_FILENO, buf, strlen(s) + 1);
+
+    free(buf);
+
+    if(res <= 0) {
         return EOF;
     }
     return 0;
@@ -243,7 +251,7 @@ size_t fread (void *restrict ptr, size_t size,
 		     size_t n, FILE *restrict stream
 ) {
     if((stream->flags & O_RDONLY) == 0) {
-        printf("ERROR: FREAD ON WRITE ONLY\n");
+        printf("ERROR: FREAD ON WRITE ONLY fd %u\n", stream->fd);
         return 0;
     }
 
@@ -453,6 +461,7 @@ int vfprintf(FILE* stream, const char* restrict format, va_list arg) {
 
     int n = vsprintf(buf, format, arg);
     if(n < 0) {
+        free(buf);
         return -1;
     }
 

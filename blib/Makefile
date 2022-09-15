@@ -4,9 +4,10 @@
 
 BIN_FILE:=blib.a
 
-CC := x86_64-elf-gcc
-AR := x86_64-elf-ar
-LD := x86_64-elf-ld
+PREFIX := /home/mathieu/opt/cross/x86_64-elf/bin/
+CC     := $(PREFIX)x86_64-elf-gcc
+LD     := $(PREFIX)x86_64-elf-ld
+AR     := $(PREFIX)x86_64-elf-ar
 ASM:=nasm
 
 

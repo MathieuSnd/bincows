@@ -38,3 +38,19 @@ int sigsend(int pid, int sig) {
     };
     return syscall(SC_SIGKILL, &args, sizeof(args));
 }
+
+int _thread_create(void* entry, void* arg) {
+    struct sc_thread_create_args args = {
+        .entry = entry,
+        .argument = arg,
+    };
+    return syscall(SC_THREAD_CREATE, &args, sizeof(args));
+}
+
+void __attribute__((noreturn)) _thread_exit(void) {
+    syscall(SC_THREAD_EXIT, NULL, 0);
+    __builtin_unreachable();
+}
+
+
+

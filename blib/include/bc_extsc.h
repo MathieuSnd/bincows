@@ -61,4 +61,27 @@ extern int forkexec(char const * const cmdline[], fd_mask_t mask);
 
 
 
+/**
+ * create a thread that starts immediatelly,
+ * with a given entry and argument.
+ * entry foramt:
+ * 
+ * void __attribute__((noreturn)) entry(void* arg)
+ * 
+ * the function must call thread_exit
+ * 
+ */
+extern int _thread_create(void* entry, void* arg);
+
+
+/**
+ * this function is the only way to exit from a thread.
+ */
+extern void __attribute__((noreturn)) _thread_exit(void);
+
+// return the tid of the current thread
+extern int _get_tid(void);
+
+
+
 #endif // BC_EXTSC_H

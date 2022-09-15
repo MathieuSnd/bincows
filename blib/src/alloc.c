@@ -75,11 +75,42 @@ static size_t n_allocations = 0;
 
 static seg_header* current_segment = NULL;
 
+#ifndef NDEBUG
+static void heap_assert_seg(const seg_header* const seg) {
+    assert(seg);
+    if((uint64_t)seg < heap_begin || 
+        (uint64_t)seg >= heap_begin + heap_size) {
+        printf("heap_assert_seg error: seg=%lx\n", seg);
+        printf("heap_assert_seg(...): arg is not in heap\n");
+        exit(1);
+    }
 
+    if((uint64_t)seg+seg->size > heap_begin + heap_size) {
+        printf("heap_assert_seg error: seg=%lx = {.next=%lx, .size=%lx, .free=%lx}\n", 
+                    seg, seg->next, seg->size, seg->free);
+        printf("heap_assert_seg(...): arg is not in heap\n");
+        exit(1);
+    }
+    if((seg->free & ~1u) != 0) {
+        printf("heap_assert_seg error: seg=%lx = {.next=%lx, .size=%lx, .free=%lx}\n", 
+                    seg, seg->next, seg->size, seg->free);
+        printf("heap_assert_seg(...): bad header (invalid free value)\n");
+        exit(1);
+    }
+    
+    if(seg->next != NULL && ((uint64_t)seg->next < heap_begin 
+                || (uint64_t)seg->next >= heap_begin + heap_size)) {
+        printf("heap_assert_seg error: seg=%lx = {.next=%lx, .size=%lx, .free=%lx}\n", 
+                    seg, seg->next, seg->size, seg->free);
+        printf("heap_assert_seg(...): bad header (invalid next value)\n");
+        exit(1);
+    }
+}
 
-
-// @todo
+#else
 #define heap_assert_seg(X)
+#endif
+
 
 static void defragment(void);
 

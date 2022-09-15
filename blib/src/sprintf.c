@@ -58,7 +58,6 @@ static char* utos(char* str, uint64_t x, int min_digits, size_t max_digits) {
         digits++;
     }
 
-    max_digits = 2;
 
     if(digits > max_digits) {
         for(unsigned i = digits; i > max_digits; i--)
