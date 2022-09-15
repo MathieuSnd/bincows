@@ -213,7 +213,7 @@ static uint64_t createPRP(void) {
 
     // disable cache for this page:
     // unmap it, the remap it as not cachable
-    unmap_pages(vaddr, 1);
+    unmap_pages(vaddr, 1, 0);
     
     map_pages(
         paddr, 
@@ -233,10 +233,8 @@ static void freePRP(uint64_t paddr) {
     // reset for this page:
     // unmap it, the remap it as cachable
 
-    unmap_pages(
-        (uint64_t)translate_address((void*)paddr), 
-        1
-    );
+    unmap_pages((uint64_t)translate_address((void*)paddr), 1,0);
+    
     map_pages(
         paddr, 
         vaddr, 
@@ -317,12 +315,16 @@ static void handle_queue(
             unsigned i = entry->cmd_id & ~CMD_TASK_ID_MASK;
 
             assert(data->read_queue[i].size != 0);
+            
+            //assert(is_higher_half(data->read_queue[i].target_buffer));
 
             memcpy(
                 data->read_queue[i].target_buffer,
                 translate_address((void*)data->prps[i]),
                 data->read_queue[i].size
             );
+
+            data->read_queue[i].target_buffer = NULL;
         }
 
         queue_consume(cq);        
@@ -1099,6 +1101,9 @@ void nvme_async_read(struct driver* this,
     assert(this->status == DRIVER_STATE_OK);
     struct data* data = this->data;
     assert(data->nns);
+
+    assert(buf);
+
 
     unsigned shift = data->namespaces[0].block_size_shift;
 

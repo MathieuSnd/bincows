@@ -729,7 +729,7 @@ static pte* get_page_table_or_panic(uint64_t vaddr) {
     return extract_pointer(get_entry_or_panic((void**)pdptentry, pdi));
 }
 
-void unmap_pages(uint64_t virtual_addr, size_t count) {
+void unmap_pages(uint64_t virtual_addr, size_t count, int free) {
     // mutual exclusion
     uint64_t rf = get_rflags();
     _cli();
@@ -764,6 +764,9 @@ void unmap_pages(uint64_t virtual_addr, size_t count) {
                 
                 panic(buff);
             }
+
+            if(free) 
+                physfree(extract_pointer(*entry_ptr));
 
             // actually erase the entry
             *entry_ptr = 0;
@@ -829,6 +832,7 @@ static void flush_tlb(void) {
  * map table physical base address
  */
 void set_user_page_map(uint64_t paddr) {
+    void* old = pml4[0];
     pml4[0]   = create_table_entry(
             (void*)paddr,   
             PRESENT_ENTRY | PL_US // execute enable, read 
@@ -836,7 +840,8 @@ void set_user_page_map(uint64_t paddr) {
                                   // and accessible from userspace
     );
 
-    flush_tlb();
+    if(pml4[0] != old)
+        flush_tlb();
 }
 
 

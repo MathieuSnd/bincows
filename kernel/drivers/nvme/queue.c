@@ -23,7 +23,7 @@ struct queue create_queue(
 
     memset(vaddr, 0, size * element_size);
 
-    unmap_pages((uint64_t)vaddr, 1);
+    unmap_pages((uint64_t)vaddr, 1, 0);
 
     map_pages(
         paddr, 
@@ -49,7 +49,7 @@ void free_queue(struct queue* q) {
     // change page flags: 
     // unmap then remap it as cachable
 
-    unmap_pages((uint64_t)vaddr, 1);
+    unmap_pages((uint64_t)vaddr, 1, 0);
 
     map_pages(
         paddr, 

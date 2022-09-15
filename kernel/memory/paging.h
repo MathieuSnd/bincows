@@ -56,7 +56,9 @@ void map_pages(uint64_t physical_addr,
                size_t   count,
                uint64_t flags);
 
-void unmap_pages(uint64_t virtual_addr, size_t count);
+
+// free: if non0, free the physical pages using physfree
+void unmap_pages(uint64_t virtual_addr, size_t count, int free);
 
 void alloc_pages(void* virtual_addr, 
                size_t   count,
