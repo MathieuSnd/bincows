@@ -1,17 +1,25 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 
+#define BUFF_SIZE 1024*1024
 
 static void cat(FILE *f)
 {
     
     int c;
-    char buff[31];
+    char* buff = malloc(BUFF_SIZE);
 
-    buff[30] = 0;
+    long rd;
 
-    while (fread(buff, 1, 1, f))
-        write(1, buff, 1);
+    do {
+        rd = read(fileno(f), buff, BUFF_SIZE);
+        rd = write(1, buff, rd);
+    }
+    while(rd > 0);
+
+
+    free(buff);
 }
 
 int main(int argc, char* argv[]) {

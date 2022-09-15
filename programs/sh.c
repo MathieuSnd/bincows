@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <bc_extsc.h>
 #include <signal.h>
+#include <ctype.h>
 
 
 #define VERSION "0.1"
@@ -89,7 +90,7 @@ extern char** __environ;
 
 static void list_env(void) {
     char** ptr = __environ;
-
+    printf("list env\n");
     while(*ptr) {
         printf("%s\n", *ptr);
         ptr++;
@@ -97,6 +98,7 @@ static void list_env(void) {
 } 
 
 static void export(const char** argv) {
+    // printf("argv[1]=%lx",argv[1]);
     if(argv[1] == NULL) {
         list_env();        
         return;
@@ -256,32 +258,173 @@ char* eval_env(char* cmd) {
 
 
 
+
 void type_character(char ch) {
 
 
     static int cur = 0;
     static char line[1024];
 
-    switch(ch) {
+    // 1 if the last ch was 0xff meaning that 
+    // the next one is the ctrl key (ctrl-C, D, etc.)
+    static int ctrl_key = 0;
+
+    static char seq[8] = {0};
+    static int seq_n = 0;
+
+    if(ch == '\x1b') {
+        // ANSI sequence
+        seq[0] = ch;
+        seq_n = 1;
+        return;
+    }
+    else if(seq_n) {
+        if(seq_n == 1) {
+            if(ch == '[') {
+                // ANSI keycode sequence
+                seq_n++;
+                seq[1] = '[';
+            }
+            else {
+                // @todo
+                seq_n = 0;
+                return;
+            }
+        }
+        else if(seq_n == 2) {
+            if(seq[1] == '[') {
+                seq[3] = 0;
+                seq_n = 0;
+
+
+                switch(ch) {
+                    case 'A': // up arrow
+                        break;
+                    case 'B': // down arrow
+                        break;
+                    case 'C': // right arrow
+                        if(line[cur]) {
+                            printf("%c_\b", line[cur]);
+                            cur++;
+                        }
+                        break;
+                    case 'D': // left arrow
+                        if(cur > 0) {
+                            char rep = line[cur];
+                            if(!rep)
+                                rep = ' ';
+
+                            printf("%c\b\b_\b", rep);
+                            cur--;
+                        }
+                        break;
+                }
+
+            }
+        }
+        return;
+    }
+
+
+
+    if(ctrl_key) {
+        ctrl_key = 0;
+        ch = toupper(ch);
+
+        switch (ch)
+        {
+        case 'C':
+        // same as new line but don't excecute
+            printf("\n");
+            print_prompt();
+
+            //line[cur] = 0;
+            line[0] = 0;
+            cur = 0;
+
+            break;
+        case 'D':
+            printf("\x0c");
+            exit(1);
+            break;
         default:
-            line[cur++] = ch;
-            printf("%c_\b", ch);
+            break;
+        }
+
+        return;
+    }
+
+    switch(ch) {
+        default: 
+        {
+            int size = strlen(line + cur);
+            memmove(
+                line + cur + 1,
+                line + cur, 
+                size + 1
+            );
+            line[cur] = ch;
+
+            // redraw line
+            int buf_size = size;
+            char* buf = malloc(buf_size + 1);
+
+            
+            memset(buf, '\b', buf_size);
+            buf[buf_size] = '\0';
+
+            printf("%s%s_\b", line + cur, buf);
+            
+            free(buf);
+            
+            cur++;
+            break;
+        }
+        case '\xff':
+            ctrl_key = 1;
             break;
         case '\b':
             if(cur > 0) {
                 printf(" \b\b_\b");
                 cur--;
+
+                memmove(
+                    line + cur, 
+                    line + cur + 1, 
+                    strlen(line + cur + 1) + 1
+                );
+                // redraw line
+                int buf_size = strlen(line +    cur);
+                char* buf = malloc(buf_size + 1);
+                
+                memset(buf, '\b', buf_size);
+                buf[buf_size] = '\0';
+                printf("%s\x1b[K%s_\b", line + cur, buf);
+                
+                free(buf);
             }
+            break;
+        case '\t':
+            type_character(' ');
             break;
         case '\n':
-            printf("\n");
-            line[cur] = 0;
+        {
+            printf("%s\n", line + cur);
+
+
+            char* line_cpy = strdup(line);
+
+            line[0] = 0;
+
             cur = 0;
 
-            if(execute(line) == -1) {
+
+            if(execute(line_cpy) == -1) {
                 print_prompt();
             }
+            free(line_cpy);
             break;
+        }
     }
 }
 
@@ -302,19 +445,6 @@ void sigchld_handler(int s) {
 }
 
 
-int tolower(int c) {
-    if(c >= 'A' && c <= 'Z')
-        return c + 32;
-    return c;
-}
-
-int toupper(int c) {
-    if(c >= 'a' && c <= 'z')
-        return c - 32;
-    return c;
-}
-
-
 static int execute(char* cmd) {
     // convert to argv
 
@@ -322,15 +452,18 @@ static int execute(char* cmd) {
 
     char** argv = convert_cmdline(final);
 
-    free(final);
 
-    if(!argv[0])
+    if(!argv[0]) {
+        free(final);
+        free(argv);
         return -1;
+    }
 
-    if(builtin_cmd((const char**) argv))
+    if(builtin_cmd((const char**) argv)) {
+        free(final);
+        free(argv);
         return -1;
-
-
+    }
 
     // 1 - stdin
     // 2 - stdout
@@ -345,6 +478,7 @@ static int execute(char* cmd) {
 
     if(r) {
         printf("couldn't create a pipe\n");
+        free(final);
         free(argv);
         return -1;
     }
@@ -353,7 +487,9 @@ static int execute(char* cmd) {
 
     dup2(0, term_in);
 
+    // put pipe_ends[0] in 0 (stdin)
     dup2(pipe_ends[0], 0);
+    close(pipe_ends[0]);
 
 
     sigchld_flag = 0;
@@ -362,26 +498,20 @@ static int execute(char* cmd) {
     int pid = forkexec((const char* const*)argv, fdmask);
 
 
-    dup2(term_in, 0);
-    close(term_in);
-    close(pipe_ends[0]);
+    dup2(term_in, 0);    // close 0 (pipe read), put terminal input in 0
+    close(term_in);      // close temp term_in fd
 
 
     if(pid == -1) 
     {
         // couldn't execute
-        
-        if(access(argv[0], F_OK)) {
-            // the file exists, but we can't execute it
-
-            printf("can't execute '%s'\n", argv[0]);
-        }
-        else
-            printf("command not found: %s\n", argv[0]);
+        printf("can't execute '%s'\n", argv[0]);
 
     }
     else {
-        
+        // sub process is running
+
+
         while(1) {
             int r = fgetc(stdin);
 
@@ -392,24 +522,48 @@ static int execute(char* cmd) {
 
 
             if(r == 0xff) {
-                // control character
+                // CTRL character
+
+                // read CTRL key 
                 r = fgetc(stdin);
 
                 r = toupper(r);
 
-                printf("^%c\n", r);
 
                 switch(r) {
                     case 'D': // CTRL-D
                     // eof: close pipe
+                        printf("^D\n");
                         close(pipe_ends[1]);
-                        if(sigchld_flag)
-                            pause();
-                        free(argv);
-                        return pid;
+                        printf("closed pipe");
+                        //if(sigchld_flag)
+                        //    pause();
+
+                        //free(argv);
+                        //return pid;
                     case 'C': // CTRL-C
                         // kill the child process
-                        kill(pid, SIGINT);
+
+                        r = kill(pid, SIGINT);
+
+                        // r == -1 if no process has 
+                        // the requested pid. It means
+                        // that the process is already 
+                        // terminated
+
+                        if(r == -1) {
+                            type_character(0xff);
+                            type_character('c');
+                            
+                            free(final);
+                            free(argv);
+                            return pid;
+                        }
+
+                        // else, a SIGINT signal has been
+                        // sent to the process.
+
+                        printf("^C\n");
                         break;
                 }
             } else {
@@ -419,14 +573,19 @@ static int execute(char* cmd) {
                     type_character(r);
                     break;
                 }
-                else
-                    fputc(r, stdout);
+                else {
+                    if(isascii(r) && !iscntrl(r))
+                       fputc(r, stdout);
+                    else
+                        fputc('?', stdout);
+                }
             }
         }
 
-        close(pipe_ends[1]);
     }
-
+    
+    close(pipe_ends[1]);
+    free(final);
     free(argv);
 
     return pid;
@@ -451,6 +610,9 @@ void script_exec(char* line) {
 
     if(*line == '#') // comment
         return;
+
+
+    //printf("%s\n", line);
 
     execute(line);
 }
@@ -477,25 +639,26 @@ void exec_script(const char* path) {
 }
 
 int main(int argc, char** argv) {
+
     init_stream();
     
     signal(SIGCHLD, sigchld_handler);
-
-    exec_script("/home/.shrc");
-
-    printf("%s\n", version_string);
 
 
     // current working directory
     cwd = getcwd(NULL, 0);
 
 
+
+    printf("%s\n", version_string);
+
+    exec_script("/home/.shrc");
     print_prompt();
 
 
 
     while(1) {
-        char ch;
+        int ch = 0;
 
         if(read(STDIN_FILENO, &ch, 1) <= 0)
             break; // eof
