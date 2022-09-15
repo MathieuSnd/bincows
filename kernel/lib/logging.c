@@ -39,7 +39,7 @@ static inline void append_string(const char* str) {
 
     unsigned len = strlen(str);
     if(i+len >= BUFFER_SIZE)
-        log_flush(1); // buffer full, flush it.
+        log_flush(); // buffer full, flush it.
 
     memcpy(logs_buffer+i, str, len);
     i += len;
@@ -98,8 +98,8 @@ void log(unsigned level, const char* string) {
     append_string(buffer);
 
     static int i = 0;
-    if(logfile_path && i++ % 5 == 0)
-        log_flush(0);
+    if(logfile_path && i++ % 10 == 0)
+        log_flush();
 }
 
 
@@ -128,26 +128,40 @@ const char* log_get(void) {
     return logs_buffer;
 }
 
-void log_flush(int force) {
-    if(logfile_path) {
 
-        if(!interrupt_enable() || !sched_is_running()) {
+void log_flush(void) {
+    i = 0;
+    return;
+
+    // if a log is done during a flush, it shouldn't flush recursively
+    static int flushing = 0;
+
+    
+
+    if(logfile_path && !flushing) {
+
+
+        if(!interrupt_enable() || !sched_is_running() || sched_current_pid() != 0) {
             // we cannot use the write 
             // function.
-
-            if(!force)
-                return;
+            i = 0;
+            //log_warn("cannot flush log file");
+            return;
         }
-        else {
-            file_handle_t* file = vfs_open_file(
-                            logfile_path, VFS_WRITE | VFS_APPEND);
-        
-            assert(file);
 
-            vfs_write_file(logs_buffer, i, 1, file);
+        flushing = 1;
 
-            vfs_close_file(file);
-        }
+        file_handle_t* file = vfs_open_file(
+                        logfile_path, VFS_WRITE | VFS_APPEND);
+
+        assert(file);
+
+
+        vfs_write_file(logs_buffer, i, 1, file);
+
+        vfs_close_file(file);
+
+        flushing = 0;
     }
     i = 0;
 }
@@ -155,14 +169,14 @@ void log_flush(int force) {
 
 
 void log_cleanup(void) {
-    log_flush(0);
+    log_flush();
+    logfile_path = NULL;
 }
 
 void log_init_file(const char* filename) {
     logfile_path = filename;
 
-
-    log_flush(0);
+    log_flush();
 }
 
 

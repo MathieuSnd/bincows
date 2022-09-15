@@ -38,11 +38,9 @@ const char* log_get(void);
  * It means, if a logfile is open, it will 
  * write the logs to the file.
  * 
- * If no logfile is open, if force is set to 1,
- * logs will be droped.
- * Otherwise, the function won't have any effect.
+ * If no logfile is open, logs will be droped.
  */
-void log_flush(int force);
+void log_flush(void);
 
 
 // flush logs and close the file
