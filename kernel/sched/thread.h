@@ -17,7 +17,6 @@ typedef struct stack {
 } stack_t;
 
 
-typedef int32_t tid_t;
 
 typedef struct gp_regs {
 
@@ -120,8 +119,8 @@ struct thread {
 
 
 // 0 if the thread cannot be created
-// the created thread is blocked
-int create_thread(thread_t* thread, pid_t pid, void* stack_base, size_t stacs_size, tid_t);
+int create_thread(thread_t* thread, pid_t pid, void* stack_base, 
+        size_t stacs_size, tid_t, uint64_t rip,uint64_t rdi);
 
 
 // add a hook to be called when the thread exits

@@ -12,6 +12,8 @@
 // this file describes what are processes
 
 typedef int pid_t;
+typedef int32_t tid_t;
+
 
 typedef unsigned fd_t;
 
@@ -172,6 +174,16 @@ int process_end_of_signal(process_t* process);
 int create_process(process_t* process, process_t* pparent, 
             const void* elffile, size_t elffile_sz, fd_mask_t fd_mask);
 
+
+
+/**
+ * create a new thread for the given process
+ * process should be locked, interrupts should be 
+ * disabled
+ * 
+ */
+
+tid_t process_create_thread(process_t* proc, void* entry, void* argument);
 
 /**
  * @brief Create a kernel process with pid 0,

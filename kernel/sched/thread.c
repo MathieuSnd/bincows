@@ -15,7 +15,10 @@ int create_thread(
             pid_t  pid, 
             void*  stack_base, 
             size_t stack_size,
-            tid_t  tid
+            tid_t  tid,
+            uint64_t rip,
+            uint64_t rdi
+
 ) {
     *thread = (thread_t) {
         .pid   = pid,
@@ -24,7 +27,9 @@ int create_thread(
             .size = stack_size,
         },
         .tid   = tid,
-        .state = BLOCKED,
+        .state = BLOCKED, // a thread is created blocked. 
+                          // it is then unblocked so registered
+                          // to the scheduler
         .lock = 0,
     };
 
@@ -41,6 +46,8 @@ int create_thread(
     thread->rsp->rbp = (uint64_t)(stack_base - 8);
 
     thread->rsp->rsp = (uint64_t)stack_base + stack_size;
+    thread->rsp->rip = rip;
+    thread->rsp->rdi = rdi;
 
     thread->kernel_stack = (stack_t) {
         .base = malloc(THREAD_KERNEL_STACK_SIZE),

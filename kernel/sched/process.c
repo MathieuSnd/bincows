@@ -10,15 +10,37 @@
 #include "sched.h"
 
 #define FIRST_TID 1
-#define STACK_SIZE 4096
+#define STACK_SIZE (32 * 1024)
+
+
 
 // return stack base
 // we suppose that the process is already mapped
 // we find a stack address by polling user top memory 
 static void* alloc_stack(process_t* process) {
-    // @todo this doesnt work with more than 1 thread
-    void* base = (void*)((USER_END + 1)/32) - STACK_SIZE;
-    (void) process;
+    assert(!interrupt_enable());
+
+    void* base = (void*)(USER_END + 1) - STACK_SIZE;
+
+
+    assert(process);
+
+
+    // search for unused memory
+    for(unsigned i = 0; i < process->n_threads; i++) {
+        // assume every thread is the same stack size
+        if(base == process->threads[i].stack.base) {
+            // @todo maybe put some padding between
+            // thread stacks    
+            base -= STACK_SIZE;
+            
+            // reloop
+            i = -1;
+        }
+    }
+
+
+//    log_info("%u/%u stack base: %lx", process->pid, process->n_threads, base);
 
     alloc_pages(
         base, 
@@ -27,6 +49,15 @@ static void* alloc_stack(process_t* process) {
     );
 
     return base;
+}
+
+static void free_stack(void* addr) {
+    // assume every thread is the same stack size
+    unmap_pages(
+        (uint64_t)addr, 
+        STACK_SIZE >> 12,
+        1
+    );  
 }
 
 
@@ -50,9 +81,11 @@ void dup_fd(file_descriptor_t* fd, file_descriptor_t* new_fd) {
 
 
 int close_fd(file_descriptor_t* fd) {
+    assert(interrupt_enable());
     if(fd->file == NULL) {
         return -1;
     }
+
 
     switch(fd->type) {
         case FD_FILE:
@@ -65,14 +98,47 @@ int close_fd(file_descriptor_t* fd) {
             assert(0);
     }
 
-
-
     fd->type = FD_NONE;
 
     return 0;
 }
 
 
+
+static int create_main_thread(process_t* process) {
+    assert(process->n_threads == 0);
+    assert(!interrupt_enable());
+
+    log_warn("CREATE MAIN THREAD %u", process->pid);
+
+    void* stack_base = alloc_stack(process);
+
+    if(!stack_base) {
+        log_warn("could not allocate stack for thread %u:%u", process->pid, 1);
+        return -1;
+    }
+    
+
+    int res = create_thread(
+        &process->threads[0], 
+        process->pid, 
+        stack_base,
+        STACK_SIZE, 
+        FIRST_TID,
+        (uint64_t)process->program->entry, // PC
+        0 // rdi register
+    );
+
+    if(res) {
+        free_stack(stack_base);
+        log_warn("cannot create thread %u:%u", process->pid, 1);
+        return -1;
+    }
+
+    process->n_threads = 1;
+
+    return 0;
+}
 
 int create_process(
         process_t*  process, 
@@ -81,6 +147,8 @@ int create_process(
         size_t      elffile_sz,
         fd_mask_t  fd_mask
 ) {
+    assert(process);
+    assert(!interrupt_enable());
 
     // assert that no userspace is mapped
     assert(get_user_page_map() == 0);
@@ -131,19 +199,6 @@ int create_process(
 
     pid_t pid = alloc_pid();
 
-    assert(process);
-
-    create_thread(
-        &threads[0], 
-        pid, 
-        alloc_stack(process), 
-        STACK_SIZE, 
-        FIRST_TID
-    );
-
-    // set PC
-    threads[0].rsp->rip = (uint64_t)program->entry;
-
 
     // choose an emplacement for heap base
     // choose it above the highest elf 
@@ -158,7 +213,7 @@ int create_process(
 
     *process = (process_t) {
         .fds   = fds,
-        .n_threads = 1,
+        .n_threads = 0, // no thread yet. The thread is added right after
         .threads = threads,
         .page_dir_paddr = user_page_map,
         .saved_page_dir_paddr = user_page_map,
@@ -175,12 +230,24 @@ int create_process(
         .sig_return_context = NULL,
         .sig_return_function = NULL,
     };
-    
 
     // empty heap
     process->brk = process->unaligned_brk = process->heap_begin = 
                         (void *)(((uint64_t)elf_end+0xfff) & ~0x0fffllu);
+
+
+
     
+    if(create_main_thread(process)) {
+        free(cwd);
+        free(threads);
+        free(fds);
+        free_user_page_map(user_page_map);
+        elf_free(program);
+        return 0;
+    }
+
+
     return 1;
 }
 
@@ -277,7 +344,7 @@ void free_process(process_t* process) {
     assert(!process->n_threads);
 
     if(process->pid == KERNEL_PID) {
-        log_info("free_process: kernel process");
+        log_info("free kernel process");
         // kernel process
     }
 
@@ -321,15 +388,6 @@ int replace_process(process_t* process, void* elffile, size_t elffile_sz) {
     // only one thread
     process->threads = realloc(process->threads, sizeof(thread_t));
 
-    int r = create_thread(
-        &process->threads[0], 
-        process->pid, 
-        alloc_stack(process), 
-        STACK_SIZE, 
-        FIRST_TID
-    );
-
-    assert(!r);
 
     // load program
     elf_program_t* program = elf_load(elffile, elffile_sz);
@@ -350,14 +408,116 @@ int replace_process(process_t* process, void* elffile, size_t elffile_sz) {
     process->brk = process->unaligned_brk = process->heap_begin = 
                         (void *)(((uint64_t)elf_end+0xfff) & ~0x0fffllu);
 
+
+    // this field is needed by alloc_stack
+    process->n_threads = 0;
+
+
+
+    if(create_main_thread(process)) {
+        // couldn't create main thread
+        free_process(process);
+    }
     
-
-    process->threads[0].rsp->rip = (uint64_t)program->entry;
-
-
-
     return 0;
 }
+
+
+
+/**
+ *  
+ * return an unsued, non-0 tid on success
+ * bellow MAX_TID
+ * 
+ * 0 on success
+ * 
+ * 
+ */
+static tid_t alloc_tid(process_t* p) {
+    assert(!interrupt_enable());
+
+    tid_t pref = 1, alt = 1;
+
+    // pref: prefered tid = max tid + 1
+    // alt:  alterative tid, tid different to any other
+
+
+    for(unsigned i = 0; i < p->n_threads; i++) {
+        thread_t* t = p->threads + i;
+
+        if(t->tid == alt)
+            alt++;
+
+        if(t->tid >= pref)
+            pref = t->tid + 1;
+    }
+
+    if(pref <= MAX_TID) 
+        return pref;
+    else if(alt <= MAX_TID)
+        return alt;
+
+    else {// too much threads, no available tid
+        log_warn("no available tid for process %u", p->pid);
+        return 0;
+    }
+}
+
+
+tid_t process_create_thread(process_t* proc, void* entry, void* argument) {
+    assert(!interrupt_enable());
+
+    // assert that the process is already mapped
+    assert(get_user_page_map() == proc->page_dir_paddr);
+
+    if(!proc)
+        return 0;
+
+    tid_t tid = alloc_tid(proc);
+
+    if(tid) {
+
+        void* stack_base = alloc_stack(proc);
+
+        if(!stack_base) {
+            log_warn("couldn't allocate stack for thread %u:%u", proc->pid, tid);
+            return 0;
+        }
+
+
+        proc->threads = realloc(proc->threads, sizeof(thread_t) * (proc->n_threads + 1));
+            
+
+        thread_t* t = proc->threads + proc->n_threads;
+        
+        int res = create_thread(
+            t,
+            proc->pid,
+            stack_base, 
+            STACK_SIZE, 
+            tid,
+            (uint64_t) entry,
+            (uint64_t) argument
+        );
+
+        if(!res) {
+            (*((volatile size_t*)&proc->n_threads))++;
+
+            sched_launch_thread(t);
+        }
+        else {
+            
+            log_warn("couldn't create thread %u:%u", proc->pid, tid);
+        }
+    }
+    // else, no available tid
+    
+
+    return tid;
+}
+
+
+
 
 
 static size_t string_list_len(char* list) {
@@ -706,15 +866,17 @@ int process_trigger_signal(pid_t pid, int signal) {
     // grab the process
     process_t* process = sched_get_process(pid);
 
-    // map the process memory into lower half
-    uint64_t saved_proc_page_map = get_user_page_map();
-    set_user_page_map(process->page_dir_paddr);
-
 
     if(!process) {
+        // no such process
         set_rflags(rf);
         return -1;
     }
+
+
+    // map the process memory into lower half
+    uint64_t saved_proc_page_map = get_user_page_map();
+    set_user_page_map(process->page_dir_paddr);
 
     if(!process->sig_table) {
         // no signal table: signal ignored

@@ -5,6 +5,7 @@
 
 #define KERNEL_PID ((pid_t)0)
 #define MAX_PID 0xffff
+#define MAX_TID 0xffff
 
 
 // blocking the current thread consists
@@ -88,6 +89,9 @@ void sched_unblock_thread(thread_t *);
 
 void sched_launch_process(process_t* p);
 
+// register the thread and mark it as ready
+void sched_launch_thread(thread_t* t);
+
 /**
  * return a fresh new pid that 
  * doesn't overlap with an existing process
@@ -111,7 +115,19 @@ pid_t sched_create_process(pid_t ppid, const void* elffile,
 int sched_kill_process(pid_t pid, int status);
 
 
-void sched_register_process(process_t* process);
+
+
+/**
+ * create a new thread in process pid
+ * On success, return the new tid
+ * 0 on falure
+ * 
+ */
+tid_t sched_create_thread(pid_t pid, void* entry, void* argument);
+
+
+
+// void sched_register_process(process_t* process);
 
 
 /**
@@ -143,6 +159,9 @@ process_t* sched_get_process(pid_t pid);
 
 pid_t sched_current_pid(void);
 tid_t sched_current_tid(void);
+
+
+void sched_register_ready_thread(pid_t pid, tid_t tid);
 
 
 /**
