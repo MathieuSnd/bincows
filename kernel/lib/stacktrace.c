@@ -20,6 +20,19 @@ static const struct  {
     sym_t    symbols[];
 }* file = NULL;
 
+
+static
+int check_address(uint64_t addr) {
+    return
+             // check cannonical form
+        !(
+            (addr & 0xfffff80000000000) == 0xfffff80000000000
+         || (addr & 0xfffff80000000000) == 0x0000000000000000 
+        )
+            // check null pointer (1st page)
+         || (addr & 0xfffffffffffff000) == 0x0000000000000000;
+}
+
 void stacktrace_file(const void* f) {
     file = f;
 } 
@@ -34,7 +47,11 @@ static const char* get_symbol_name(
     if(!file)
         return NULL;
 
-    // dichotomy
+    if(((uint64_t)(file) & 0xffff000000000000) != 0xffff000000000000) {
+        panic("broken up memory");
+    }
+
+    // binary search
     uint64_t A = 0;
     uint64_t B = file->n_symbols - 1;
 
@@ -75,38 +92,44 @@ void stacktrace_print(void) {
     
     for(unsigned i = 0; i < MAX_STACK_TRACE; i++) {
         
+        if(check_address((uint64_t)ptr)) {
+            printf("corrupted stack\n");
+            break;
+        }
+
+
         if(*ptr == 0) // reached the top 
         {
             printf("   trace end\n");
             break;
         }
+
         
         int interrupt_routine = 0;
+
+        if(check_address((uint64_t)(ptr + 1))) {
+            printf("   invalid address\n");
+            return;
+        }
+
         
         uint64_t rip = (uint64_t) *(ptr+1);
 
-        if(!is_kernel_memory(rip) 
-        
-        // && (rip < 0x4000b0 || rip > 0x405000)
-        
-        
-        ) {
-            printf("bad rip: %lx\n", rip);
+        if(check_address(rip)) {
+            printf("   %16llx BAD RIP\n", rip);
             return;
         }
-/*
-        if(!is_kernel_memory(rip)) {
-            //maybe it is an exception error code
-            // or maybe its the user....
-            return;
-            interrupt_routine = 1;
-            rip = (uint64_t) *(ptr+2);  
+
+
+        printf("   %16llx    ", rip);
+
+        if(is_user((uint64_t)rip)) {
+            printf("userspace\n");
+            break;
         }
-*/
-        printf("   %llx    ", rip);
 
         unsigned offset;
-        const char* symbol  = get_symbol_name(rip, &offset);
+        const char* symbol  = get_symbol_name(rip-1, &offset);
 
         if(symbol)
             printf("<%s + %x>", symbol, offset);
