@@ -8,6 +8,7 @@
 #include "../../lib/panic.h"
 
 #include "../../memory/heap.h"
+#include "../../memory/vmap.h"
 
 #include "fat32.h"
 #include "specs.h"
@@ -125,6 +126,8 @@ void* async_read(
 
     assert(lba >= part->begin);
     assert(lba < part->end);
+
+    assert(buf);
 
     
     part->interface->async_read(part->interface->driver, lba, buf, count);

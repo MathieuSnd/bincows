@@ -650,14 +650,20 @@ static void aquire_file_access(uint64_t vfile_id) {
         {
             struct file_ent* vfile = aquire_vfile(vfile_id);
             accessed = vfile->accessed;
+
+            //if(accessed)
+            //    log_info("concurrent file access %s", vfile->path);
+
             vfile->accessed = 1;
             release_vfile();
+            
         }
         _sti();
 
         
-        if(accessed)
+        if(accessed) {
             sched_yield();
+        }
 
         
         // yield until the process is done
@@ -743,7 +749,8 @@ size_t vfs_read_file(void *ptr, size_t size,
     aquire_file_access(stream->vfile_id);
 
     assert(stream);
-    assert(ptr);
+    assert(ptr >= 0x1000);
+    
 
     void *const buf = stream->sector_buff;
 
@@ -940,11 +947,9 @@ size_t vfs_write_file(const void *ptr, size_t size, size_t nmemb,
     }
 
     aquire_file_access(stream->vfile_id);
-
     
-
     assert(stream);
-    assert(ptr);
+    assert(ptr >= 0x1000);
 
     void *const buf = stream->sector_buff;
 
@@ -1153,7 +1158,6 @@ size_t vfs_write_file(const void *ptr, size_t size, size_t nmemb,
     if((file_copy.file_size != ~0llu && file_copy.file_size < stream->file_offset) // size update
         || file_addr != file_copy.addr           // address update
     ) {
-        log_warn("file size or address updated %lu", file_copy.file_size);
         file_copy.file_size = stream->file_offset;
         // update file size
         // we need to reaquire the vfile

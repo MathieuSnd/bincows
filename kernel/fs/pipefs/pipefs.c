@@ -75,6 +75,12 @@ id_t create_file(void) {
     spinlock_acquire(&priv->lock);
 
 
+    // for now, only the shell creates a pipe,
+    // one per process, no two sub processes
+    // at a time
+    assert(priv->n_files == 0);
+
+
 
     // add a record to the pipefs
     // in the end of the list. The list
@@ -337,7 +343,8 @@ static int read(struct fs* restrict fs, const file_t* restrict fd,
 
     spinlock_release(&file->lock);
     set_rflags(rf);
-    //  log_warn("readed");
+    
+    
 
 
     return n - remaining;
@@ -360,6 +367,8 @@ static int write(struct fs* restrict fs, file_t* restrict fd,
     struct pipefs_priv* priv = (void *)(fs + 1);
     
     pipefs_file_t* file = get_file(priv, fd->addr);
+
+
     
     if (!file) {
         return -1;

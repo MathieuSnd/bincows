@@ -168,6 +168,8 @@ static GUID makeGUID(
 
 void gpt_scan(const struct storage_interface* sti) {
 
+    assert(sti);
+
     void* buffer = malloc(1 << sti->lbashift);
     
     // LBA 1: Partition Table Header
