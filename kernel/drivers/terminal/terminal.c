@@ -149,13 +149,8 @@ char terminal_install(driver_t* this) {
 // with right size
     unsigned console_w = (dev->width  ),//* 9 ) / 10,
              console_h = (dev->height );//* 95 ) / 100;
-#ifdef BIGGER_FONT
-    d->ncols       = console_w / TERMINAL_FONTWIDTH / 2;
-    d->term_nlines = console_h / TERMINAL_LINE_HEIGHT / 2;
-#else
-    d->ncols       = console_w / TERMINAL_FONTWIDTH  ;//- 1;
-    d->term_nlines = console_h / TERMINAL_LINE_HEIGHT;// - 1;
-#endif
+    d->ncols       = console_w / TERMINAL_FONTWIDTH   ;
+    d->term_nlines = console_h / TERMINAL_LINE_HEIGHT ;
 
     // align width on 16 pixels
     //d->ncols &= ~0x0f;
@@ -164,13 +159,8 @@ char terminal_install(driver_t* this) {
 
 
     // calculate the margins 
-#ifdef BIGGER_FONT
-    d->margin_left = (dev->width - d->ncols * 2 * TERMINAL_FONTWIDTH ) / 2;
-    d->margin_top  = 0;
-#else
     d->margin_left = (dev->width - d->ncols * TERMINAL_FONTWIDTH ) / 2;
     d->margin_top  = (dev->height - d->term_nlines * TERMINAL_FONTHEIGHT) / 2;
-#endif
 
     // align margin
     d->margin_left = d->margin_left & ~0xf;
@@ -206,8 +196,12 @@ char terminal_install(driver_t* this) {
     
 
     terminal_clear(this);
+    flush_screen(this);
 
     active_terminal = this;
+
+
+    d->current_fgcolor = 0xffffff;
 
     return 1;
 }
@@ -245,7 +239,7 @@ static void terminal_clear(driver_t* this) {
     for(;buffer_len > 0; --buffer_len)
         *(ptr++) = make_Char(d, 0);
     
-    flush_screen(this);
+    d->need_refresh = 1;
 }
 
 
@@ -415,29 +409,44 @@ static void esc_cup(struct data* restrict d) {
 }
 
 // Erase in Line
-static void esc_el(struct data* restrict d) {
+static void esc_el(driver_t* this) {
+    struct data* restrict d = this->data;
+    
 
     int num = parse_esc_number_single(d);
 
     unsigned line_begin = d->ncols * d->cur_line;
-    unsigned line_end   = (d->ncols+1) * d->cur_line;
+    unsigned line_end   = (d->ncols) * (d->cur_line+1);
     unsigned line_cur   = line_begin + d->cur_col;
+
+    
+    const struct Char ch = make_Char(d, ' ');
+
+    d->need_refresh = 1;
+
+    unsigned begin, end;
 
     switch(num) {
         case 0: // cursor -> end
-            for(unsigned x = line_cur; x < line_end; x++)
-                d->char_buffer[x] = make_Char(d, ' ');
+            begin = line_cur;
+            end = line_end;
             break;
         case 1: // begin -> cursor
+            begin = line_begin;
+            end = line_cur;
             for(unsigned x = line_begin; x < line_cur; x++)
                 d->char_buffer[x] = make_Char(d, ' ');
             break;
         case 2: // begin -> end
-            for(unsigned x = line_begin; x < line_end; x++)
-                d->char_buffer[x] = make_Char(d, ' ');
+            begin = line_begin;
+            end = line_end;
             break;
+        default:
+            return;
     }
 
+    for(unsigned x = begin; x < end; x++)
+        d->char_buffer[x] = make_Char(d, ' ');
 }
 
 
@@ -499,7 +508,7 @@ static void emplace_char(driver_t* this, char c) {
                     esc_cup(d);
                     break;
                 case 'K':
-                    esc_el(d);
+                    esc_el(this);
                     break;
                 default:
                     // invalid escape sequence
@@ -589,13 +598,6 @@ static void print_char(driver_t* this,
     void* px = dev->pix;
 
     void* px_buffer = d->px_buffers[d->cur_px_buffer];
-#ifdef BIGGER_FONT
-    blitcharX2(px, pitch,
-                &charmap, c->c, c->fg_color, c->bg_color,
-                d->margin_left + 2 * col  * TERMINAL_FONTWIDTH, 
-                d->margin_top  + 2 * line * TERMINAL_LINE_HEIGHT);
-    
-#else
 
     int y = d->margin_top + line * TERMINAL_LINE_HEIGHT;
     int x = d->margin_left + col * TERMINAL_FONTWIDTH;
@@ -611,15 +613,13 @@ static void print_char(driver_t* this,
     }
         
 
-    blitchar(px, pitch, 
+    blitchar_func(px, pitch, 
              &charmap, c->c, c->fg_color, c->bg_color,
              x, y);
              
-    blitchar(px_buffer, pitch, 
+    blitchar_func(px_buffer, pitch, 
              &charmap, c->c, c->fg_color, c->bg_color,
              x, y);
-#endif
-
 }
 
 // print in buffer exclusively
@@ -634,18 +634,10 @@ static void buff_print_char(driver_t* this,
     void* px = d->px_buffers[d->cur_px_buffer];
     unsigned pitch = dev->pitch;
 
-#ifdef BIGGER_FONT
-    blitcharX2(px, pitch, 
-                &charmap, c->c, c->fg_color, c->bg_color,
-                d->margin_left + 2 * col  * TERMINAL_FONTWIDTH, 
-                d->margin_top  + 2 * line * TERMINAL_LINE_HEIGHT);
-    
-#else
-    blitchar(px, pitch, 
+    blitchar_func(px, pitch, 
              &charmap, c->c, c->fg_color, c->bg_color,
              d->margin_left + col  * TERMINAL_FONTWIDTH, 
              d->margin_top  + line * TERMINAL_LINE_HEIGHT);
-#endif
 }
 
 static void update_framebuffer(driver_t* this) {
@@ -741,20 +733,31 @@ static void append_string(const char *string, size_t length) {
 }
 */
 
+
 void write_string(driver_t* this, const char *string, size_t length) {
     struct data* restrict d = this->data;
     d->need_refresh = false;
 
-    for(;length>0;--length) {
-        char c = *string++;
+    char* buf = malloc(length), *ptr=buf;
 
-        if(!c)
-            break;
 
-        emplace_char(this, c);
+    memcpy(buf, string, length);
+    
+    
+    for(;length>0; length--) {
+        char c = *(ptr++);
+
+//        if(!c)
+//            break;
+
+
+        if(c > 0 && c < 0x7f)
+            emplace_char(this, c);
     }
     if(d->need_refresh)
         flush_screen(this);
+    
+    free(buf);
 }
 
 

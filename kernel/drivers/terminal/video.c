@@ -417,6 +417,8 @@ for(ptr = col; ; ptr += 2px) {
     *ptr = map+4*in'
 }
 */
+
+#ifndef BIGGER_FONT
 __attribute__((optimize("unroll-loops")))
 
 void blitchar(void* pixels, unsigned pitch,
@@ -467,7 +469,12 @@ void blitchar(void* pixels, unsigned pitch,
 
 }
 
+// else this func wont work 
+static_assert(TERMINAL_FONTWIDTH     == 6);
+static_assert(TERMINAL_FONTWIDTH % 2 == 0);
+static_assert(TERMINAL_FONTHEIGHT    == 8);
 
+#else
 
 __attribute__((optimize("unroll-loops")))
 
@@ -484,10 +491,10 @@ void blitcharX2(void* pixels, unsigned pitch,
         ((uint64_t) fg_color << 32) | fg_color,  
     };
     
-    uint16_t srcy = c * TERMINAL_FONTHEIGHT;
+    uint16_t srcy = c * TERMINAL_FONTHEIGHT / 2;
 
     uint64_t* dst_ptr = (uint64_t *)(pixels + pitch * dsty + 4 * dstx);
-    uint16_t  dst_skip = 2 * pitch - 2 * TERMINAL_FONTWIDTH * 4;
+    uint16_t  dst_skip = 2 * pitch - TERMINAL_FONTWIDTH * 4;
 
 /// second line to modify
     uint64_t* dst_ptr2 = dst_ptr + pitch / 8;
@@ -497,7 +504,7 @@ void blitcharX2(void* pixels, unsigned pitch,
     for(size_t n_line = 8; n_line > 0; n_line--) {
         
 
-        for(size_t n_col2 = TERMINAL_FONTWIDTH / 2 ; n_col2 > 0 ; n_col2--) {
+        for(size_t n_col2 = TERMINAL_FONTWIDTH / 4 ; n_col2 > 0 ; n_col2--) {
             uint16_t index = lines & 0b11;
 
             register uint64_t pixs_val = colormap[index];
@@ -515,15 +522,13 @@ void blitcharX2(void* pixels, unsigned pitch,
         dst_ptr2 += dst_skip / 8;
         
         
-        lines >>= 8 - TERMINAL_FONTWIDTH;
+        lines >>= 8 - TERMINAL_FONTWIDTH / 2;
     }
 
 }
 
-// else this func wont work 
-static_assert(TERMINAL_FONTWIDTH     == 6);
-static_assert(TERMINAL_FONTWIDTH % 2 == 0);
-static_assert(TERMINAL_FONTHEIGHT    == 8);
+
+#endif
 
 
 //static Image loadBMP_24b_1b_ret;

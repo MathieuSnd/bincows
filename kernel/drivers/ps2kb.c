@@ -38,35 +38,59 @@ static char file_buffer[BUFFER_SIZE];
 
 static volatile unsigned buff_tail = 0, buff_head = 0;
 
-
+// shutdown signal to the kernel process
 extern int lazy_shutdown;
+
+
+static int append_char(int c) {
+
+    if((buff_head + 1) % BUFFER_SIZE == buff_tail) {
+        log_warn("ps2 keyboard overrun");
+        return -1;
+    }
+    else {
+        if(ctrl_state) {
+            // insert the shifted escape code
+            file_buffer[buff_head] = 0xff;
+
+            buff_head = (buff_head + 1) % BUFFER_SIZE;
+
+            if((buff_head + 1) % BUFFER_SIZE == buff_tail) {
+                log_warn("ps2 keyboard overrun");
+                return -1;
+            }
+                
+        }
+
+        file_buffer[buff_head] = c;
+        buff_head = (buff_head + 1) % BUFFER_SIZE;
+    }
+    return 0;
+}
+
 
 static void append_event(const struct kbevent* ev) {
     if(ev->type == KEYRELEASED && ev->scancode == PS2KB_ESCAPE)
         lazy_shutdown = 1;
     
     else if(ev->type == KEYPRESSED && ev->keycode != 0) {
-        if((buff_head + 1) % BUFFER_SIZE == buff_tail) {
-            log_warn("ps2 keyboard overrun");
-            return;
-        }
-        else {
-            if(ctrl_state) {
-                // insert the shifted escape code
-                file_buffer[buff_head] = 0xff;
+        
+        
+        if(ev->scancode & ~0xff) {// sequence
+            uint32_t kc = ev->keycode;
+            
+            for(int i = 0; i < 4; i++) {
+                char c = kc & 0xff;
+                kc >>= 8;
+                if(c == '\0')
+                    break;
 
-                buff_head = (buff_head + 1) % BUFFER_SIZE;
 
-                if((buff_head + 1) % BUFFER_SIZE == buff_tail) {
-                    log_warn("ps2 keyboard overrun");
-                    return;
-                }
-                   
+                append_char(c);
             }
-
-            file_buffer[buff_head] = ev->keycode;
-            buff_head = (buff_head + 1) % BUFFER_SIZE;
         }
+        else
+            append_char(ev->keycode);
     }
 }
 
@@ -146,13 +170,21 @@ static int process_leds(uint8_t b) {
 
 static void process_byte(uint8_t b) {
 
+    // if non 0, a sequence is running
+    static int seq = 0;
+
+
     if(b == 0xFA) // ACK
         return;
-    else if(b == 0xFE) { // resend
-        // well shit
+    else if(b == 0xFE) { // error
         log_warn("something went wrong with the keyboard");
         return;
     } 
+    else if(b == 0xE0) {
+        // sequence
+        seq = 1;
+        return;
+    }
     else if(process_leds(b))
         return;
     struct kbevent ev = {
@@ -176,8 +208,35 @@ static void process_byte(uint8_t b) {
         ctrl_state = ev.type;        
     }
 
+    //if(ev.type)
 
-    if(altgr_state)
+
+    if(seq) {
+        switch(ev.scancode) {
+                break;
+            case 0x48: // up cursor
+                ev.keycode = *(uint32_t*)("\x1b[A");
+                break;
+            case 0x50: // down cursor
+                ev.keycode = *(uint32_t*)("\x1b[B");
+                break;
+            case 0x4d: // right cursor
+                ev.keycode = *(uint32_t*)("\x1b[C");
+                break;
+            case 0x4b: // left cursor
+                ev.keycode = *(uint32_t*)("\x1b[D");
+                break;
+            default:
+                ev.keycode = 0;
+                break;
+        }
+        ev.scancode |= (0xE0 << 8);
+
+        char* s = &ev.keycode;
+        seq = 0;
+    }
+
+    else if(altgr_state)
         ev.keycode = ps2_azerty_table_altgr    [ev.scancode];
     else if(is_caps())
         ev.keycode = ps2_azerty_table_uppercase[ev.scancode];
