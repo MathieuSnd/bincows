@@ -8,11 +8,6 @@
 #define MAX_TID 0xffff
 
 
-// blocking the current thread consists
-// in triggering a special software
-// interrupt that changes the thread state
-#define BLOCK_IRQ 46
-
 // a yield consists in a software interrupt
 // that just schedules
 #define YIELD_IRQ 47
@@ -161,7 +156,7 @@ pid_t sched_current_pid(void);
 tid_t sched_current_tid(void);
 
 
-void sched_register_ready_thread(pid_t pid, tid_t tid);
+void sched_emplace_ready_thread(pid_t pid, tid_t tid);
 
 
 /**

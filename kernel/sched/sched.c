@@ -196,6 +196,23 @@ static td_t pqueue_pop(void) {
 }
 
 
+// push an element backward
+static void pqueue_unpop(td_t thread) {
+    assert(!interrupt_enable());
+
+
+    if((pqueue.tail + 1) % pqueue.cap == pqueue.head) // queue full
+        pqueue_expand();
+
+    pqueue.head = pqueue.head - 1;
+
+    if(pqueue.head < 0)
+        pqueue.head = pqueue.cap - 1;
+    
+
+    pqueue.buffer[pqueue.head] = thread;
+}
+
 /*
 // remove a thread from the queue
 static int pqueue_remove(td_t thread) {
@@ -225,59 +242,8 @@ static int pqueue_remove(td_t thread) {
 */
 
 
-void sched_register_ready_thread(pid_t pid, tid_t tid) {
-    uint64_t rf = get_rflags();
-    _cli();
-
-
-    // add the thread
-    td_t td = {
-        .pid=pid,
-        .tid=tid,
-    };
-    
-
-    n_ready_threads++;    
-
-    set_rflags(rf);
-
-}
-
-
-
 static void yield_irq_handler(struct driver* unused) {
     (void) unused;
-
-    schedule();
-}
-
-
-static void block_irq_handler(struct driver* unused) {
-    (void) unused;
-
-    process_t* p = sched_current_process();
-    assert(p);
-
-    thread_t* t = sched_get_thread_by_tid(p, current_tid);
-
-    if(t->state == READY) {
-        // the approch is optimistic
-        // a processor could have executed 
-        // the thread. This is why the block function
-        // should be executed in a loop.
-
-        // the thread will eventually block.
-
-        // @todo it doesn't work if the thread
-        // gets unblocked before it is actually blocked!!
-        // it can be avoided with a "soft_blocked" flag
-        t->state = BLOCKED;
-
-        n_ready_threads--;
-    }
-    // else, don't do anything
-
-    spinlock_release(&p->lock);
 
     schedule();
 }
@@ -306,14 +272,12 @@ static process_t* add_process(void) {
 
 
 
-
 void sched_init(void) {
     // init syscall stacks
     syscall_stacks = malloc(sizeof(void*) * get_smp_count());
 
     // init the virtual yield IRQ 
     register_irq(YIELD_IRQ, yield_irq_handler, 0);
-    register_irq(BLOCK_IRQ, block_irq_handler, 0);
 
     // add the kernel process
     _cli();
@@ -518,15 +482,10 @@ pid_t sched_create_process(pid_t ppid, const void* elffile,
 }
 
 
-void sched_launch_process(process_t* p) {
-    assert(p->n_threads == 1);
-    p->threads[0].state = READY;
-    n_ready_threads++;
-}
 
 void sched_launch_thread(thread_t* t) {
     t->state = READY;
-    n_ready_threads++;
+    sched_emplace_ready_thread(t->pid, t->tid);    
 }
 
 
@@ -550,75 +509,17 @@ int sched_kill_process(pid_t pid, int status) {
 
     for(unsigned i = 0; i < process->n_threads; i++) {
         thread_t* thread = &process->threads[i];
-
-        if(thread->state == RUNNING) {
-            // we can't kill a running process
-            // we must wait for it to finish
-
             // we do a lazy kill
 
+        thread->should_exit = 1;
+
+        if(thread->state == RUNNING) {
             // @todo send an IPI to the thread cpu
-            // to force it to stop earlier
-            
-            thread->should_exit = 1;
-            running = 1;
-        }
-        else if(thread->state == READY) {
-            // remove it from the ready queue
-            // and free the thread
-
-            thread_terminate(thread, status);
-            n_ready_threads--;
-
-
-            // remove the element from the list
-            *thread = process->threads[process->n_threads - 1];
-            process->n_threads--;
-
-            if(process->n_threads == 0)
-                free(process->threads);
-
-            log_debug("thread %d terminated", thread->tid);
+            // to force it to stop earlier?
         }
     }
 
-
-
-    if(!running) {
-        // no running thread, we can kill the process
-
-        // remove the process from the list
-        // and free it
-
-        // avoid deadlocks:
-        // we must release the process lock 
-        // before taking the sched lock
-        // as a process could be concurrently
-        // try to take the sched lock
-        // and then try to take the process lock
-
-        pid_t pid = process->pid;
-        spinlock_release(&process->lock);
-
-        
-        remove_process(pid);
-
-
-
-        // the process has been successfully removed
-        // from the list. Thus, noone can fetch it.
-        // though it is still be taken
-        //spinlock_acquire(&sched_lock);
-
-
-
-    }
-    else {
-        // we can't kill the process
-        // we must wait for it to finish
-        spinlock_release(&process->lock);
-    }
-
+    spinlock_release(&process->lock);
     _sti();
 
     // success
@@ -670,8 +571,17 @@ void  sched_save(gp_regs_t* rsp) {
 
         assert(t);
 
-        n_ready_threads++;
-        t->state = READY;
+
+        if(t->should_block) {
+            t->should_block = 0;
+            t->state = BLOCKED;
+        }
+        else {
+            t->state = READY;
+            sched_emplace_ready_thread(current_pid, current_tid);
+        }
+
+
         t->rsp = rsp;
 
         // save page table
@@ -679,7 +589,6 @@ void  sched_save(gp_regs_t* rsp) {
 
         // release process lock
         spinlock_release(&p->lock);
-
     }
 }
 
@@ -792,7 +701,6 @@ void sched_cleanup(void) {
             thread_t* t = &p->threads[j];
 
             thread_terminate(t, 1);
-            n_ready_threads--;
         }
 
         p->n_threads = 0;
@@ -920,7 +828,7 @@ static void choose_next(process_t** pr, thread_t** th) {
 }
 
 
-void sched_register_ready_thread(pid_t pid, tid_t tid) {
+void sched_emplace_ready_thread(pid_t pid, tid_t tid) {
     uint64_t rf = get_rflags();
     _cli();
     spinlock_acquire(&sched_lock);
@@ -938,6 +846,42 @@ void sched_register_ready_thread(pid_t pid, tid_t tid) {
     spinlock_release(&sched_lock);
     set_rflags(rf);
 }
+
+static void unpop_ready_thread(pid_t pid, tid_t tid) {
+    uint64_t rf = get_rflags();
+    _cli();
+    spinlock_acquire(&sched_lock);
+
+
+    td_t thread = {
+        .pid = pid,
+        .tid = tid,
+    };
+
+    pqueue_unpop(thread);
+    n_ready_threads--;
+
+    
+    spinlock_release(&sched_lock);
+    set_rflags(rf);
+}
+
+static td_t pop_ready_thread(void) {
+    uint64_t rf = get_rflags();
+    _cli();
+    spinlock_acquire(&sched_lock);
+
+
+    td_t thread = pqueue_pop();
+    n_ready_threads--;
+
+    
+    spinlock_release(&sched_lock);
+    set_rflags(rf);
+
+    return thread;
+}
+
 
 
 #define RR_TIME_SLICE_MS 10
@@ -998,11 +942,18 @@ void sched_irq_ack(void) {
             schedule();
         }   
 
-        n_ready_threads--;
-        t->state = RUNNING;
+        // @todo remove the thread from the ready queue
+        // and run it
+        //t->state = RUNNING;
+
+        // for now, just reschedule....
         
         // release process lock
         spinlock_release(&p->lock);
+
+
+        // for now, just reschedule....
+        schedule();
     }
 
     irq_end();
@@ -1011,7 +962,6 @@ void sched_irq_ack(void) {
 
 
 void sched_block(void) {
-
     assert(!currently_in_irq);
 
     if(!sched_running) {
@@ -1019,11 +969,34 @@ void sched_block(void) {
         return;
     }
 
+
     // the kernel process must not be blocked
     // because it the idle process
     assert(current_pid != KERNEL_PID);
 
-    asm volatile("int $" XSTR(BLOCK_IRQ));    
+
+    uint64_t rf = get_rflags();
+
+    process_t* p = sched_get_process(current_pid);
+    thread_t* t = sched_get_thread_by_tid(p, current_tid);
+
+    // we set the should_block flag so when the soft interrupt
+    // fires, the process is marked blocked and not placed
+    // in the ready queue
+
+    t->should_block = 1;
+
+    spinlock_release(&p->lock);
+
+
+    asm volatile("int $" XSTR(YIELD_IRQ));    
+    
+    // in some cases (the sleep function),
+    // it is important that no interrupt hits before the thread
+    // blocks.
+    // so we must restore irqs after the int instructuin
+
+    set_rflags(rf);
 }
 
 
@@ -1060,9 +1033,9 @@ void sched_unblock_thread(thread_t* t) {
     }
 
     t->state = READY;
-
-    n_ready_threads++;
+    sched_emplace_ready_thread(t->pid, t->tid);
 }
+
 
 void sched_unblock(pid_t pid, tid_t tid) {
     // at initialization, this function is called
@@ -1072,7 +1045,6 @@ void sched_unblock(pid_t pid, tid_t tid) {
     //    return;
     //}
 
-    //log_info("unblocking %d:%d %d", pid, tid,n_ready_threads);
 
     uint64_t rf = get_rflags();
     _cli();
@@ -1139,31 +1111,21 @@ void schedule(void) {
         
         // process is locked there
         choose_next(&p, &t);
+        n_ready_threads--;
 
         assert(p);
         assert(t);
 
         assert(p->n_threads > 0);
-        //assert(p->pid == 1);
         assert(t->tid > 0);
-        assert(t->state != RUNNING);
         assert(t->state == READY);
 
 
-        if(t->should_exit && t->state == READY) {
-            // if t->state != READY,
-            // the process might be executing already 
-            // in kernel space, on the core we are executing 
-            // right now. Thus, we can't kill it, as 
-            // our kernel stack resides in its memory.
-
+        if(t->should_exit) {
             // lazy thread kill 
-            // we must kill the thread
-            // and free it
             // lock the process
 
             thread_terminate(t, t->exit_status);
-            n_ready_threads--;
             
             // remove the element from the list
             *t = p->threads[p->n_threads - 1];
@@ -1227,7 +1189,6 @@ void schedule(void) {
     assert(t->state == READY);
 
     t->state = RUNNING;
-    n_ready_threads--;
 
     
     current_pid = p->pid;
@@ -1300,9 +1261,10 @@ static void kernel_process_shutdown(int do_reboot) {
     // first need to suicide this process
 
     _cli();            
-    process_t* p = sched_get_process(current_pid);
-
     assert(current_pid == KERNEL_PID);
+    process_t* p = sched_get_process(0);
+
+    assert(p);
     assert(p->n_threads == 1);
     thread_t* t = &p->threads[0];
 

@@ -90,6 +90,13 @@ struct thread {
     // scheduled
     int should_exit;
 
+
+    // if this field is set, then the thread
+    // should block when it is next 
+    // scheduled
+    int should_block;
+
+
     // if should_exit is set, this field
     // contains the exit status
     int exit_status;

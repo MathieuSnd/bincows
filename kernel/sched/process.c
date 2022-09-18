@@ -702,6 +702,7 @@ int prepare_process_signal(process_t* process, int signal) {
     assert(process->n_threads >= 1);
     assert(process->threads[0].state != RUNNING);
 
+    // main thread
     thread_t* thread0 = &process->threads[0];
 
     assert(process->sig_return_context == NULL);
@@ -886,7 +887,8 @@ int process_trigger_signal(pid_t pid, int signal) {
     }
     else {
         if(process->sig_current == NOSIG) {
-            prepare_process_signal(process, signal);
+            // @todo
+            //prepare_process_signal(process, signal);
         }
         else
             process->sig_pending |= (1 << signal);
