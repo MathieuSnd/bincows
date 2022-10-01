@@ -429,6 +429,7 @@ void* realloc(void* ptr, size_t size) {
     // mutual exclusion
     uint64_t rf = get_rflags();
     _cli();
+
     seg_header* header = ptr - sizeof(seg_header);
 
     uint32_t header_size = header->size;
@@ -436,8 +437,11 @@ void* realloc(void* ptr, size_t size) {
     if(size < header_size) {
         // its not worth reallocating
         if(size > header_size / 2 
-          || header_size-size < MIN_SEGMENT_SIZE * 2)
+          || header_size-size < MIN_SEGMENT_SIZE * 2) {
+            
+            set_rflags(rf);
             return ptr;
+        }
         
     } 
 
