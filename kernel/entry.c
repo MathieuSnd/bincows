@@ -170,7 +170,10 @@ disk_part_t* find_main_part(const struct stivale2_struct_tag_boot_volume* boot_v
         (boot_volume_tag != NULL) ? &boot_volume_tag->part_guid: NULL;
 
 
-    disk_part_t* part = find_partition(*(GUID*)part_guid);
+    disk_part_t* part = NULL;
+    if(part_guid)
+        part = find_partition(*(GUID*)part_guid);
+        
     if(part)
         log_info("main partition found");
     if(!part) {
@@ -480,6 +483,11 @@ void _start(struct stivale2_struct *stivale2_struct) {
     
     puts(log_get());
 
+    log_info("screen resolution: %ux%u", 
+            framebuffer_tag->framebuffer_width,
+            framebuffer_tag->framebuffer_height
+    );
+
     hpet_init();
     apic_setup_clock();
 
@@ -500,6 +508,10 @@ void _start(struct stivale2_struct *stivale2_struct) {
     assert(part);
     int r = vfs_mount(part, "/");
     assert(r != 0);
+
+    
+    // init log file
+    log_init_file("/var/log/sys.log");
 
 
     r = vfs_mount_devfs();      assert(r);
@@ -536,9 +548,6 @@ void _start(struct stivale2_struct *stivale2_struct) {
     // clear the terminal
     //printf("\x0c");
 
-    
-    // init log file
-    //log_init_file("/var/log/sys.log");
     
     // start the scheduler
     sched_start();
