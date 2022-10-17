@@ -31,6 +31,16 @@ int create_thread(
                           // it is then unblocked so registered
                           // to the scheduler
         .lock = 0,
+
+        .n_exit_hooks = 0,
+        .running_cpu_id = -1,
+        .sig_wait = 0,
+        .syscall_user_rsp = NULL,
+    // flags
+        .should_block = 0,
+        .should_exit = 0,
+        .uninterruptible = 0,
+        
     };
 
     // set the stack frame
