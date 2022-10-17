@@ -77,7 +77,7 @@ struct thread {
     // during a syscall, this field
     // saves the user rsp value before
     // the syscall. It is NULL otherwise.
-    // this is fpr signals to use a valid
+    // this is for signals to use a valid
     // stack at anytime.
     // The signal code goes bellow this field 
     // value.
@@ -85,10 +85,18 @@ struct thread {
 
     tstate_t state;
 
+
     // if this field is set, then the thread
     // is to be terminated when it is next 
     // scheduled
     int should_exit;
+
+    // if this field is set, the thread cannot
+    // be lazily killed. A signal cannot happen
+    // either. It is important to have
+    // such a flag to unsure that every system call
+    // eventually returns
+    int uninterruptible;
 
 
     // if this field is set, then the thread
