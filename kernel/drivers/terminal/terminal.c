@@ -420,7 +420,6 @@ static void esc_el(driver_t* this) {
     unsigned line_cur   = line_begin + d->cur_col;
 
     
-    const struct Char ch = make_Char(d, ' ');
 
     d->need_refresh = 1;
 
@@ -434,8 +433,6 @@ static void esc_el(driver_t* this) {
         case 1: // begin -> cursor
             begin = line_begin;
             end = line_cur;
-            for(unsigned x = line_begin; x < line_cur; x++)
-                d->char_buffer[x] = make_Char(d, ' ');
             break;
         case 2: // begin -> end
             begin = line_begin;
@@ -445,8 +442,9 @@ static void esc_el(driver_t* this) {
             return;
     }
 
+    const struct Char empty_ch = make_Char(d, ' ');
     for(unsigned x = begin; x < end; x++)
-        d->char_buffer[x] = make_Char(d, ' ');
+        d->char_buffer[x] = empty_ch;
 }
 
 
@@ -602,12 +600,12 @@ static void print_char(driver_t* this,
     int y = d->margin_top + line * TERMINAL_LINE_HEIGHT;
     int x = d->margin_left + col * TERMINAL_FONTWIDTH;
 
-    if(y > dev->height) {
+    if(y > (int) dev->height) {
         for(;;)
             error = 3;
     }
 
-    if(x > dev->width) {
+    if(x > (int) dev->width) {
         for(;;)
             error = 4;
     }
@@ -735,6 +733,13 @@ static void append_string(const char *string, size_t length) {
 
 
 void write_string(driver_t* this, const char *string, size_t length) {
+    // writes to /dev/term and write_stirng() calls
+    // must by syncrhonized
+    // @todo add a lock
+
+    uint64_t rf = get_rflags();
+    _cli();
+
     struct data* restrict d = this->data;
     d->need_refresh = false;
 
@@ -758,6 +763,9 @@ void write_string(driver_t* this, const char *string, size_t length) {
         flush_screen(this);
     
     free(buf);
+
+
+    set_rflags(rf);
 }
 
 
