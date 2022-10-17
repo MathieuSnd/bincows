@@ -26,7 +26,7 @@ int sigsetup(signal_end_fun_t sigend, sighandler_t* handler_table) {
 void sigreturn(void) {
     syscall(SC_SIGRETURN, NULL, 0);
 
-    printf("sigreturn: should never reach this point\n");
+    printf("sigreturn: unreachable code reached\n");
     for(;;);
 }
 
