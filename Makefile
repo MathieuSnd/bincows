@@ -1,5 +1,5 @@
 
-.PHONY: clean all run disk kernel force_look threaded_build native_disk test
+.PHONY: clean all run disk kernel force_look threaded_build native_disk test programs lib
 
 HDD_ROOT := disc_root 
 DISK_FILE := disk.bin
@@ -22,13 +22,14 @@ KERNEL_TARGET := debug
 
 
 QEMU_COMMON_ARGS := -bios ./ovmf/OVMF.fd \
-			 -m 8192 \
+			 -m 128 \
 			 -M q35 \
-			 -vga virtio \
 			 -no-reboot  -no-shutdown \
 			 -D qemu.log \
+			 -d int \
 			 -device nvme,drive=NVME1,serial=deadbeef \
 			-drive format=raw,if=none,id=NVME1,file=disk.bin \
+			 -vga virtio -full-screen \
 
 # -trace "pci_nvme_*" \
 			 -trace "apic_*" \
@@ -53,6 +54,8 @@ native_disk: all
 
 
 all: diskfile
+	make -C ./blib
+	make -C programs
 
 
 prun: kernel $(PARTITION)
@@ -71,6 +74,11 @@ pdebug: $(PARTITION)
 	$(QEMU_PATH) $(QEMU_ARGS) 
 
 
+programs: force_look
+	make -C programs
+
+lib: force_look
+	make -C blib
 
 threaded_build:
 	make -j all
@@ -82,7 +90,7 @@ $(PARTITION): kernel
 
 
 $(DISK_FILE): kernel/entry.c
-	dd if=/dev/zero bs=1M count=0 seek=513 of=$(DISK_FILE)
+	dd if=/dev/zero bs=1M count=0 seek=1024 of=$(DISK_FILE)
 	sudo /sbin/parted -s $(DISK_FILE) mklabel gpt
 	sudo /sbin/parted -s $(DISK_FILE) mkpart Bincows fat32 0% 100%
 	sudo /sbin/parted -s $(DISK_FILE) set 1 esp on
@@ -102,6 +110,25 @@ diskfile: kernel $(DISK_FILE)
 	
 	sudo /sbin/losetup -d $(USED_LOOPBACK)
 	rm -rf img_mount
+
+
+	echo ok
+
+
+remount_disk:
+	sudo losetup -P $(USED_LOOPBACK) $(DISK_FILE)
+	
+	mkdir -p ./disk_output
+
+	sudo mount $(USED_LOOPBACK)p1 ./disk_output/
+
+
+demount_disk:
+	sudo umount ./disk_output/
+
+	sudo /sbin/losetup -d $(USED_LOOPBACK)
+	rmdir ./disk_output
+
 
 
 kernel: force_look
