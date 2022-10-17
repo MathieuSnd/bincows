@@ -2,7 +2,7 @@
 
 .PHONY: all clean debug release
 
-BIN_FILE:=blib.a
+BIN_FILE:=blibc.a
 
 PREFIX := /home/mathieu/opt/cross/x86_64-elf/bin/
 CC     := $(PREFIX)x86_64-elf-gcc

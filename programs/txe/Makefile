@@ -2,7 +2,7 @@
 
 ELF:=txe.elf
 
-INCLUDE_DIR=../../blib/include
+INCLUDE_DIR=../../blibc/include
 
 include ../Makefile.config
 
@@ -17,9 +17,9 @@ all: $(ELF)
 	echo $(OBJS)
 
 $(ELF): $(OBJS)
-	$(LD) -static $(OBJS) ../../blib/blib.a -o $(ELF)
+	$(LD) -static $(OBJS) ../../blibc/blibc.a -o $(ELF)
 
-%.o: %.c ../blib/blib.a
+%.o: %.c ../blibc/blibc.a
 	$(CC) $(CFLAGS) -c $< -o $@.o
 
 

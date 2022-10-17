@@ -51,7 +51,7 @@ native_disk_simu: compile
 			-drive format=raw,if=none,id=NVME2,file=/dev/nvme0n1
 
 
-compile: blib programs
+compile: blibc programs
 
 
 test: force_look
@@ -66,7 +66,7 @@ programs: force_look
 	make -C programs
 
 lib: force_look
-	make -C blib
+	make -C blibc
 
 threaded_compile:
 	make -j compile
@@ -117,7 +117,7 @@ kernel: force_look
 	$(MAKE) -C ./kernel/ $(KERNEL_TARGET)
 
 clean:
-	$(MAKE) clean -C blib
+	$(MAKE) clean -C blibc
 	$(MAKE) clean -C programs
 	$(MAKE) clean -C kernel
 	rm -f $(IMAGE_FILE)

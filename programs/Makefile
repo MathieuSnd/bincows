@@ -2,7 +2,7 @@
 
 .PHONY: all clean release debug txe
 
-INCLUDE_DIR:= ../blib/include
+INCLUDE_DIR:= ../blibc/include
 
 include Makefile.config
 
@@ -32,7 +32,7 @@ all: $(EFILES) txe
 
 %.elf: %.c
 	$(CC) $(CFLAGS) -c $< -o $@.o
-	$(LD) -static $@.o ../blib/blib.a -o $@ 
+	$(LD) -static $@.o ../blibc/blibc.a -o $@ 
 
 clean:
 	rm -rf *.s *.elf
@@ -48,7 +48,7 @@ force_look:
 
 
 
-../blib/blib.a:
+../blibc/blibc.a:
 
-#../blib/blib.a: ../blib/blib.a
-#	$(MAKE) -C ../blib/
+#../blibc/blibc.a: ../blibc/blibc.a
+#	$(MAKE) -C ../blibc/
