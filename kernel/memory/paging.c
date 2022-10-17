@@ -765,8 +765,10 @@ void unmap_pages(uint64_t virtual_addr, size_t count, int free) {
                 panic(buff);
             }
 
-            if(free) 
-                physfree(extract_pointer(*entry_ptr));
+            if(free) {
+                uint64_t paddr = (uint64_t)extract_pointer(*entry_ptr);
+                physfree(paddr);
+            }
 
             // actually erase the entry
             *entry_ptr = 0;

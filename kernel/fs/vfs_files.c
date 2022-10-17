@@ -76,7 +76,7 @@ struct file_ent {
 
     // number of distincs file handlers
     // associated with this file
-    unsigned n_insts;
+    int n_insts;
 
     // list of all file handlers
     // pointing to this file
@@ -316,7 +316,7 @@ void invalidate_handlers_buffer(
     if(!ent->fs->cacheable)
         return;
 
-    for(unsigned i = 0; i < ent->n_insts; i++) {
+    for(int i = 0; i < ent->n_insts; i++) {
         if(ent->fhs[i] != protected)
             ent->fhs[i]->buffer_valid = 0;
     }
@@ -410,6 +410,7 @@ file_handle_t* vfs_handle_dup(file_handle_t* from) {
     new->sector_offset = from->sector_offset;
     new->sector_buff   = new + 1;
 
+    // @todo lock FS operation
     fs->n_open_files++;
 
 
@@ -538,6 +539,9 @@ void vfs_close_file(file_handle_t *handle) {
 
     open_file->n_insts--;
 
+
+    assert(open_file->n_insts >= 0);
+
     // when the file is closed, we 
     // should flush it to disk
     if(handle->flags & VFS_WRITE)
@@ -555,7 +559,6 @@ void vfs_close_file(file_handle_t *handle) {
         free(open_file->fhs);
 
         uint64_t addr = open_file->addr;
-
 
 
         // remove open_file from 
@@ -749,7 +752,7 @@ size_t vfs_read_file(void *ptr, size_t size,
     aquire_file_access(stream->vfile_id);
 
     assert(stream);
-    assert(ptr >= 0x1000);
+    assert((uint64_t)ptr >= 0x1000);
     
 
     void *const buf = stream->sector_buff;
@@ -949,7 +952,7 @@ size_t vfs_write_file(const void *ptr, size_t size, size_t nmemb,
     aquire_file_access(stream->vfile_id);
     
     assert(stream);
-    assert(ptr >= 0x1000);
+    assert((uint64_t)ptr >= 0x1000);
 
     void *const buf = stream->sector_buff;
 

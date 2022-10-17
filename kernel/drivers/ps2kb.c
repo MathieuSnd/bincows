@@ -232,7 +232,6 @@ static void process_byte(uint8_t b) {
         }
         ev.scancode |= (0xE0 << 8);
 
-        char* s = &ev.keycode;
         seq = 0;
     }
 
