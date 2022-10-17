@@ -11,7 +11,7 @@ void thread_entry(const char* print) {
     for(;;) {
         printf("%s!\n", print);
 
-        usleep(500);
+        usleep(0);
     }
 }
 
@@ -27,8 +27,10 @@ int main() {
     _thread_create(thread_entry, "thread 1");
     usleep(0);
     _thread_create(thread_entry, "thread 2");
-    for(int i = 0; i < 10; i++) {
+
+    
+    for(int i = 0; i < 0; i++) {
         printf("thread 0\n");
-        usleep(500);
+        usleep(0);
     }
 }

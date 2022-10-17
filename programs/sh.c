@@ -440,6 +440,8 @@ void sigchld_handler(int s) {
         return;
     }
 
+    //printf("sh: sigchld_handler\n");
+
     sigchld_flag = 1;
     print_prompt();
 }
