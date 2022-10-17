@@ -1,4 +1,5 @@
 #include "../lib/assert.h"
+#include "../lib/time.h"
 #include "../memory/heap.h"
 #include "../memory/vmap.h"
 #include "../memory/paging.h"
@@ -109,7 +110,6 @@ static int create_main_thread(process_t* process) {
     assert(process->n_threads == 0);
     assert(!interrupt_enable());
 
-    log_warn("CREATE MAIN THREAD %u", process->pid);
 
     void* stack_base = alloc_stack(process);
 
@@ -267,6 +267,7 @@ int create_kernel_process(process_t* process) {
         .state = BLOCKED,
         .running_cpu_id = 0,
         .should_exit = 0,
+        .uninterruptible = 0,
         .stack = (stack_t) {
             .base = NULL,
             .size = 0,
@@ -695,6 +696,10 @@ int prepare_process_signal(process_t* process, int signal) {
 
     process->sig_current = signal;
 
+    
+    // the signal should be pending
+    assert((process->sig_pending & (1 << signal)) != 0);
+
     // disable pending bit
     process->sig_pending ^= (1 << signal);
 
@@ -709,7 +714,6 @@ int prepare_process_signal(process_t* process, int signal) {
 
 
     process->sig_return_context = thread0->rsp;
-
 
     ////////////////////////////////////////////////
     //////////////// return address ////////////////
@@ -772,12 +776,43 @@ int prepare_process_signal(process_t* process, int signal) {
     assert(process->sig_table[signal]);
     thread0->rsp->rip = (uint64_t)process->sig_table[signal];
 
+
+    // cancel the thread sleep if it is sleeping
+    sleep_cancel(process->pid, process->threads[0].tid);
+    
     // unblock the thread if blocked
+    // sleep_cancel will unblock the sleep of
+    // the thread if it is sleeping, but
+    // we want to unblock it even if it is
+    // not sleeping
     if(process->threads[0].state == BLOCKED)
         sched_unblock_thread(&process->threads[0]);
 
-
     return 0;
+}
+
+
+int process_handle_signal(process_t* process) {
+    assert(!interrupt_enable());
+    assert(process->lock);
+    assert(process->n_threads > 0);
+    
+    if(process->sig_pending == 0)
+        return -1;
+    if(process->sig_current != NOSIG)
+        return -1;
+    if(process->threads[0].uninterruptible)
+        return -1;
+
+    // returns 1 + the index of the least significant 
+    // non null bit of sig_pending
+    int bit = __builtin_ffs(process->sig_pending);
+
+    assert(bit);
+
+    int which = bit - 1;
+
+    return prepare_process_signal(process, which);
 }
 
 
@@ -813,13 +848,12 @@ int process_end_of_signal(process_t* process) {
     // clear the sig_current field
     process->sig_current = NOSIG;
 
-    spinlock_release(&process->lock);
-
     // don't return from the system call,
     // directly jump to the code
-    _restore_context(process->threads[0].rsp);
-
-    __builtin_unreachable();
+//    _restore_context(process->threads[0].rsp);
+//
+//    __builtin_unreachable();
+    return 0;
 }
 
 
@@ -886,12 +920,12 @@ int process_trigger_signal(pid_t pid, int signal) {
         // signal ignored
     }
     else {
-        if(process->sig_current == NOSIG) {
-            // @todo
-            //prepare_process_signal(process, signal);
-        }
-        else
-            process->sig_pending |= (1 << signal);
+        assert(process->n_threads > 0);
+        process->sig_pending |= (1 << signal);
+
+        if(process->sig_current == NOSIG 
+        && process->threads[0].uninterruptible)
+;//            prepare_process_signal(process, signal);
     }
 
     // unblock threads that wait for a signal if necessary

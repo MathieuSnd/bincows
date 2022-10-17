@@ -22,7 +22,13 @@
 
 typedef uint64_t(*sc_fun_t)(process_t*, void*, size_t);
 
+
 static sc_fun_t sc_funcs[SC_END];
+
+
+static void enable_signals   (process_t* process, tid_t tid);
+static void redisable_signals(process_t* process, tid_t tid);
+static void thread_leave_syscall(process_t* process, tid_t tid);
 
 static inline void sc_warn(const char* msg, void* args, size_t args_sz) {
     (void) args;
@@ -115,8 +121,6 @@ static char* get_absolute_path(const char* cwd, const char* path) {
 }
 
 
-
-
 static uint64_t sc_unimplemented(process_t* proc, void* args, size_t args_sz) {
     (void) proc;
 
@@ -137,10 +141,23 @@ static uint64_t sc_sleep(process_t* proc, void* args, size_t args_sz) {
 
     uint64_t ms = *(uint64_t*)args;
 
+// this syscall is cancellable
+// it means that it should be possible that a signal occur  
+// when the thread is put to sleep
+    enable_signals(proc, sched_current_tid());
+    
+// not essential, needed for both sched_yield and sleep
+// because yielding or sleeping with interrupts disabled
+// is error prone.
+    _sti();
     if(ms == 0)
         sched_yield();
     else 
         sleep(*(uint64_t*)args);
+
+    assert(!proc->lock);
+
+    redisable_signals(proc, sched_current_tid());
 
 
     return 0;
@@ -217,21 +234,19 @@ static uint64_t sc_exit(process_t* proc, void* args, size_t args_sz) {
 
     uint64_t status = *(uint64_t*)args;
 
+    assert(interrupt_enable() && "FKK");
+
     sched_kill_process(sched_current_pid(), status);
     // every thread (including the current one)
-    // is marked as exited.d
+    // is marked as exited.
     // the process will is killed by the scheduler
 
     // atomically mark the current thread as ready
-    /*
-    _cli();
-    spinlock_acquire(&proc->lock);
-    proc->threads[sched_current_tid()].state = READY;
-    spinlock_release(&proc->lock);
 
-
+    thread_leave_syscall(proc, sched_current_tid());
+    
+    // not essential
     _sti();
-*/
 
     sched_yield();
 
@@ -445,7 +460,6 @@ static uint64_t sc_exec(process_t* proc, void* args, size_t args_sz) {
 
 
         new_proc = sched_get_process(p);
-
     }
 
     // here, new_proc is currently mapped in memory
@@ -487,7 +501,7 @@ static uint64_t sc_exec(process_t* proc, void* args, size_t args_sz) {
     _sti();
 
 
-    // unblock the process
+    // unblock the process's main thread
     sched_unblock(new_pid, 1);
     
 
@@ -593,6 +607,7 @@ static uint64_t sc_open(process_t* proc, void* args, size_t args_sz) {
 
         struct DIR* dir = vfs_opendir(path);
 
+        assert(interrupt_enable());
 
         if(dir) {
             proc->fds[fd].dir = dir;
@@ -632,6 +647,7 @@ static uint64_t sc_open(process_t* proc, void* args, size_t args_sz) {
     free(path);
     // insert h in the process file handles
 
+    assert(interrupt_enable());
 
     return fd;
 }
@@ -1150,7 +1166,7 @@ uint64_t sc_sigsetup(process_t* proc, void* args, size_t args_sz) {
 
 
 
-uint64_t sc_sigretrn(process_t* proc, void* args, size_t args_sz) {
+uint64_t sc_sigreturn(process_t* proc, void* args, size_t args_sz) {
     if(args_sz != 0) {
         sc_warn("bad args_sz", args, args_sz);
         return -1;
@@ -1162,11 +1178,41 @@ uint64_t sc_sigretrn(process_t* proc, void* args, size_t args_sz) {
     spinlock_acquire(&proc->lock);
     {
         res = process_end_of_signal(proc);
+        assert(!interrupt_enable());
     }
-    spinlock_release(&proc->lock);
-    _sti();
 
-    return res;
+    gp_regs_t* context = proc->threads[0].rsp;
+    spinlock_release(&proc->lock);
+
+
+    
+    if(res) {
+        // error: no context switch happens, 
+        // the system call returns
+        _sti();
+
+        // @todo: test calling sig_return not from a signal
+        // handler
+
+        sc_warn("signal return failed", args, args_sz);
+
+        return res;
+    }
+    else {
+        // process_end_of_signal succeeded:
+        // the system call shall not return
+        // instead, exit from syscall and yield
+        thread_leave_syscall(proc, sched_current_tid());
+
+
+        _restore_context(context);
+        //sched_yield();
+
+        // unreachable code
+        assert(0 && "unreachable");
+        panic("unreachable");
+    }
+    panic("unreachable");
 }
 
 
@@ -1227,7 +1273,6 @@ uint64_t sc_thread_create(process_t* proc, void* args, size_t args_sz) {
     void* entry    = a->entry;
     void* argument = a->argument;
 
-    uint64_t res;
     return sched_create_thread(proc->pid, entry, argument);
 }
 
@@ -1241,6 +1286,10 @@ extern void syscall_entry(void);
 
 void syscall_init(void) {
 
+
+    ///////////////////////
+    ////// SC_FUNCS //////
+    ///////////////////////
 
     for(unsigned i = 0; i < SC_END; i++)
         sc_funcs[i] = sc_unimplemented;
@@ -1265,9 +1314,10 @@ void syscall_init(void) {
     sc_funcs[SC_GETPID]    = sc_getpid;
     sc_funcs[SC_GETPPID]   = sc_getppid;
     sc_funcs[SC_SIGSETUP]  = sc_sigsetup;
-    sc_funcs[SC_SIGRETURN] = sc_sigretrn;
+    sc_funcs[SC_SIGRETURN] = sc_sigreturn;
     sc_funcs[SC_SIGKILL]   = sc_kill;
     sc_funcs[SC_SIGPAUSE]  = sc_pause;
+
 
 
     /*
@@ -1317,40 +1367,149 @@ char* scname[] = {
     "SEEK", 
     "ACCESS",
     "DUP", 
+    "PIPE", 
     "THREAD_CREATE", 
-    "JOIN_THREAD", 
-    "EXIT_THREAD", 
+    "THREAD_JOIN", 
+    "THREAD_EXIT", 
     "SBRK", 
     "FORK", 
     "EXEC", 
     "CHDIR", 
     "GETCWD", 
-    "GETPID", 
-    "GETPPID",
-    "SC_SIGSETUP", 
-    "SC_SIGRETURN",
-    "SC_SIGKILL",
-    "SC_SIGPAUSE",
+    "GETPID",
+    "GETPPID", 
+    "SIGSETUP",
+    "SIGRETURN",
+    "SIGKILL",
+    "SIGPAUSE",
 };
-
-
-// called from syscall_entry
-uint64_t syscall_main(uint8_t scid, void* args, size_t args_sz, uint64_t* user_sp) {
-
-
-    process_t* process = sched_current_process();
-
+// a thread with tid must exist
+// user_sp: saved syscall user stack pointer
+static 
+void thread_enter_syscall(process_t* process, tid_t tid, uint64_t* user_sp) {
+    assert(!interrupt_enable());
+    
+    thread_t* t = sched_get_thread_by_tid(process, tid);
 
     // save the user stack pointer of the thread
     // while the irqs are still disable
-    thread_t* t = sched_get_thread_by_tid(process, sched_current_tid());
-
     t->syscall_user_rsp = user_sp;
 
 
+    // a thread cannot be terminated during a system call
+    assert(!t->uninterruptible);
+
+
+    if(t->should_exit) {
+        // shortcut: the thread is marked
+        // as lazy killed, so there is no point in
+        // executing the system call.
+
+        spinlock_release(&process->lock);
+        _sti();
+        sched_yield();
+
+        panic("unreachable");
+    }
+    t->uninterruptible = 1;
+}
+
+
+// this function must be called at the end of the syscall.
+// even if the system call terminates the current thread, it 
+// must call this function beforehand.
+// it leaves the intererupts disabled
+// it is important that the interrupts don't get enabled 
+// before the end of the system call
+// @todo unsure that its the case
+static void thread_leave_syscall(process_t* process, tid_t tid) {
+    // disable interrupts if not already
+    // to swich to the user stack
+    _cli();
+    
+    spinlock_acquire(&process->lock);
+
+    thread_t* t = sched_get_thread_by_tid(process, tid);    
+    
+    t->syscall_user_rsp = NULL;
+    assert(t->uninterruptible);
+    t->uninterruptible = 0;
+
+    spinlock_release(&process->lock);
+}
+
+// this functions allows a signal to spawn
+// it is to call before sleeping in a cancellable 
+// system call ususally
+static void enable_signals(process_t* process, tid_t tid) {
+    // this function looks like thread_leave_syscall,
+    // but keeps t->syscall_user_rsp saved, so that
+    // a signal can find the user stack pointer
+
+    assert(interrupt_enable());
+    _cli();
+    
+    spinlock_acquire(&process->lock);
+    
+    thread_t* t = sched_get_thread_by_tid(process, tid);    
+    
+    
+    assert(t->uninterruptible);
+    t->uninterruptible = 0;
+
+    spinlock_release(&process->lock);
+
+    _sti();
+}
+
+
+
+// this functions is similar to thread_enter_syscall
+// but do not save the user RSP, as is has been already
+static
+void redisable_signals(process_t* process, tid_t tid) {
+    assert(interrupt_enable());
+
+    _cli();
+    spinlock_acquire(&process->lock);
+    
+    thread_t* t = sched_get_thread_by_tid(process, tid);
+    
+
+    assert(!t->uninterruptible);
+
+    t->uninterruptible = 1;
+
+    spinlock_release(&process->lock);
+    _sti();
+}
+
+static void handle_signal(process_t* process) {
+    assert(sched_current_tid() == 1);
+
+    enable_signals(process, 1);
+
+    sched_yield();
+
+    redisable_signals(process, 1);
+}
+
+// called from syscall_entry
+uint64_t syscall_main(uint8_t   scid, 
+                      void*     args, 
+                      size_t    args_sz, 
+                      uint64_t* user_sp
+) {
+    // syscall_main is called from a safe interrupt disabled context
+    assert(!interrupt_enable());
+
+    process_t* process = sched_current_process();
+    assert(process);
+
     assert(process->pid > 0 && process->pid <= MAX_PID);
 
-    assert(process);
+
+    thread_enter_syscall(process, sched_current_tid(), user_sp);
 
     // Though we might take the lock again,
     // we don't need  to hold it here
@@ -1364,6 +1523,7 @@ uint64_t syscall_main(uint8_t scid, void* args, size_t args_sz, uint64_t* user_s
     // to be enabled again
     _sti();
 
+    uint64_t res;
 
     if(!scid && scid >= SC_END) {
         log_info("process %u, thread %u: bad syscall", sched_current_pid(), sched_current_tid());
@@ -1371,25 +1531,34 @@ uint64_t syscall_main(uint8_t scid, void* args, size_t args_sz, uint64_t* user_s
             asm ("hlt");
     }
     else {
+
         //log_debug("%u.%u: %s", sched_current_pid(), sched_current_tid(), scname[scid]);
 
         sc_fun_t fun = sc_funcs[scid];
-
         assert(fun);
-        uint64_t res = fun(process, args, args_sz);
-
-
-        // disable interrupts again
-        // to swich to the user stack
-        _cli();
         
-        spinlock_acquire(&process->lock);
-        t = sched_get_thread_by_tid(process, sched_current_tid());
-        
-        t->syscall_user_rsp = NULL;
+        res = fun(process, args, args_sz);
 
-        spinlock_release(&process->lock);
+        // fun should keep the interrupts enabled
+        assert(interrupt_enable());
 
-        return res;
+
+        //log_debug("%u.%u: %s - OK", sched_current_pid(), sched_current_tid(), scname[scid]);        
+
     }
+
+    int sig_trigger = (process->sig_pending) && (process->sig_current == NOSIG);
+
+    // the process has received a signal
+    // this is a good moment to handle it.
+    // to do so, we must yield right ater the 
+    // signal is prepared
+    if(sig_trigger) {
+        handle_signal(process);
+    }
+
+    thread_leave_syscall(process, sched_current_tid());
+
+
+    return res;
 }

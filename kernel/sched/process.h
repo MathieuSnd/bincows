@@ -8,6 +8,7 @@
 #include "../fs/vfs.h"
 
 #include "signal/signal.h"
+#include "../sync/spinlock.h"
 
 // this file describes what are processes
 
@@ -148,10 +149,24 @@ int process_register_signal_setup(
 int process_trigger_signal(pid_t pid, int signal);
 
 
-// returns 0 on success
-// should be executed when a thread reaches the
+// this function should be executed when a thread reaches the
 // end of a signal handler: on receiving a SIGRETURN system call
+// 
+// returns non 0 value on failure
+// return 0 on success
+// the interrupts must be disabled, and
+// stay disabled.
+// 
+// On success, this function replaces the thread context 
+// so the caller must exit from the system call
+// and yield so that the context is safely switched
 int process_end_of_signal(process_t* process);
+
+
+// call this function when a process has a non-0 
+// sig_pending field, and handling a signal sis safe 
+// (thread 0 is interruptible)
+int process_handle_signal(process_t* process);
 
 
 /**
