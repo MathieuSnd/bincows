@@ -122,6 +122,8 @@ void cleanup_sleeping_threads(void) {
 
 void wakeup_threads(void) {
     uint64_t rf = get_rflags();
+    assert(!interrupt_enable());
+    assert(!sleep_lock.val);
     _cli();
     spinlock_acquire(&sleep_lock);
 
@@ -173,7 +175,7 @@ void sleep(unsigned ms) {
 
     assert(interrupt_enable());
 
-    uint64_t wakeup_time = begin + ms * 1000 * 1000;
+    uint64_t wakeup_time = begin + ((uint64_t)ms) * 1000llu * 1000llu;
 
 
     if(sched_is_running()) {
@@ -204,3 +206,59 @@ void sleep(unsigned ms) {
             asm volatile("hlt");
         while (clock_ns() < wakeup_time);
 }
+
+int sleep_cancel(pid_t pid, tid_t tid) {
+    // @todo O(log(n)) algorithm:
+    // save the wakeup date for each thread to
+    // its thread structure, then give this function 
+    // this date. 
+    // As the array of sleeping threads is sorted, 
+    // it is then possible to find it on the list
+    // using a binary search.
+
+
+    uint64_t rf = get_rflags();
+    _cli();
+    spinlock_acquire(&sleep_lock);
+
+    unsigned idx = -1;
+
+    // @todo binary search on the wakeup date
+    for(unsigned i = 0; i < n_sleeping_threads; i++) {
+        sleeping_thread_t* sti = sleeping_threads + i;
+
+        if(sti->pid == pid && sti->tid == tid)
+            idx = i;
+            // found!
+    }
+
+    if(idx == -1) {
+        spinlock_release(&sleep_lock);
+        set_rflags(rf);
+        return -1;
+    }
+
+
+    // shift the array to the left
+    memmove(
+        sleeping_threads + idx, 
+        sleeping_threads + idx + 1, 
+        sizeof(sleeping_thread_t) * (n_sleeping_threads - idx - 1)
+    );
+
+    
+    n_sleeping_threads--;
+
+    spinlock_release(&sleep_lock);
+    set_rflags(rf);
+
+    // the waking up was cancelled successfuly, now wake up 
+    // immediatley the thread
+    sched_unblock(pid, tid);
+
+
+    
+    return 0;
+}
+
+
