@@ -4,14 +4,14 @@
 
 
 
-DISK_FILE             ?= disk.bin
+IMAGE_FILE            ?= disk.bin
 USED_LOOPBACK         ?= /dev/loop2
 QEMU_PATH             ?= qemu-system-x86_64
 QEMU_RAM_MB           ?= 256
 QEMU_LOG_FILE         ?= qemu.log
-QEMU_BIOS_FILE        ?= ./ovmf/OVMF.fd
+QEMU_BIOS_FILE        ?= /usr/share/ovmf/OVMF.fd
 QEMU_GRAPHICS_OPTIONS ?= -vga virtio
-QEMU_TRACE_OPTIONS    ?=
+QEMU_EXTRA_OPTIONS    ?=
 
 
 # default: passing -g -fno-inline
@@ -27,20 +27,14 @@ QEMU_ARGS := -bios $(QEMU_BIOS_FILE)   \
 			 -m    $(QEMU_RAM_MB)      \
 			 -D    $(QEMU_LOG_FILE)    \
 			 $(QEMU_GRAPHICS_OPTIONS)  \
-			 $(QEMU_TRACE_OPTIONS)	   \
 			 -d int                    \
 			 -M q35                    \
 			 -monitor stdio            \
 			 -no-reboot  -no-shutdown  \
 			 -device nvme,drive=NVME1,serial=deadbeef \
-			-drive format=raw,if=none,id=NVME1,file=$(DISK_FILE)
+			-drive format=raw,if=none,id=NVME1,file=$(IMAGE_FILE) \
+			 $(QEMU_EXTRA_OPTIONS)
 			
-
-#			 -usb \
-#			 -device usb-host \
-
-
-
 
 run_qemu: compile image_file local_disk_install
 	$(QEMU_PATH) $(QEMU_ARGS)
@@ -78,15 +72,15 @@ threaded_compile:
 	make -j compile
 
 
-$(DISK_FILE): kernel
-	dd if=/dev/zero bs=1M count=0 seek=1024 of=$(DISK_FILE)
-	sudo /sbin/parted -s $(DISK_FILE) mklabel gpt
-	sudo /sbin/parted -s $(DISK_FILE) mkpart Bincows fat32 0% 100%
-	sudo /sbin/parted -s $(DISK_FILE) set 1 esp on
+$(IMAGE_FILE): kernel
+	dd if=/dev/zero bs=1M count=0 seek=1024 of=$(IMAGE_FILE)
+	sudo /sbin/parted -s $(IMAGE_FILE) mklabel gpt
+	sudo /sbin/parted -s $(IMAGE_FILE) mkpart Bincows fat32 0% 100%
+	sudo /sbin/parted -s $(IMAGE_FILE) set 1 esp on
 
 
-image_file: kernel $(DISK_FILE)
-	sudo losetup -P $(USED_LOOPBACK) $(DISK_FILE)
+image_file: kernel $(IMAGE_FILE)
+	sudo losetup -P $(USED_LOOPBACK) $(IMAGE_FILE)
 	
 	sudo /sbin/mkfs.fat -F 32 $(USED_LOOPBACK)p1 -s 8
 	mkdir -p img_mount
@@ -104,7 +98,7 @@ image_file: kernel $(DISK_FILE)
 
 
 remount_disk:
-	sudo losetup -P $(USED_LOOPBACK) $(DISK_FILE)
+	sudo losetup -P $(USED_LOOPBACK) $(IMAGE_FILE)
 	
 	mkdir -p ./disk_output
 
@@ -126,7 +120,7 @@ clean:
 	$(MAKE) clean -C blib
 	$(MAKE) clean -C programs
 	$(MAKE) clean -C kernel
-	rm -f $(DISK_FILE)
+	rm -f $(IMAGE_FILE)
 	rm -rf build
 
 force_look:
