@@ -1,16 +1,17 @@
 
-.PHONY: clean all run disk kernel force_look threaded_build native_disk test programs lib
+.PHONY: clean all run_qemu disk kernel force_look threaded_compile\
+	    native_disk_simu local_disk_install test programs lib remake
 
-HDD_ROOT := disc_root 
-DISK_FILE := disk.bin
 
-PARTITION :=/dev/nvme0n1p5
 
-USED_LOOPBACK :=/dev/loop2
-
-LIMINE_INSTALL := ./limine-bootloader/limine-install-linux-x86_64
-
-QEMU_PATH := qemu-system-x86_64
+DISK_FILE             ?= disk.bin
+USED_LOOPBACK         ?= /dev/loop2
+QEMU_PATH             ?= qemu-system-x86_64
+QEMU_RAM_MB           ?= 256
+QEMU_LOG_FILE         ?= qemu.log
+QEMU_BIOS_FILE        ?= ./ovmf/OVMF.fd
+QEMU_GRAPHICS_OPTIONS ?= -vga virtio
+QEMU_TRACE_OPTIONS    ?=
 
 
 # default: passing -g -fno-inline
@@ -18,60 +19,53 @@ QEMU_PATH := qemu-system-x86_64
 # you can change this to 
 # 'release' to replace by
 # NDEBUG
-KERNEL_TARGET := debug
+KERNEL_TARGET ?= debug
 
 
-QEMU_COMMON_ARGS := -bios ./ovmf/OVMF.fd \
-			 -m 128 \
-			 -M q35 \
-			 -no-reboot  -no-shutdown \
-			 -D qemu.log \
-			 -d int \
+
+QEMU_ARGS := -bios $(QEMU_BIOS_FILE)   \
+			 -m    $(QEMU_RAM_MB)      \
+			 -D    $(QEMU_LOG_FILE)    \
+			 $(QEMU_GRAPHICS_OPTIONS)  \
+			 $(QEMU_TRACE_OPTIONS)	   \
+			 -d int                    \
+			 -M q35                    \
+			 -monitor stdio            \
+			 -no-reboot  -no-shutdown  \
 			 -device nvme,drive=NVME1,serial=deadbeef \
-			-drive format=raw,if=none,id=NVME1,file=disk.bin \
-			 -vga virtio -full-screen \
-
-# -trace "pci_nvme_*" \
-			 -trace "apic_*" \
-			
+			-drive format=raw,if=none,id=NVME1,file=$(DISK_FILE)
 			
 
-QEMU_ARGS := -monitor stdio $(QEMU_COMMON_ARGS)
 #			 -usb \
 #			 -device usb-host \
 
-QEMU_DEBUG_ARGS:= -no-shutdown -s -S -d int $(QEMU_COMMON_ARGS)
 
 
-run: all
-	./write_disk.sh
+
+run_qemu: compile image_file local_disk_install
 	$(QEMU_PATH) $(QEMU_ARGS)
 
-native_disk: all
+
+compile: lib programs kernel
+
+
+partition_install:
 	./write_disk.sh
+
+native_disk_simu: compile
 	sudo $(QEMU_PATH) $(QEMU_ARGS) -device nvme,drive=NVME2,serial=dead \
 			-drive format=raw,if=none,id=NVME2,file=/dev/nvme0n1
 
 
-all: diskfile
-	make -C ./blib
-	make -C programs
-
-
-prun: kernel $(PARTITION)
-	sudo $(QEMU_PATH) $(QEMU_ARGS)$(PARTITION)
+compile: blib programs
 
 
 test: force_look
 	$(MAKE) -C ./tests/
 
 
-debug: all
+debug: compile
 	$(QEMU_PATH) $(QEMU_DEBUG_ARGS)
-# gdb -x gdb_cfg ./disk_root/boot/kernel.elf
-pdebug: $(PARTITION)
-	DISK_FILE := $(PARTITION)
-	$(QEMU_PATH) $(QEMU_ARGS) 
 
 
 programs: force_look
@@ -80,31 +74,25 @@ programs: force_look
 lib: force_look
 	make -C blib
 
-threaded_build:
-	make -j all
+threaded_compile:
+	make -j compile
 
 
-$(PARTITION): kernel
-	sudo cp -r disk_root/* /media/bincows/
-#sudo $(LIMINE_INSTALL) $(PARTITION)
-
-
-$(DISK_FILE): kernel/entry.c
+$(DISK_FILE): kernel
 	dd if=/dev/zero bs=1M count=0 seek=1024 of=$(DISK_FILE)
 	sudo /sbin/parted -s $(DISK_FILE) mklabel gpt
 	sudo /sbin/parted -s $(DISK_FILE) mkpart Bincows fat32 0% 100%
 	sudo /sbin/parted -s $(DISK_FILE) set 1 esp on
-#	$(LIMINE_INSTALL) $(DISK_FILE)
 
 
-diskfile: kernel $(DISK_FILE)
+image_file: kernel $(DISK_FILE)
 	sudo losetup -P $(USED_LOOPBACK) $(DISK_FILE)
 	
 	sudo /sbin/mkfs.fat -F 32 $(USED_LOOPBACK)p1 -s 8
 	mkdir -p img_mount
 	sudo mount $(USED_LOOPBACK)p1 img_mount
 
-	sudo cp -r disk_root/* img_mount/
+	sudo cp -r build/* img_mount/
 	sync
 	sudo umount img_mount
 	
@@ -135,8 +123,35 @@ kernel: force_look
 	$(MAKE) -C ./kernel/ $(KERNEL_TARGET)
 
 clean:
-	cd ./kernel/ && make clean
+	$(MAKE) clean -C blib
+	$(MAKE) clean -C programs
+	$(MAKE) clean -C kernel
 	rm -f $(DISK_FILE)
+	rm -rf build
 
 force_look:
 	true
+
+
+# copy UEFI limine files into build
+limine_efi_install:
+	LIMINE_VERSION=2.85 ./update_limine.sh
+
+
+# create build/ tree: main FS layout 
+all:
+	mkdir -p ./build/
+	mkdir -p ./build/bin
+	mkdir -p ./build/var/log
+	mkdir -p ./build/boot
+	mkdir -p ./build/EFI/BOOT
+	mkdir -p ./build/home
+
+	cp ./resources/ascii/boot_message.txt ./build/boot
+	cp ./resources/cfg/limine.cfg ./build/boot/
+	cp ./resources/cfg/default.shrc ./build/home/.shrc
+
+	
+	make limine_efi_install
+	make programs
+	make kernel

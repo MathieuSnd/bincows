@@ -1,6 +1,6 @@
 
 
-.PHONY: all clean release debug ../blib/blib.a
+.PHONY: all clean release debug txe
 
 INCLUDE_DIR:= ../blib/include
 
@@ -8,7 +8,7 @@ include Makefile.config
 
 CFILES :=$(shell echo *.c)
 EFILES := $(CFILES:.c=.elf)
-BIN_DIR := ../disk_root/bin/
+BIN_DIR := ../build/bin/
 
 debug: CFLAGS += -g
 debug: LDFLAGS += -g
@@ -16,9 +16,7 @@ debug: all
 
 release: all 
 
-all: $(EFILES)
-	$(MAKE) -C ../blib
-	$(MAKE) -C txe
+all: $(EFILES) txe
 	rm -f $(BIN_DIR)/*
 	cp test_threads.elf $(BIN_DIR)/test_threads
 	cp sh.elf $(BIN_DIR)/sh
@@ -40,5 +38,17 @@ clean:
 	rm -rf *.s *.elf
 	$(MAKE) -C txe clean
 
+
+txe: force_look
+	$(MAKE) -C txe
+
+
+force_look: 
+	true
+
+
+
 ../blib/blib.a:
-	$(MAKE) -C ../blib/
+
+#../blib/blib.a: ../blib/blib.a
+#	$(MAKE) -C ../blib/

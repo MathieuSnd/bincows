@@ -1,12 +1,18 @@
 #!/bin/sh
+# clone limine-bootloader's repository
+# in ./limine-bootloader/
+# then copy the right files into ./build
+
+mkdir -p ./limine-bootloader/
 cd ./limine-bootloader/
-rm -rf *
-rm -rf .*
 
-git clone https://github.com/limine-bootloader/limine.git . --branch=$V-binary
-cp BOOTX64.EFI ../disk_root/EFI/BOOT/BOOTX64.EFI
-cp limine.sys ../disk_root/boot/limine.sys
 
-cd ..
-
-make clean && make
+if test -d .git; then
+    git checkout v$LIMINE_VERSION-binary
+    echo checkout
+else
+    echo clone
+    git clone https://github.com/limine-bootloader/limine.git . --branch=v$LIMINE_VERSION-binary
+fi
+cp BOOTX64.EFI ../build/EFI/BOOT/BOOTX64.EFI
+cp limine.sys ../build/boot/limine.sys

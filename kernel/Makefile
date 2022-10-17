@@ -1,6 +1,8 @@
-KERNEL 		:= ../disk_root/boot/kernel.elf
-CC  		:= x86_64-elf-gcc
-LD          := x86_64-elf-ld
+KERNEL 		:= ../build/boot/kernel.elf
+
+PREFIX      := /home/mathieu/opt/cross/x86_64-elf/bin/
+CC  		:= $(PREFIX)x86_64-elf-gcc
+LD          := $(PREFIX)x86_64-elf-ld
 ASM			:= nasm
 ASM_FLAGS 	:= -felf64
 PY          := python3
@@ -24,12 +26,13 @@ INTERNALCFLAGS  :=  -mgeneral-regs-only    \
 					-fno-omit-frame-pointer\
 					-std=gnu11 			   \
 					-Wall -Wextra -Wno-trigraphs \
+					-Wmissing-field-initializers \
 					-fcompare-debug-second \
 					-I/opt/cross/include/  \
 					-I../lai/include       \
 					-fPIE                  \
-					
-#					-D BIGGER_FONT
+					-D_KERNEL_             \
+					-DBIGGER_FONT
 
 
 LAI_FILE := ../lai/lai.elf
@@ -57,14 +60,15 @@ release: all
 all: $(KERNEL)
 
  
-$(KERNEL): $(OBJ) $(LDSCRIPT) parse_symbols.py
+$(KERNEL): $(OBJ) $(LDSCRIPT) parse_symbols.py Makefile
 	$(CC) $(INTERNALLDFLAGS) $(OBJ) $(LAI_FILE) -o $@
 
 	rm symbols.txt
-	nm ../disk_root/boot/kernel.elf -n >> symbols.txt
+	nm ../build/bin/txe -n >> symbols.txt
+	nm ../build/boot/kernel.elf -n >> symbols.txt
 	
 	$(PY) ./parse_symbols.py
-	mv symbols.dat ../disk_root/boot/kernel.symbols
+	mv symbols.dat ../build/boot/kernel.symbols
 
 $(BUILDDIR)/%.c.o: %.c
 	mkdir -p $(dir $@)
