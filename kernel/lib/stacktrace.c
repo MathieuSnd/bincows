@@ -5,6 +5,7 @@
 #include "../lib/dump.h"
 #include "../lib/logging.h"
 #include "sprintf.h"
+#include "panic.h"
 
 #define MAX_STACK_TRACE 40
 
@@ -123,7 +124,7 @@ void stacktrace_print(void) {
 
         printf("   %16llx    ", rip);
 
-        if(is_user((uint64_t)rip)) {
+        if(is_user((void*)rip)) {
             printf("userspace\n");
             break;
         }
