@@ -1,5 +1,6 @@
 #include "power.h"
 #include "../lib/assert.h"
+#include "../lib/sprintf.h"
 #include "../lib/panic.h"
 #include "../lib/logging.h"
 #include "../drivers/ps2kb.h"
@@ -20,8 +21,10 @@ void shutdown(void) {
     // cannot shutdown anything yet.
     // need an AML interpreter.
 
-
-    log_debug("shuting sequence started");
+    // insert a newline as we don't know what's 
+    // being currently printed
+    printf("\n");
+    log_debug("shutdown sequence started");
 
     reboot();
 }
@@ -48,7 +51,7 @@ void reboot(void) {
     //panic("non");
     //_cli();
     
-    //ps2_trigger_CPU_reset();
+    ps2_trigger_CPU_reset();
 
     for(;;)
         asm("hlt"); 
