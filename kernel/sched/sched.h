@@ -156,7 +156,7 @@ pid_t sched_current_pid(void);
 tid_t sched_current_tid(void);
 
 
-void sched_emplace_ready_thread(pid_t pid, tid_t tid);
+void sched_push_ready_thread(pid_t pid, tid_t tid);
 
 
 /**
