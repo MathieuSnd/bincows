@@ -1,0 +1,13 @@
+#! bin/sh
+export PATH=$PATH:/bin
+
+clear
+cow
+
+test_threads
+
+#cd /boot/
+#cat bg.bmp
+#txe limine.cfg
+#txe NvVars
+#ls -l
