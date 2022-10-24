@@ -774,7 +774,7 @@ void write_string(driver_t* this, const char *string, size_t length) {
 /////////////      /dev/term0 driver      ////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "../../../blib/include/terminfo.h"
+#include "../../../blibc/include/terminfo.h"
 #include "../../lib/math.h"
 
 static int terminal_devfile_read(
