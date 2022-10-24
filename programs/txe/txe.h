@@ -33,7 +33,7 @@ typedef struct {
 struct screen_size {
     size_t width;
     size_t height;
-} screen_size;
+};
 
 
 extern struct screen_size screen_size;

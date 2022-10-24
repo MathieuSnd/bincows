@@ -1,8 +1,8 @@
 KERNEL 		:= ../build/boot/kernel.elf
 
-PREFIX      := /home/mathieu/opt/cross/x86_64-elf/bin/
-CC  		:= $(PREFIX)x86_64-elf-gcc
-LD          := $(PREFIX)x86_64-elf-ld
+GNU_PREFIX  ?= $(HOME)/cross/bin/
+CC  		:= $(GNU_PREFIX)x86_64-elf-gcc
+LD          := $(GNU_PREFIX)x86_64-elf-ld
 ASM			:= nasm
 ASM_FLAGS 	:= -felf64
 PY          := python3

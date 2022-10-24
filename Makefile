@@ -4,6 +4,7 @@
 
 
 
+GNU_PREFIX 			  ?= $(HOME)/cross/bin/
 IMAGE_FILE            ?= disk.bin
 USED_LOOPBACK         ?= /dev/loop2
 QEMU_PATH             ?= qemu-system-x86_64
@@ -51,7 +52,7 @@ native_disk_simu: compile
 			-drive format=raw,if=none,id=NVME2,file=/dev/nvme0n1
 
 
-compile: blibc programs
+compile: lib programs
 
 
 test: force_look
@@ -62,11 +63,11 @@ debug: compile
 	$(QEMU_PATH) $(QEMU_DEBUG_ARGS)
 
 
-programs: force_look
-	make -C programs
+programs: lib force_look
+	GNU_PREFIX=$(GNU_PREFIX) make -C programs
 
 lib: force_look
-	make -C blibc
+	GNU_PREFIX=$(GNU_PREFIX) make -C blibc
 
 threaded_compile:
 	make -j compile

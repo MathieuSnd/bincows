@@ -4,10 +4,10 @@
 
 BIN_FILE:=blibc.a
 
-PREFIX := /home/mathieu/opt/cross/x86_64-elf/bin/
-CC     := $(PREFIX)x86_64-elf-gcc
-LD     := $(PREFIX)x86_64-elf-ld
-AR     := $(PREFIX)x86_64-elf-ar
+GNU_PREFIX ?= $(HOME)/cross/bin/
+CC     := $(GNU_PREFIX)x86_64-elf-gcc
+LD     := $(GNU_PREFIX)x86_64-elf-ld
+AR     := $(GNU_PREFIX)x86_64-elf-ar
 ASM:=nasm
 
 
