@@ -10,6 +10,8 @@
 // this file impelments the functions needed 
 // by the LAI library
 
+#ifdef USE_LAI
+
 
 // OS-specific functions.
 void *laihost_malloc(size_t s) {
@@ -73,4 +75,7 @@ uint32_t laihost_pci_readd(uint16_t, uint8_t, uint8_t, uint8_t, uint16_t);
 void laihost_sleep(uint64_t);
 
 void laihost_handle_amldebug(lai_variable_t *);
+
+
+#endif
 
