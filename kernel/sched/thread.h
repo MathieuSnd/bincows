@@ -130,7 +130,7 @@ struct thread {
     
 } thread_t;
 
-#define THREAD_KERNEL_STACK_SIZE (1024 * 16)
+#define KERNEL_STACK_SIZE (1024 * 16)
 
 
 // 0 if the thread cannot be created
