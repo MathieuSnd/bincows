@@ -20,3 +20,4 @@ lai/
 kernel/symbols.txt
 kernel/symbols.dat
 build/
+env.sh
