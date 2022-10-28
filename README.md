@@ -40,6 +40,8 @@ Limine and GCC/binutils (targeting x86_64) are the only dependencies to build Bi
 
 This section describes how to build the Bincows ecosystem (kernel, libc and programs)
 
+To build the bincows ecosystem, you will need a __cross compiler__ (GCC and the GNU binutils suite) targeting x86_64. You have to define the `GNU_PREFIX` environment variable as the path to GCC and binutils bin directory.
+
 From the root of this repository, you can simply build everything by typing:
 ```
 $ make all
