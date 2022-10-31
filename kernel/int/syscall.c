@@ -17,6 +17,10 @@
 #include "apic.h"
 
 
+// defined in restore_context.s
+void __attribute__((noreturn)) _restore_context(struct gp_regs* rsp);
+
+
 #define IA32_EFER_SCE_BIT (1lu)
 
 
@@ -1204,6 +1208,7 @@ uint64_t sc_sigreturn(process_t* proc, void* args, size_t args_sz) {
         // instead, exit from syscall and yield
         thread_leave_syscall(proc, sched_current_tid());
 
+        assert(!interrupt_enable());
 
         _restore_context(context);
         //sched_yield();
