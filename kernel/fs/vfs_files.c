@@ -166,14 +166,19 @@ uint64_t search_or_insert_file(
     strcpy(pathbuf, path);
 
 
-    static uint64_t id = 0;
+    uint64_t vfile_id;
+    // protected by the lock
+    {
+        static uint64_t cur_id = 0;
+        vfile_id = ++cur_id;
+    }
 
     open_files[n_open_files - 1] = (struct file_ent) {
         .addr = addr,
         .fs   = fs,
         .file_size = file_len,
         .path = pathbuf,
-        .id   = ++id,
+        .id   = vfile_id,
 
         .fhs = NULL,
         .n_insts = 0,
@@ -189,7 +194,7 @@ uint64_t search_or_insert_file(
         fs->open_file(fs, addr);
 
 
-    return id;
+    return vfile_id;
 }
 
 
@@ -378,7 +383,7 @@ file_handle_t* vfs_open_file(const char *path, int flags) {
     // are enabled
     fs_t *restrict fs = vfs_open(path, &dirent);
 
-
+    
     
     // dirent not found or associated to a 
     // virtual directory
