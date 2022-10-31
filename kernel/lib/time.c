@@ -221,7 +221,7 @@ int sleep_cancel(pid_t pid, tid_t tid) {
     _cli();
     spinlock_acquire(&sleep_lock);
 
-    unsigned idx = -1;
+    int idx = -1;
 
     // @todo binary search on the wakeup date
     for(unsigned i = 0; i < n_sleeping_threads; i++) {

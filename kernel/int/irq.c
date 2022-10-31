@@ -127,7 +127,7 @@ void int_common_handler(uint8_t irq_n, gp_regs_t* context, uint32_t error_code) 
 
         log_warn("EXCEPTION %u fired", irq_n);
         // exception
-        ((exc_handler_t)handler)(error_code);
+        ((exc_handler_t)(void*)handler)(error_code);
     } else {
         // irq
         ((irq_handler_t)handler)(driver);
