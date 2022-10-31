@@ -99,7 +99,7 @@ id_t create_file(void) {
     spinlock_init(&file->lock);
 
 
-    id_t id = file->id = cur_id++;
+    id_t id = file->id = ++cur_id;
 
 
     spinlock_release(&priv->lock);
@@ -546,7 +546,7 @@ static dirent_t* read_dir(struct fs* restrict fs, uint64_t dir_addr, size_t* res
         dirents[i].ino = file->id;
         dirents[i].type = DT_REG;
         dirents[i].file_size = (size_t) -1;
-        dirents[1].rights.value = in ? 2 : 1; 
+        dirents[i].rights.value = in ? 2 : 1; 
         // just readable (1) or just writable (2)
     }
 
