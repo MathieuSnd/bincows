@@ -1,8 +1,5 @@
 #include <stdbool.h>
 
-// for initialization
-#include <stivale2.h>
-
 #include "../../memory/heap.h"
 
 #include "../../lib/string.h"

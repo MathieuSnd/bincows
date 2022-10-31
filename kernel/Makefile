@@ -1,11 +1,11 @@
 KERNEL 		:= ../build/boot/kernel.elf
 
 GNU_PREFIX  ?= $(HOME)/cross/bin/
-CC  		?= $(GNU_PREFIX)x86_64-elf-gcc
-LD          ?= $(GNU_PREFIX)x86_64-elf-ld
-ASM			?= nasm
+CC  		:= $(GNU_PREFIX)x86_64-elf-gcc
+LD          := $(GNU_PREFIX)x86_64-elf-ld
+ASM			:= nasm
 ASM_FLAGS 	:= -felf64
-PY          ?= python3
+PY          := python3
 
 BUILDDIR := ./build
  
