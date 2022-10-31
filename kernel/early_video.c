@@ -1,14 +1,16 @@
-#include <stivale2.h>
-
 #include "early_video.h"
 #include "drivers/terminal/terminal.h"
 #include "memory/vmap.h"
+#include "boot/boot_interface.h"
 
 typedef struct framebuffer_dev fd_t;
 
 driver_t* video_init(
-        const struct stivale2_struct_tag_framebuffer* framebuffer_tag
+        const struct boot_interface* bi
 ) {
+
+    if(bi->framebuffer_paddr == 0)
+        return NULL; // no framebuffer 
 
 // framebuffer virtual device
     fd_t* fb_dev = 
@@ -19,10 +21,10 @@ driver_t* video_init(
             .name = {"stivale2 framebuffer",0},
             .driver = NULL
         },
-        .width  = framebuffer_tag->framebuffer_width,
-        .height = framebuffer_tag->framebuffer_height,
-        .bpp    = framebuffer_tag->framebuffer_bpp,
-        .pitch  = framebuffer_tag->framebuffer_pitch,
+        .width  = bi->framebuffer_width,
+        .height = bi->framebuffer_height,
+        .bpp    = bi->framebuffer_bpp,
+        .pitch  = bi->framebuffer_pitch,
 
         .pix = (void *)MMIO_BEGIN,
     };

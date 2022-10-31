@@ -10,7 +10,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-struct stivale2_struct_tag_memmap;
+struct boot_interface;
 
 /**
  * enable PML4 4K paging
@@ -19,7 +19,7 @@ struct stivale2_struct_tag_memmap;
  * 
  * map the kernel executable to high half: 0xffffffff80000000 + phys
  */
-void init_paging(const struct stivale2_struct_tag_memmap* memmap);
+void init_paging(const struct boot_interface* bi);
 void append_paging_initialization(void);
 
 // asserts that the vaddr is in

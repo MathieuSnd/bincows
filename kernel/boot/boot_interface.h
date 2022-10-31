@@ -13,8 +13,7 @@ enum mmape_type {
     KERNEL,
     BOOTLOADER_RECLAIMABLE,
     ACPI_RECLAIMABLE,
-    ACPI_NVS,
-    MMIO
+    ACPI_NVS
 };
 
 
@@ -34,7 +33,7 @@ struct boot_interface {
     void (*console_write)(const char *string, size_t length);
 
     // physical address of the RSDP ACPI table base
-    void* rsdp_paddr;
+    uint64_t rsdp_paddr;
 
     // kernel symbols file base
     // ignored if NULL
@@ -42,17 +41,36 @@ struct boot_interface {
 
     // reutrn the next mmap entry
     // when the map end is reached, 
-    // return NULL.
-    // this function is only called in early memory context
+    // return NULL. The next call wraps and 
+    // returns the first entry
+    //
+    // this function is only called in early memory context:
+    // before bootloader/ACPI memory reclaim.
+    //
+    // the entries returned by the function describe memory
+    // ranges and ACPI NVS regions. It does not include MMIOs.
     struct mmape* (*mmap_get_next)(void);
-    
-    // number of entries
-    int mmap_entries;
 
+
+    // physical address of the framebuffer
+    // or 0 if no framebuffer installed
+    uint64_t framebuffer_paddr;
+    unsigned framebuffer_width;
+    unsigned framebuffer_height;
+    unsigned framebuffer_pitch;
+    unsigned framebuffer_bpp;
+
+    // byte size of the framebuffer
+    // it should be paged-aligned
+    size_t   framebuffer_size;
+
+    
     // all 0 if unavailable
     GUID boot_volume_guid;
 
 
+    char* bootloader_brand;
+    char* bootloader_version;
 };
 
 

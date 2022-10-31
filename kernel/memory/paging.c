@@ -1,4 +1,3 @@
-#include <stivale2.h>
 #include "../lib/assert.h"
 #include "../lib/string.h"
 #include "physical_allocator.h"
@@ -11,6 +10,7 @@
 #include "../lib/registers.h"
 #include "../smp/smp.h"
 #include "../int/idt.h"
+#include "../boot/boot_interface.h"
 
 
 #define CR0_WP            (1lu << 16)
@@ -158,24 +158,34 @@ void physical_allocator_callback_mmio(
 }
 */
 
-// map the data of the allocator
-static void map_physical_memory(const struct stivale2_struct_tag_memmap* memmap) {
+// map the physical memory, using the map given by the bootloader
+// to the translated memory region. also map the kernel according
+// to vmap.h.
+static void map_physical_memory(const struct boot_interface* bi) {
 // as we are not in a callback function,
 // we can realloc page tables on the fly 
     alloc_page_table_realloc = 1;
 
+    struct mmape* e;
 
-    for(unsigned i = 0; i < memmap->entries; i++) {
-        const struct stivale2_mmap_entry* e = &memmap->memmap[i];
 
-        if(e->type ==  STIVALE2_MMAP_USABLE 
-        || e->type == STIVALE2_MMAP_BOOTLOADER_RECLAIMABLE
-        || e->type == STIVALE2_MMAP_ACPI_RECLAIMABLE
-        || e->type == STIVALE2_MMAP_ACPI_NVS) {
+// count the number of kernel entries
+// suppose the first one is the .text section,
+// the second one is rodata
+// and the third is data+bss
+// @todo check ELF header maybe
+    int kernel_entry_i = 0;
+
+    while((e = bi->mmap_get_next()) != NULL) {
+
+        if(e->type == USABLE 
+        || e->type == BOOTLOADER_RECLAIMABLE
+        || e->type == ACPI_RECLAIMABLE
+        || e->type == ACPI_NVS) {
             // be inclusive!
-            uint64_t phys_addr = (uint64_t) (e->base / 0x1000) * 0x1000;
+            uint64_t phys_addr = (uint64_t) (e->pbase / 0x1000) * 0x1000;
 
-            size_t   size = (e->length + (e->base - phys_addr) + 0x0fff) / 0x1000;
+            size_t   size = (e->length + (e->pbase - phys_addr) + 0x0fff) / 0x1000;
             
 
             if(size == 0)
@@ -195,6 +205,41 @@ static void map_physical_memory(const struct stivale2_struct_tag_memmap* memmap)
             // to map its own data
         }
 
+        if(e->type == KERNEL) {
+            // floor the base to one page
+            uint64_t base = e->pbase & ~0x0fff;
+
+            
+            // ceil the size
+            size_t   size = e->length + (e->pbase - base);
+            size = (size+0x0fff) / 0x1000;
+   
+            uint64_t virtual_addr = base | KERNEL_DATA_BEGIN;
+
+            uint64_t flags = PRESENT_ENTRY;
+
+            switch (kernel_entry_i++)
+            {
+            case 0:
+                /* .text */
+                break;
+            case 1:
+                /* rodata */
+                flags |= PL_XD;
+                break;
+            case 2:
+                flags |= PL_RW;
+                /* data+bss */
+                break;
+            default:
+                //modules: do not map in higher half!
+                flags |= PL_RW;
+                virtual_addr = base | TRANSLATED_PHYSICAL_MEMORY_BEGIN;
+                break;
+            }
+            // fill_page_table_allocator_buffer(PTAAB_SIZE);
+            internal_map_pages(base, virtual_addr, size, flags);
+        }
     }
 }
 /*
@@ -218,61 +263,6 @@ static void map_allocator_data(void) {
     }
 }
 */
-
-// map the kernel to KERNEL_DATA_BEGIN | kernel_phys_base
-static void map_kernel(const struct stivale2_struct_tag_memmap* memmap) {
-
-// count the number of kernel entries
-// suppose the first one is the .text section,
-// the second one is rodata
-// and the third is data+bss
-    int n = 0;
-
-
-    for(unsigned i = 0; i < memmap->entries; i++) {
-        const struct stivale2_mmap_entry* e = &memmap->memmap[i];
-
-        if(e->type == STIVALE2_MMAP_KERNEL_AND_MODULES) {
-            // floor the base to one page
-            uint64_t base = e->base & ~0x0fff;
-
-            
-
-            // ceil the size
-            size_t   size = e->length + (e->base - base);
-            size = (size+0x0fff) / 0x1000;
-   
-            uint64_t virtual_addr = base | KERNEL_DATA_BEGIN;
-
-            uint64_t flags = PRESENT_ENTRY;
-
-            switch (n++)
-            {
-            case 0:
-                /* .text */
-                break;
-            case 1:
-                /* rodata */
-                flags |= PL_XD;
-                break;
-            case 2:
-                flags |= PL_RW;
-                /* data+bss */
-                break;
-            default:
-                //modules: do not map in higher half!
-                flags |= PL_RW;
-                virtual_addr = base | TRANSLATED_PHYSICAL_MEMORY_BEGIN;
-                break;
-            }
-            //alloc the page table pages
-            // before doing any allocation
-            fill_page_table_allocator_buffer(PTAAB_SIZE);
-            internal_map_pages(base, virtual_addr, size, flags);
-        }
-    }
-}
-
 
 // return non 0 value iif the entry is
 // present
@@ -311,7 +301,7 @@ static inline void print_struct(int level, void** table, uint64_t virt) {
 
 
 
-void init_paging(const struct stivale2_struct_tag_memmap* memmap) {
+void init_paging(const struct boot_interface* bi) {
 // init the highest paging structures
 // no need to use the translate_address macro
 // as we are still in the early memory configuration
@@ -353,7 +343,7 @@ void init_paging(const struct stivale2_struct_tag_memmap* memmap) {
 
 
 // map all the memory to 0xffff800000000000
-    map_physical_memory(memmap);
+    map_physical_memory(bi);
 
 
 // everytime we allocate a page table
@@ -362,10 +352,6 @@ void init_paging(const struct stivale2_struct_tag_memmap* memmap) {
 // in order to avoid awful recursion bugs 
     alloc_page_table_realloc = 0;
 
-
-
-// map the kernel 
-    map_kernel(memmap);
 }
 
 

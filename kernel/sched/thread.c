@@ -60,8 +60,8 @@ int create_thread(
     thread->rsp->rdi = rdi;
 
     thread->kernel_stack = (stack_t) {
-        .base = malloc(KERNEL_STACK_SIZE),
-        .size = KERNEL_STACK_SIZE,
+        .base = malloc(KERNEL_THREAD_STACK_SIZE),
+        .size = KERNEL_THREAD_STACK_SIZE,
     };
 
 

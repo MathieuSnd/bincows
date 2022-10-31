@@ -16,12 +16,12 @@
 
 
 
-struct stivale2_struct_tag_memmap;
+struct boot_interface;
 
-// init the physical allocator with the stivale2 memory map
+// init the physical allocator
 // first phase of initialization:
 // suppose that all the addressable memory is identity mapped
-void init_physical_allocator(const struct stivale2_struct_tag_memmap* memmap);
+void init_physical_allocator(const struct boot_interface *);
 
 //linked list element representing a 64 MB memory region
 struct physical_allocator_data_page_entry {

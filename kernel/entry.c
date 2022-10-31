@@ -44,27 +44,25 @@
 
 // accessible by other compilation units
 // like panic.c
-const size_t stack_size = KERNEL_STACK_SIZE;
-uint8_t stack_base[KERNEL_STACK_SIZE] 
+const size_t stack_size = KERNEL_THREAD_STACK_SIZE;
+uint8_t stack_base[KERNEL_THREAD_STACK_SIZE] 
         __attribute__((section(".stack"))) 
         __attribute__((aligned(16)));
 
 
 
 
-static void init_memory(
-    const struct stivale2_struct_tag_memmap* memmap_tag,
-    const struct stivale2_struct_tag_framebuffer* fb
-) {
+static void init_memory(const struct boot_interface* bi) {
     log_debug("init memory...");
-    init_physical_allocator(memmap_tag);
-    init_paging            (memmap_tag);
+    init_physical_allocator(bi);
+    init_paging            (bi);
 
-// map MMIOs
+// map framebuffer
     map_pages(
-        early_virtual_to_physical((void *)fb->framebuffer_addr), 
+        bi->framebuffer_paddr, 
         MMIO_BEGIN,
-        (fb->framebuffer_height * fb->framebuffer_pitch+0x0fff) / 0x1000,
+        // round to one page
+        (bi->framebuffer_size + 0x0fff) / 0x1000,
         PRESENT_ENTRY | PL_RW  | PL_XD
     );
 }
@@ -94,20 +92,23 @@ static void print_fun(const char* s, size_t len) {
  * @return disk_part_t* NULL if not found
  */
 static 
-disk_part_t* find_main_part(const struct stivale2_struct_tag_boot_volume* boot_volume_tag) {
+disk_part_t* find_main_part(const struct boot_interface* bi) {
 
-    const struct stivale2_guid* part_guid = 
-        (boot_volume_tag != NULL) ? &boot_volume_tag->part_guid: NULL;
+    GUID part_guid = bi->boot_volume_guid;
 
 
     disk_part_t* part = NULL;
-    if(part_guid)
-        part = find_partition(*(GUID*)part_guid);
-        
-    if(part)
-        log_info("main partition found");
+
+    int valid_part_guid = (part_guid.low | part_guid.high) != 0llu;
+
+    if(valid_part_guid) {
+        part = find_partition(part_guid);
+
+        if(part)
+            log_info("main partition found");
+    }
     if(!part) {
-        if(!part_guid) {
+        if(!valid_part_guid) {
             log_warn(
                 "cannot find boot partition."
             );
@@ -115,11 +116,7 @@ disk_part_t* find_main_part(const struct stivale2_struct_tag_boot_volume* boot_v
         else {
             log_warn(
                 "cannot find boot partition. (boot volume GUID: "
-                "{%8x-%4x-%4x-%2x%2x-%2x%2x%2x%2x%2x%2x})",
-                part_guid->a,    part_guid->b,    part_guid->c,
-                part_guid->d[0], part_guid->d[1],
-                part_guid->d[2], part_guid->d[3], part_guid->d[4], 
-                part_guid->d[5], part_guid->d[6], part_guid->d[7]
+                "{%8lx-%8lx})", part_guid.high, part_guid.low
             );
         }
 
@@ -335,21 +332,28 @@ void launch_shell(void) {
 
 
 void kernel_main(struct boot_interface* bi) {
+
+ // print all logging messages
+    set_logging_level(LOG_LEVEL_DEBUG);
     
     if(bi->kernel_symbols)
         stacktrace_file(bi->kernel_symbols);
+    else
+        log_warn("no stacktrace found");
     if(bi->console_write)
         set_backend_print_fun(bi->console_write);
+    else
+        log_warn("no early console found");
+
+    assert(bi->rsdp_paddr);
+    assert(bi->mmap_get_next);
 
 
     // start system initialization
 
- // print all logging messages
-    set_logging_level(LOG_LEVEL_DEBUG);
-
     setup_isrs();
 
-    init_memory(memmap_tag, framebuffer_tag);
+    init_memory(bi);
 
     read_acpi_tables(translate_address((void*)(bi->rsdp_paddr)));
     
@@ -360,6 +364,8 @@ void kernel_main(struct boot_interface* bi) {
     set_backend_print_fun(empty_terminal_handler);
     append_paging_initialization();
 
+
+    // @todo reclaim bootloader / ACPI memory
 
 
 // init kernel heap
@@ -374,7 +380,7 @@ void kernel_main(struct boot_interface* bi) {
     atshutdown(free_all_devices);
 
 
-    driver_t* terminal = video_init(framebuffer_tag);
+    driver_t* terminal = video_init(bi);
 
 
     set_backend_print_fun(print_fun);
@@ -388,8 +394,8 @@ void kernel_main(struct boot_interface* bi) {
     puts(log_get());
 
     log_info("screen resolution: %ux%u", 
-            framebuffer_tag->framebuffer_width,
-            framebuffer_tag->framebuffer_height
+            bi->framebuffer_width,
+            bi->framebuffer_height
     );
 
     hpet_init();
@@ -407,7 +413,7 @@ void kernel_main(struct boot_interface* bi) {
     //ps2kb_set_event_callback(early_kbhandler);
     
 
-    disk_part_t* part = find_main_part(boot_volume_tag);
+    disk_part_t* part = find_main_part(bi);
     
     assert(part);
     int r = vfs_mount(part, "/");

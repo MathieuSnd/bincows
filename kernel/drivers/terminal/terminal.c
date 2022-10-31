@@ -195,13 +195,17 @@ char terminal_install(driver_t* this) {
         loadBMP_24b_1b(&_binary_charmap_bmp, &charmap);
     
 
+    d->current_fgcolor = 0xffffff;
+
+
     terminal_clear(this);
     flush_screen(this);
+
+
 
     active_terminal = this;
 
 
-    d->current_fgcolor = 0xffffff;
 
     return 1;
 }
@@ -658,6 +662,8 @@ static void update_framebuffer(driver_t* this) {
 
 
         // check if something is modified
+        // maybe remove the break and unroll
+        // the loop?
         for(unsigned i = 0; i < cache_line; i++) {
             diff = *(ptr++) ^ *(otherptr++);
             if(diff)
@@ -671,6 +677,8 @@ static void update_framebuffer(driver_t* this) {
             uint64_t* devptr = devfb;
             for(unsigned j = 0; j < cache_line; j++) {
                 asm volatile(
+                    // mov non temporal integer:
+                    // non temporal 64 bit memory write
                     "movnti %1, %0"
                     : "=m" (*(devptr++))
                     : "r"  (*ptr++)

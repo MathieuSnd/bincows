@@ -1,6 +1,5 @@
 #include <stdint.h>
 #include <stddef.h>
-#include <stivale2.h>
 #include <stdbool.h>
 
 #include "../lib/string.h"
@@ -9,6 +8,7 @@
 #include "../lib/panic.h"
 #include "../lib/registers.h"
 #include "../int/idt.h"
+#include "../boot/boot_interface.h"
 
 #include "physical_allocator.h"
 #include "../lib/logging.h"
@@ -138,27 +138,31 @@ static void init_memory_range(struct memory_range* range, uint64_t addr, size_t 
 }
 
 
-void init_physical_allocator(const struct stivale2_struct_tag_memmap* memmap) {
+void init_physical_allocator(const struct boot_interface* bi) {
 // counter of the number of detected pages
     unsigned total_pages = 0;
 
     unsigned j = 0; // index of the current created memory range struct 
-    for(unsigned i = 0; i < memmap->entries; i++) {
 
-        const struct stivale2_mmap_entry e = memmap->memmap[i];
+    struct mmape* e;
+
+    while((e = bi->mmap_get_next()) != NULL) {
     // memory ranges in account
         
-    // dont take kernel & modules or acpi reclaimable
-        if(e.type == STIVALE2_MMAP_USABLE) {
+    // ignore kernel and reclaimable memory
+        if(e->type == USABLE) {
 
         // ceil the size to the number of pages
 
-            uint64_t base = e.base;
-            size_t size = e.length;
+            uint64_t base = e->pbase;
+            size_t size = e->length;
+
+
+            // align base
 
             if(base & 0x0fff) {
                 uint64_t new_base = (base & 0x0fff) + 0x1000;
-                size = new_base - base;
+                size += new_base - base;
                 base = new_base;
             }
 

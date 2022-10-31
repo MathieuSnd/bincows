@@ -1,17 +1,20 @@
-
 #include "stivale2.h"
 #include "boot_interface.h"
 
-// for KERNEL_STACK_SIZE
+// for KERNEL_THREAD_STACK_SIZE
 #include "../sched/thread.h"
+#include "../lib/assert.h"
+#include "../lib/string.h"
+#include "../lib/panic.h"
+#include "../memory/vmap.h"
 
 
 extern uint8_t stack_base[];
 
-void* const bs_stack_end = stack_base + KERNEL_STACK_SIZE;
+void* const bs_stack_end = stack_base + KERNEL_THREAD_STACK_SIZE;
 
 
-#define INITIAL_STACK_PTR ((uintptr_t)(stack_base + KERNEL_STACK_SIZE))
+#define INITIAL_STACK_PTR ((uintptr_t)(stack_base + KERNEL_THREAD_STACK_SIZE))
 
 
 
@@ -77,6 +80,7 @@ static void read_modules(
     for(unsigned i = 0; i < module_count; i++) {
         const struct stivale2_module* module = &modules[i];
         if(!strcmp(module->string, "kernel.symbols")) {
+            bi->kernel_symbols = (void*)module->begin;
         }
     }
 }
@@ -87,21 +91,29 @@ static const struct stivale2_struct_tag_memmap* memmap_tag;
 
 
 static struct mmape* stivale2_mmap_get_next(void) {
-    static int i = 0;
+    static unsigned i = 0;
     static struct mmape mmape;
 
+    assert(memmap_tag);
+
     for(;;) {
-        if(i >= memmap_tag->entries)
+        if(i >= memmap_tag->entries) {
+            // the next call will wrap to the first entry
+            i = 0;
             return NULL;
+        }
 
 
-        struct stivale2_mmap_entry* st2e = &memmap_tag->memmap[i++];
+        const struct stivale2_mmap_entry* st2e = &memmap_tag->memmap[i++];
 
         mmape.pbase  = st2e->base;
         mmape.length = st2e->length;
         
         switch (st2e->type)
         {
+        case STIVALE2_MMAP_FRAMEBUFFER:
+            // the framebuffer is stored in the 
+            // boot interface structure
         case STIVALE2_MMAP_RESERVED:
         case STIVALE2_MMAP_BAD_MEMORY:
             continue;
@@ -112,7 +124,7 @@ static struct mmape* stivale2_mmap_get_next(void) {
             break;
 
         case STIVALE2_MMAP_ACPI_RECLAIMABLE:
-            mmape.type = USABLE;
+            mmape.type = ACPI_RECLAIMABLE;
             break;
         case STIVALE2_MMAP_ACPI_NVS:
             mmape.type = ACPI_NVS;
@@ -123,9 +135,6 @@ static struct mmape* stivale2_mmap_get_next(void) {
         case STIVALE2_MMAP_KERNEL_AND_MODULES:
             mmape.type = KERNEL;
             break;
-        case STIVALE2_MMAP_FRAMEBUFFER:
-            mmape.type = MMIO;
-            break;
         default:
             panic("stivale2 mmap: unexpected value");
         }
@@ -134,8 +143,11 @@ static struct mmape* stivale2_mmap_get_next(void) {
 }
 
 
+// actual kernel main
+extern void kernel_main(struct boot_interface* bi);
+
 // entry point
-static void _start(struct stivale2_struct *stivale2_struct) {
+void _start(struct stivale2_struct *stivale2_struct) {
 
     log_info("starting boot sequence");
 
@@ -157,6 +169,13 @@ static void _start(struct stivale2_struct *stivale2_struct) {
     // system information structure to fill using stivale2 structures
     struct boot_interface bi;
 
+
+    if(!rsdp_tag_ptr) {
+        panic("stivale2: no RSDP tag found");
+    }
+    else {
+        bi.rsdp_paddr = rsdp_tag_ptr->rsdp;
+    }
     
 
     // term_str_tag == NULL is not a blocking
@@ -174,5 +193,37 @@ static void _start(struct stivale2_struct *stivale2_struct) {
 
     
     bi.mmap_get_next = stivale2_mmap_get_next;    
+
+    /////////////////////////////////
+    /////////// framebuffer /////////
+    /////////////////////////////////
+    if(!framebuffer_tag) {
+        log_warn("stivale2: no framebuffer found");
+        bi.framebuffer_paddr = 0;
+    }
+    else {
+        bi.framebuffer_paddr  = trv2p((void*)framebuffer_tag->framebuffer_addr);
+        bi.framebuffer_width  = framebuffer_tag->framebuffer_width;
+        bi.framebuffer_height = framebuffer_tag->framebuffer_height;
+        bi.framebuffer_pitch  = framebuffer_tag->framebuffer_pitch;
+        bi.framebuffer_bpp    = framebuffer_tag->framebuffer_bpp;
         
+        // compute size
+        bi.framebuffer_size   = bi.framebuffer_pitch * bi.framebuffer_height;
+    }
+
+
+    if(!boot_volume_tag) {
+        log_warn("stivale2: no boot volume tag found");
+        bi.boot_volume_guid = (GUID){0,0};
+    }
+    else {
+        bi.boot_volume_guid = *(GUID*)&boot_volume_tag->guid;
+    }
+
+    
+
+    // launch the kernel
+    kernel_main(&bi);
+    panic("stivale2 _start: unreachable");
 }

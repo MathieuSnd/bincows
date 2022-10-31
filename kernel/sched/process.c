@@ -273,8 +273,8 @@ int create_kernel_process(process_t* process) {
             .size = 0,
         },
         .kernel_stack = (stack_t) {
-        .base = malloc(THREAD_KERNEL_STACK_SIZE),
-        .size = THREAD_KERNEL_STACK_SIZE,
+        .base = malloc(KERNEL_THREAD_STACK_SIZE),
+        .size = KERNEL_THREAD_STACK_SIZE,
         },
     };
 
