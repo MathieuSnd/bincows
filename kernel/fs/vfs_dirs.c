@@ -758,6 +758,8 @@ fs_t *vfs_open(const char *path, fast_dirent_t *dir)
         .ino = fs->root_addr,
         .file_size = 0,
         .type = DT_DIR,
+        // @todo
+        //.rights = 
     };
 
     // in case vdir is the root
