@@ -1069,6 +1069,7 @@ void schedule(void) {
         assert(p);
         assert(t);
 
+        assert(t->pid == p->pid);
         assert(p->n_threads > 0);
         assert(t->tid > 0);
         assert(t->state == READY);
