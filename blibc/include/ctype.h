@@ -37,5 +37,7 @@ extern int tolower(int c);
 
 extern int toupper(int c);
 
+extern int isascii(int c);
+
 
 #endif // CTYPES_H
