@@ -34,6 +34,7 @@ fast_spinlock_t sleep_lock = {0};
 
 // return the position to insert the thread in 
 // the sleeping_threads array
+// @todo binary search
 static 
 unsigned insert_position(uint64_t wakeup_time) {
 
@@ -41,27 +42,14 @@ unsigned insert_position(uint64_t wakeup_time) {
         return 0;
     }
 
-    // insert the tid in its correct position
-    // the array is sorted so we can use a binary search
-    // to find the correct position
-    int A = 0;
-    int B = n_sleeping_threads - 1;
-
-    while(A <= B) {
-        int mid = (A + B) / 2;
-
-        uint64_t t = sleeping_threads[mid].wakeup_time;
-
-        if(t > wakeup_time) {
-            B = mid - 1;
-        } else {
-            A = mid + 1;
-        }
-
-        // correct position
-        if(A > B)
-            return mid;
+    for(int i = 0; i < n_sleeping_threads; i++) {
+        uint64_t t = sleeping_threads[i].wakeup_time;
+        
+        if(wakeup_time < t)
+            return i;
     }
+    return n_sleeping_threads;
+
 
     panic("unreachable");
 }
@@ -81,6 +69,7 @@ void register_sleeping_thread(tid_t tid, pid_t pid, uint64_t wakeup_time) {
 
 
     int i = insert_position(wakeup_time);
+
 
     // shift the array to the right
     memmove(
@@ -141,7 +130,6 @@ void wakeup_threads(void) {
         if(sched_is_running()) {
             for(unsigned i = 0; i < j; i++) {
                 sleeping_thread_t* t = sleeping_threads + i;
-                
                 sched_unblock(t->pid, t->tid);
             }
         }
