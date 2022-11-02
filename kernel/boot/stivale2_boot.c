@@ -218,10 +218,8 @@ void _start(struct stivale2_struct *stivale2_struct) {
         bi.boot_volume_guid = (GUID){0,0};
     }
     else {
-        bi.boot_volume_guid = *(GUID*)&boot_volume_tag->guid;
+        bi.boot_volume_guid = *(GUID*)&boot_volume_tag->part_guid;
     }
-
-    
 
     // launch the kernel
     kernel_main(&bi);
