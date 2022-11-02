@@ -4,7 +4,6 @@
 
 BIN_FILE:=blibc.a
 
-GNU_PREFIX ?= $(HOME)/cross/bin/
 CC     := $(GNU_PREFIX)x86_64-elf-gcc
 LD     := $(GNU_PREFIX)x86_64-elf-ld
 AR     := $(GNU_PREFIX)x86_64-elf-ar

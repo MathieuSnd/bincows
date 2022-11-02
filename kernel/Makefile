@@ -1,6 +1,5 @@
 KERNEL 		:= ../build/boot/kernel.elf
 
-GNU_PREFIX  ?= $(HOME)/cross/bin/
 CC  		:= $(GNU_PREFIX)x86_64-elf-gcc
 LD          := $(GNU_PREFIX)x86_64-elf-ld
 ASM			:= nasm
