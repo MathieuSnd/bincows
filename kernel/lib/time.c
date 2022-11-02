@@ -42,7 +42,7 @@ unsigned insert_position(uint64_t wakeup_time) {
         return 0;
     }
 
-    for(int i = 0; i < n_sleeping_threads; i++) {
+    for(unsigned i = 0; i < n_sleeping_threads; i++) {
         uint64_t t = sleeping_threads[i].wakeup_time;
         
         if(wakeup_time < t)
@@ -158,7 +158,7 @@ void wakeup_threads(void) {
 
 
 
-void sleep(unsigned ms) {
+int sleep(unsigned ms) {
     uint64_t begin = clock_ns();
 
     assert(interrupt_enable());
@@ -173,7 +173,7 @@ void sleep(unsigned ms) {
         // or idle else
         if(sched_current_pid() == KERNEL_PID) {
             sched_kernel_wait(ms);
-            return;
+            return 0;
         }
 
         do {
@@ -183,17 +183,30 @@ void sleep(unsigned ms) {
                 sched_current_pid(), 
                 wakeup_time
             );
-            sched_block();
+
+            int interrupted = sched_block();
+
             _sti();
+
+            if(interrupted) {
+                // a signal is triggered
+                return 1;
+            }
+
         }
         while (clock_ns() < wakeup_time);
+        
+        return 0;
     }
-    else
-
+    else {
         do 
             asm volatile("hlt");
         while (clock_ns() < wakeup_time);
+
+        return 0;
+    }
 }
+
 
 int sleep_cancel(pid_t pid, tid_t tid) {
     // @todo O(log(n)) algorithm:

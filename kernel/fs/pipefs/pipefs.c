@@ -79,10 +79,9 @@ id_t create_file(void) {
     spinlock_acquire(&priv->lock);
 
 
-    // for now, only the shell creates a pipe,
-    // one per process, no two sub processes
-    // at a time
-    assert(priv->n_files == 0);
+    if(priv->n_files > 3) {
+        log_warn("pipefs: %u simultaneous pipes", priv->n_files + 1);
+    }
 
 
 
@@ -163,6 +162,7 @@ int create_pipe(file_handle_pair_t* ends) {
 
     // @todo forbit mounting pipe on another mount point
     sprintf(path, "/pipe/out/%u", id);
+
 
     ends->out = vfs_open_file_from(pipefs, &dirent,  path, VFS_READ);
 
@@ -245,7 +245,11 @@ static pipefs_file_t* wait_for_buffer(struct pipefs_priv* priv, pipefs_file_t* f
 
 
     // wait for the buffer to be filled
-    sched_block();
+    if(sched_block()) {
+        // signal triggered:
+        // should return now
+        return NULL;
+    }
 
     // may be filled
     // reaquire file
@@ -283,10 +287,14 @@ static int read(struct fs* restrict fs, const file_t* restrict fd,
         return -1;
     }
 
+
+    if(n == 0) {
+        return 0;
+    }
+
     unsigned remaining = n;
 
     while(remaining) {
-        //log_warn("remaining: %u, head = %u, tail = %u", remaining, file->head, file->tail);
         if(file->broken) {
             // UNIX semantics:
             // if the pipe is broken,
@@ -337,8 +345,14 @@ static int read(struct fs* restrict fs, const file_t* restrict fd,
             // if we read something, we should not block, juste signal 
             // the caller that there is not enough data.
 
-            if(n == remaining) // actually block
+            if(n == remaining) {// actually block
                 file = wait_for_buffer(priv, file);
+                
+                if(!file) {
+                    // read interrupted
+                    break;
+                }
+            }
             else  {
                 break;
             }
@@ -350,6 +364,12 @@ static int read(struct fs* restrict fs, const file_t* restrict fd,
     
     
 
+    if(n == remaining) {
+        // nothing was read, it means that the read was aborted
+        // before reading any byte.
+        // UNIX returns with the EINTR error
+        return -1;
+    }
 
     return n - remaining;
 }
@@ -376,6 +396,10 @@ static int write(struct fs* restrict fs, file_t* restrict fd,
     
     if (!file) {
         return -1;
+    }
+
+    if(n == 0) {
+        return 0;
     }
     
     unsigned remaining = n;
@@ -437,8 +461,16 @@ static int write(struct fs* restrict fs, file_t* restrict fd,
     
     spinlock_release(&file->lock);
     set_rflags(rf);
+
+
+    if(n - remaining == 0) {
+        // nothing was read, it means that the read was aborted
+        // before reading any byte.
+        // UNIX returns with the EINTR error
+        return -1;
+    }
     
-    return n;
+    return n - remaining;
 }
 
 
@@ -460,6 +492,8 @@ static void close_file(struct fs* restrict fs, uint64_t addr) {
 
 
     assert(file);
+
+
 
 
     if(file->broken) {

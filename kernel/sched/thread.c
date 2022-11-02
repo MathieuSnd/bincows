@@ -109,20 +109,18 @@ void thread_pause(void) {
     thread_t* thread = sched_get_thread_by_tid(pr, sched_current_tid());
     thread->sig_wait = 1;
 
-    
-    do {
-        spinlock_release(&pr->lock);
-        _sti();
-
-        sched_block();
-
-
-        pr = sched_current_process();
-        thread = sched_get_thread_by_tid(pr, sched_current_tid());
-    }
-    while((volatile int)thread->sig_wait);
-
-
     spinlock_release(&pr->lock);
     _sti();
+    
+    for(;;) {
+        int cause = sched_block();
+
+        if(!cause) {
+            // the unblock was caused by an explicit call to 
+            // sched_unblock(). It should be an error
+            log_warn("thread_pause was interrupted, not by a signal");
+        }
+        else
+            return;
+    }
 }

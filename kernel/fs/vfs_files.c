@@ -1228,7 +1228,7 @@ uint64_t vfs_seek_file(file_handle_t *restrict stream, uint64_t offset, int when
 
     set_stream_offset(stream, absolute_offset);
 
-    // everything is fine: return 0
+    // everything is fine: return the absolute offset
     return absolute_offset;
 }
 

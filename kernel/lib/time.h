@@ -21,8 +21,10 @@ uint64_t next_wakeup(uint64_t now);
  */
 void wakeup_threads(void);
 
-// sleep for around ms miliseconds 
-void sleep(unsigned ms);
+// the function blocks until:
+// - ms miliseconds passed - returns 0
+// - a signal triggers     - retuns non-0
+int sleep(unsigned ms);
 
 // try to cancel the sleep of a given thread
 // return 0 if the cancellation succeed

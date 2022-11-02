@@ -145,6 +145,9 @@ static uint64_t sc_sleep(process_t* proc, void* args, size_t args_sz) {
 
     uint64_t ms = *(uint64_t*)args;
 
+// @todo cancel the sleep using its
+// return value 
+
 // this syscall is cancellable
 // it means that it should be possible that a signal occur  
 // when the thread is put to sleep
@@ -156,7 +159,7 @@ static uint64_t sc_sleep(process_t* proc, void* args, size_t args_sz) {
     _sti();
     if(ms == 0)
         sched_yield();
-    else 
+    else
         sleep(*(uint64_t*)args);
 
     assert(!proc->lock);

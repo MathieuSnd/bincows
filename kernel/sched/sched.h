@@ -52,14 +52,14 @@ int timer_irq_should_schedule(void);
 
 void __attribute__((noreturn)) schedule(void); 
 
+
 /**
  * @brief block the current thread. It can get
  * unblocked at anytime, so this should be placed
  * in a loop. This function returns after a call
  * to sched_unblock(...) or when a signal is armed
- * @return 0:     a call to sched_unblock unblocked
- *                the thread
- *         non 0: a signal got armed
+ * @return 0 if a call to sched_unblock unblocked
+ *         the thread, or non 0 if a signal got armed
  */
 int sched_block(void);
 

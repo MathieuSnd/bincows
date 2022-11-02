@@ -920,7 +920,7 @@ int sched_block(void) {
 
     if(!sched_running) {
         asm volatile("hlt");
-        return;
+        return 0;
     }
 
 
@@ -959,21 +959,24 @@ int sched_block(void) {
     // by a signal
     int interrupted_block = 0;
 
-    if(current_tid == 0) {
-        // only threads with tid 0 can handle signals
+    if(current_tid == 1) {
+        // only threads with tid 1 can handle signals
         
         process_t* p = sched_get_process(current_pid);
 
-        assert(!p->sig_current);
 
-
-        if(p->sig_pending) {
+        // no recursive signals 
+        // @todo add recursive signals
+        if(p->sig_current == NOSIG && p->sig_pending) {
             // at least one signal is pending
             interrupted_block = 1;
+        }
+        else {
         }
 
         spinlock_release(&p->lock);
     }
+
 
 
     set_rflags(rf);

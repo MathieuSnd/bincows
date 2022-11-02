@@ -100,7 +100,13 @@ static int block_pop_chars(char* c, size_t n) {
     for(i = 0; i < n; i++) {
         while(buff_tail == buff_head) {
             // buffer is empty
-            sleep(20);
+            
+            int cause = sleep(20);
+
+            if(cause) {
+                // a signal interupted the sleep
+                return i;
+            }
         }
     
         c[i] = file_buffer[buff_tail];
@@ -291,25 +297,30 @@ void ps2kb_init(void) {
 }
 
 
-
-
-static int devfs_read(void* arg, void* buf, size_t begin, size_t count) {
+static int ps2kb_read(void* arg, void* buf, size_t begin, size_t count) {
     (void) arg;
-    (void) buf;
     (void) begin;
-    (void) count;
 
-    return block_pop_chars(buf, count);
+    if(!count)
+        return 0;
+
+    int rd = block_pop_chars(buf, count);
+    if(!rd) {
+        // call interrupted by signal
+        // EINTR
+        return -1;
+    }
+    return rd;
 }
 
-static int devfs_write(void* arg, const void* buf, size_t begin, size_t count) {
+static int ps2kb_write(void* arg, const void* buf, size_t begin, size_t count) {
     (void) arg;
     (void) buf;
     (void) begin;
     (void) count;
-    panic("tried to write in read-only dev file /dev/ps2kb");
+    log_warn("tried to write in read-only dev file /dev/ps2kb");
     // unwritable
-    return 0;
+    return -1;
 }
 
 
@@ -318,8 +329,8 @@ void ps2kb_register_dev_file(const char* filename) {
 
     int r = devfs_map_device((devfs_file_interface_t){
         .arg   = NULL,
-        .read  = (void*)devfs_read,
-        .write = (void*)devfs_write,
+        .read  = (void*)ps2kb_read,
+        .write = (void*)ps2kb_write,
         .rights = {.read = 1, .write = 0, .seekable = 0},
         .file_size = ~0llu,
     }, filename);
