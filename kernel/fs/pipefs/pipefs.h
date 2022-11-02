@@ -1,7 +1,6 @@
 #pragma once
 #include "../fs.h"
 
-#define PIPE_SIZE 1024
 
 fs_t* pipefs_mount(void);
 

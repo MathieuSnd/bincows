@@ -18,6 +18,10 @@ typedef struct {
 } thread_id_t;
 
 
+#define PIPE_SIZE 1024
+
+
+
 typedef uint32_t id_t;
 
 
