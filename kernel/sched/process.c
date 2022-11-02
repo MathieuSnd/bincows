@@ -922,10 +922,6 @@ int process_trigger_signal(pid_t pid, int signal) {
     else {
         assert(process->n_threads > 0);
         process->sig_pending |= (1 << signal);
-
-        if(process->sig_current == NOSIG 
-        && process->threads[0].uninterruptible)
-;//            prepare_process_signal(process, signal);
     }
 
     // unblock threads that wait for a signal if necessary

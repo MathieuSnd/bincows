@@ -915,7 +915,7 @@ void sched_irq_ack(void) {
 
 
 
-void sched_block(void) {
+int sched_block(void) {
     assert(!currently_in_irq);
 
     if(!sched_running) {
@@ -948,9 +948,37 @@ void sched_block(void) {
     // in some cases (the sleep function),
     // it is important that no interrupt hits before the thread
     // blocks.
-    // so we must restore irqs after the int instructuin
+    // so we must restore irqs after the int instruction
+
+    assert(!interrupt_enable());
+    // the interrupt should have restored 
+    // the interrupt enable flag
+    
+
+    // check if the block was interrupted
+    // by a signal
+    int interrupted_block = 0;
+
+    if(current_tid == 0) {
+        // only threads with tid 0 can handle signals
+        
+        process_t* p = sched_get_process(current_pid);
+
+        assert(!p->sig_current);
+
+
+        if(p->sig_pending) {
+            // at least one signal is pending
+            interrupted_block = 1;
+        }
+
+        spinlock_release(&p->lock);
+    }
+
 
     set_rflags(rf);
+
+    return interrupted_block;
 }
 
 
