@@ -338,7 +338,7 @@ static int read(struct fs* restrict fs, const file_t* restrict fd,
             // the caller that there is not enough data.
 
             if(n == remaining) // actually block
-                wait_for_buffer(priv, file);
+                file = wait_for_buffer(priv, file);
             else  {
                 break;
             }
@@ -432,7 +432,7 @@ static int write(struct fs* restrict fs, file_t* restrict fd,
         remaining -= batch_wr;
         
         if(block)
-            wait_for_buffer(priv, file);
+            file = wait_for_buffer(priv, file);
     }
     
     spinlock_release(&file->lock);
