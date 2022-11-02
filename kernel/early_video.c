@@ -29,6 +29,13 @@ driver_t* video_init(
         .pix = (void *)MMIO_BEGIN,
     };
 
+    log_info("screen resolution: %ux%u", 
+            bi->framebuffer_width,
+            bi->framebuffer_height
+    );
+
+
+
 
     register_dev((struct dev *)fb_dev);
 

@@ -9,7 +9,6 @@
 #include "int/pic.h"
 #include "int/syscall.h"
 
-#include "drivers/terminal/video.h"
 #include "drivers/terminal/terminal.h"
 #include "drivers/hpet.h"
 #include "drivers/ps2kb.h"
@@ -23,7 +22,6 @@
 #include "memory/physical_allocator.h"
 #include "memory/paging.h"
 #include "memory/vmap.h"
-#include "memory/heap.h"
 
 #include "lib/sprintf.h"
 #include "lib/string.h"
@@ -32,14 +30,11 @@
 #include "lib/dump.h"
 #include "lib/stacktrace.h"
 #include "lib/panic.h"
+#include "boot/boot_interface.h"
 
 #include "sched/sched.h"
-
 #include "sync/spinlock.h"
-
 #include "early_video.h"
-
-#include "boot/boot_interface.h"
  
 
 // accessible by other compilation units
@@ -102,6 +97,11 @@ disk_part_t* find_main_part(const struct boot_interface* bi) {
     int valid_part_guid = (part_guid.low | part_guid.high) != 0llu;
 
     if(valid_part_guid) {
+        log_info(
+            "booted from partition with guid %lx-%lx",
+            part_guid.high,
+            part_guid.low
+        );
         part = find_partition(part_guid);
 
         if(part)
@@ -139,136 +139,6 @@ disk_part_t* find_main_part(const struct boot_interface* bi) {
 }
 
 
-static inline
-void test_disk_write(void) {
-    file_handle_t* f = vfs_open_file("//////home//elyo//", VFS_WRITE);
-
-    const char* s = "Hello, world!";
-
-    vfs_write_file(s, 1, strlen(s), f);
-// check
-    //read
-    vfs_close_file(f);
-    
-    f = vfs_open_file("//////home//elyo//", VFS_READ);
-
-    // read and print file
-    char buf[2048];
-    size_t read = vfs_read_file(buf, 2048, f);
-    log_info("read %d bytes", read);
-    printf("%s", buf);
-
-    vfs_close_file(f);
-}
-
-
-
-static inline
-void test_disk_overflow(void) {
-    file_handle_t* f = vfs_open_file("//////home//elyo//", VFS_READ);
-
-    const int bsize = 1024 * 1024 * 8;
-
-    const size_t size = 1024*1024*64;
-
-    uint8_t* buf = malloc(bsize);
-    for(int i = 0; i < bsize; i++)
-        buf[i] = i;
-
-    uint64_t time = clock_ns();
-
-    for(unsigned i = 0; i < size / bsize; i++) {
-        log_info("write %u (%u)", i * bsize, (clock_ns() - time) / 1000000);
-        time = clock_ns();
-        
-        size_t r = vfs_write_file(buf, bsize, 1, f);
-        assert(r == 1); 
-    }
-
-// check
-    //read
-    vfs_close_file(f);
-    
-    f = vfs_open_file("//////home//elyo//", VFS_READ);
-
-    time = clock_ns();
-    int rsize = (int) bsize;
-    int i = 0;
-    while(vfs_read_file(buf, rsize, f) == (size_t)rsize) {
-        int begin = i++ * rsize;
-        log_info("read %u (%u)", begin, (clock_ns() - time) / 1000000);
-        time = clock_ns();
-
-        for(int j = begin; j < begin + rsize; j++)
-            assert(buf[j - begin] == (j & 0xff));
-            
-    }
-    vfs_close_file(f);
-    free(buf);
-}
-
-
-
-
-
-static inline 
-void test_disk_read(void) {
-    file_handle_t* fd = vfs_open_file("//////bin/sh//", VFS_READ);
-    
-    const int size = vfs_seek_file(fd, 0, SEEK_END);
-
-    assert(size > 0);
-    vfs_seek_file(fd, 0, SEEK_SET);
-
-
-    vfs_close_file(fd);
-
-    _cli();
-
-    for(int i = 0; i < 10000; i++) {
-
-        // alloc user memory
-        uint64_t pm = alloc_user_page_map();
-
-        // map user memory
-        set_user_page_map(pm);
-
-        uint8_t* buf = malloc(size);
-        memset(buf, 0, size);        
-
-        _sti();
-        fd = vfs_open_file("/////bin/sh//", VFS_READ);
-        int r = vfs_read_file(buf, size, fd);
-
-        for(int i = 0; i < 10; i++)
-            asm("hlt");
-
-
-        vfs_close_file(fd);
-
-
-        assert(r == size);
-
-        // load elf
-        //elf_program_t* prog = elf_load(buf, size);
-
-
-        log_info("checksum: %u", memsum(buf, size));
-
-        //assert(prog != NULL);
-
-        //elf_free(prog);
-
-        free_user_page_map(pm);
-        free(buf);
-
-    }
-
-
-
-}
-
-
 
 void launch_shell(void) {
     // argv and envp for the initial shell
@@ -297,8 +167,6 @@ void launch_shell(void) {
 
     vfs_close_file(f);
     
-
-    //terminal_clear(get_active_terminal());
 
     _cli();
 
@@ -330,6 +198,8 @@ void launch_shell(void) {
 
 }
 
+
+extern void run_tests(void);
 
 void kernel_main(struct boot_interface* bi) {
 
@@ -389,29 +259,21 @@ void kernel_main(struct boot_interface* bi) {
 // terminal is successfully installed 
     init_gdt_table();
 
-    puts("\x1b[0m\x0c");
-    
     puts(log_get());
 
-    log_info("screen resolution: %ux%u", 
-            bi->framebuffer_width,
-            bi->framebuffer_height
-    );
 
     hpet_init();
     apic_setup_clock();
 
-
-
     vfs_init();
+
+    // scan PCIe bus
     pcie_init();
 
 
     pic_init();
     ps2kb_init();
 
-    //ps2kb_set_event_callback(early_kbhandler);
-    
 
     disk_part_t* part = find_main_part(bi);
     
@@ -441,12 +303,14 @@ void kernel_main(struct boot_interface* bi) {
     log_debug("init syscalls");
     syscall_init();
 
-    //log_warn("test disk read");
-    //test_disk_read();
 
-    //log_warn("test disk write");
-    //test_disk_overflow();
-    
+#define KERNEL_RUN_TESTS
+    //////////////
+    /// TESTS ////
+    //////////////
+#ifdef KERNEL_RUN_TESTS
+    run_tests();
+#endif
 
     log_debug("launch shell");
     // everything should be correctly initialized
@@ -455,10 +319,7 @@ void kernel_main(struct boot_interface* bi) {
 
     log_debug("start scheduling");
 
-    // clear the terminal
-    //printf("\x0c");
 
-    
     // start the scheduler
     sched_start();
     
