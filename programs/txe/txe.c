@@ -13,8 +13,15 @@
 
 #define VERSION_STR "txe v0.1"
 
+
+#define CURSOR_CHAR '_'
+
 // initialized in parse_args
 static char* opened_filename = NULL;
+
+
+// move cursor to the top of the screen
+static const char* cursor_reset_seq = "\033[0;0H";
 
 
 //#define MAX_BUFF_SIZE (1024 * 1024 * 512)
@@ -142,6 +149,12 @@ screen_layout_t* init_screen_layout(void) {
     layout->cols = screen_size.width;
 
 
+
+    // layout buffer
+    layout->buf_sz  = layout->lines * layout->cols * 2 + 2 * strlen(cursor_reset_seq) + 1;
+    layout->buf     = malloc(layout->buf_sz);
+
+
     return layout;
 }
 
@@ -155,15 +168,11 @@ void write_padding(char* string, int line) {
 
     int num_begin = LEFT_PADDING - 1 - digits;
 
-    memset(string, ' ', num_begin);
+    memset(string, '-', num_begin);
     memcpy(string + num_begin, str_line, digits);
 
     string[LEFT_PADDING -1] = '|';
 }
-
-
-
-
 
 
 void print_header(char* buf, file_buffer_t* fb, screen_layout_t* sl) {
@@ -191,18 +200,20 @@ void print_header(char* buf, file_buffer_t* fb, screen_layout_t* sl) {
 }
 
 
-char* footer_message = NULL;
+char* footer_message = "footer message";
 
 void print_footer(char* buf, file_buffer_t* fb, screen_layout_t* sl) {
 
     buf += sl->cols * (sl->lines - sl->bottom_padding);
 
     // second last line
-    memset(buf , '~', sl->cols * 2);
+    memset(buf , '~', sl->cols);
 
     
     // center the footer message
     if(footer_message) {
+        buf += sl->cols;
+
         size_t len = strlen(footer_message);
 
         int left  = (sl->cols - len) / 2;
@@ -220,7 +231,46 @@ void print_footer(char* buf, file_buffer_t* fb, screen_layout_t* sl) {
 
 
 
-void draw_screen(file_buffer_t* fb, screen_layout_t* sl, cursor_t* cur) {
+// update cursor position:
+// put the right character at its last position
+// and put the cursor char at its new one
+void update_cursor(file_buffer_t* fb, screen_layout_t* sl, 
+                   cursor_t* new, cursor_t* last) {
+        
+    char buf[64];
+
+
+    int lastx = last->col + LEFT_PADDING,
+        lasty = last->row + sl->top_padding;
+
+    // character that is hidden behind
+    // the last cursor
+    char hidden = sl->buf[strlen(cursor_reset_seq) + lasty * sl->cols + lastx];
+
+
+    int len = snprintf(buf, sizeof(buf), 
+            "\033[%u;%uH%c" // put new cursor
+            "\033[%u;%uH%c" // remove last cursor
+            "\033[0;0H",    // back to 0:0
+
+            new->col + LEFT_PADDING + 1, new->row + sl->top_padding + 1,
+            CURSOR_CHAR,
+
+            lastx + 1, lasty + 1,
+            hidden
+    );
+
+    fwrite(buf, 1, len, stdout);
+}
+
+
+
+// draw the whole screen
+void draw_screen(
+        file_buffer_t* fb, 
+        screen_layout_t* sl, 
+        cursor_t* cur
+) {
 
     // compute end line to draw
     size_t endline = sl->lines - sl->top_padding - sl->bottom_padding;
@@ -228,10 +278,6 @@ void draw_screen(file_buffer_t* fb, screen_layout_t* sl, cursor_t* cur) {
     if(endline > fb->newlines_count ) {
         endline = fb->newlines_count;
     }
-    // move cursor to the top of the screen
-    printf("\033[0;0H");
-
-    const char* end_seq = "\033[0;0H";
 
 
     // @todo buffer shift
@@ -239,17 +285,18 @@ void draw_screen(file_buffer_t* fb, screen_layout_t* sl, cursor_t* cur) {
     char* buf_end = fb->buffer + fb->newlines[0 + endline];
 
 
-    // layout buffer
-    size_t layout_buf_sz =  sl->lines * sl->cols * 2 + sizeof(end_seq);
-    char*  layout_buf    = malloc(layout_buf_sz);
+    char*  screen_begin = sl->buf + strlen(cursor_reset_seq);
+
+
+    memcpy(sl->buf, cursor_reset_seq, strlen(cursor_reset_seq));
 
 
     int lnum = fb->buffer_line_begin + 0; // @todo buffer shift
 
 
-    print_header(layout_buf, fb, sl);
+    print_header(screen_begin, fb, sl);
 
-    char* curline_begin = layout_buf + sl->top_padding * sl->cols;
+    char* curline_begin = screen_begin + sl->top_padding * sl->cols;
 
     for(size_t l = 0; l < sl->lines - sl->top_padding - sl->bottom_padding; l++) {
 
@@ -298,13 +345,18 @@ void draw_screen(file_buffer_t* fb, screen_layout_t* sl, cursor_t* cur) {
         curline_begin += screen_size.width;
     }
 
-    print_footer(layout_buf, fb, sl);
+    print_footer(screen_begin, fb, sl);
 
 
     // buffer end
-    curline_begin = layout_buf + sl->lines * sl->cols - 1;
-//
-    memcpy(curline_begin, end_seq, sizeof(end_seq));
+    curline_begin = screen_begin + sl->lines * sl->cols - 1;
+
+    int cursor_line_begin = (cur->row + sl->top_padding) * sl->cols;
+    int cursor_pos        = cursor_line_begin + cur->col + LEFT_PADDING;
+
+    //screen_begin[cursor_pos] = 'X';
+
+    memcpy(curline_begin, cursor_reset_seq, sizeof(cursor_reset_seq));
 
 
     
@@ -312,13 +364,12 @@ void draw_screen(file_buffer_t* fb, screen_layout_t* sl, cursor_t* cur) {
 
     //size_t len = buf_end - buf_begin;
     // draw the buffer
-    fwrite(layout_buf, 1, layout_buf_sz, stdout);
+    fwrite(sl->buf, 1, sl->buf_sz, stdout);
     //printf("_");
     // print cursor
-    printf("\x1b[%u;%uHX", cur->col + LEFT_PADDING + 1, cur->row + sl->top_padding + 1);
+    //printf("\x1b[%u;%uHX", cur->col + LEFT_PADDING + 1, cur->row + sl->top_padding + 1);
     fflush(stdout);
 
-    free(layout_buf);
 }
 
 
@@ -330,11 +381,15 @@ static void load_screen_size(void) {
         exit(1);
     }
 
-    printf("bordel de\n");
-
     screen_size.width = ti.cols;
     screen_size.height = ti.lines;
-    printf("bordel de\n");
+}
+
+
+
+
+void ask_exit(void) {
+    exit(1);
 }
 
 
@@ -344,15 +399,9 @@ void sigterm(int n) {
 }
 
 
-void ask_exit(void) {
-    exit(1);
-}
-
-
 void cleanup(void) {
     printf("\x0c");
 }
-
 
 
 
@@ -382,16 +431,28 @@ int main(int argc, char** argv) {
         .col = 0,
     };
 
+    cursor_t old_cur;
+
     atexit(cleanup);
-    //printf("\x0c");
-    //printf("\033[0;0H");
 
 
-
+    draw_screen(fb, sl, &cur);
 
     while(1) {
-        draw_screen(fb, sl, &cur);
         int c = getc(stdin);
-        read_input(c, fb, &cur, sl);
+
+        old_cur = cur;
+        int modified = read_input(c, fb, &cur, sl);
+
+
+        switch(modified) {
+            case 1: 
+                draw_screen(fb, sl, &cur);
+                update_cursor(fb, sl, &cur, &old_cur);
+                break;
+            default:
+                update_cursor(fb, sl, &cur, &old_cur);
+        }
+        
     }
 }

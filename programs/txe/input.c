@@ -60,7 +60,7 @@ void emplace_char(file_buffer_t* fb, cursor_t* cur, screen_layout_t* sl, int ch)
 
 
 
-void read_input(int c, file_buffer_t* fb, cursor_t* cur, screen_layout_t* sl) {
+int read_input(int c, file_buffer_t* fb, cursor_t* cur, screen_layout_t* sl) {
     if(c == EOF)
         exit(1);
 
@@ -107,7 +107,7 @@ void read_input(int c, file_buffer_t* fb, cursor_t* cur, screen_layout_t* sl) {
             seq = 0;
         }
 
-        return;
+        return 0;
     }
     
 
@@ -118,4 +118,5 @@ void read_input(int c, file_buffer_t* fb, cursor_t* cur, screen_layout_t* sl) {
         // write key
         break;
     }    
+    return 1;
 }

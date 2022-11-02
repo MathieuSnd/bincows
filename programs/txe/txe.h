@@ -45,7 +45,9 @@ struct screen_layout {
     int bottom_padding;
     int lines;
     int cols;
-
+    
+    char* buf;
+    int   buf_sz;
 } screen_layout_t;
 
 
@@ -54,4 +56,5 @@ void analyze_lines(file_buffer_t* buf);
 
 
 // from input.c
-void read_input(int c, file_buffer_t* fb, cursor_t* cur, screen_layout_t* sl);
+// returns 1 iif the screen should be redrawn
+int read_input(int c, file_buffer_t* fb, cursor_t* cur, screen_layout_t* sl);
