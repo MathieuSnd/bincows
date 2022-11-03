@@ -895,17 +895,21 @@ size_t vfs_read_file(void *ptr, size_t size,
 
     // if we have read less than we wanted,
     // we have reached the end of the file
+    // OR
+    // the fs we read from did only send us
+    // fewer bytes
     if(rd < (int)read_blocks) {
         // reading less than we wanted
         // is only possible on special files,
         // with granularity = 1 (non block fs)
+        // (for now, @todo....)
         assert(granularity == 1); 
         
         // no need to update the sector offset
         // 
 
         read_buf_size = rd;
-        size -= read_blocks - rd;
+        bsize -= read_blocks - rd;
     }
 
 
