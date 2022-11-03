@@ -259,6 +259,11 @@ void kernel_main(struct boot_interface* bi) {
 // terminal is successfully installed 
     init_gdt_table();
 
+
+    // clear screen to append
+    // the background color
+    puts("\x1b[0m\x0c");
+
     puts(log_get());
 
 
@@ -304,7 +309,6 @@ void kernel_main(struct boot_interface* bi) {
     syscall_init();
 
 
-#define KERNEL_RUN_TESTS
     //////////////
     /// TESTS ////
     //////////////
