@@ -690,7 +690,6 @@ int prepare_process_signal(process_t* process, int signal) {
      */
     assert(!interrupt_enable());
 
-
     set_user_page_map(process->page_dir_paddr);
 
 
@@ -926,6 +925,10 @@ int process_trigger_signal(pid_t pid, int signal) {
 
     // unblock threads that wait for a signal if necessary
     unblock_sigwait_threads_and_release(process, rf);
+
+    // unblock the thread
+    sleep_cancel (pid, 1);
+    sched_unblock(pid, 1);
 
     // restore the process memory map
     set_user_page_map(saved_proc_page_map);
