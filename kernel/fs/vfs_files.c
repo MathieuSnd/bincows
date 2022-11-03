@@ -807,17 +807,17 @@ size_t vfs_read_file(void *ptr, size_t size,
     // first read unaligned 
     if(stream->buffer_valid && cachable) {
         // we already have some bytes in memory
-        size_t size = MIN(granularity - stream->sector_offset, bsize);
+        size_t unaligned_size = MIN(granularity - stream->sector_offset, bsize);
         
 
-        memcpy(ptr, buf + stream->sector_offset, size);
+        memcpy(ptr, buf + stream->sector_offset, unaligned_size);
 
 
 
 
         // advance the cursor
-        stream->sector_offset += size;
-        stream->file_offset += size;
+        stream->sector_offset += unaligned_size;
+        stream->file_offset += unaligned_size;
 
         assert(stream->sector_offset <= granularity);
 
@@ -828,14 +828,14 @@ size_t vfs_read_file(void *ptr, size_t size,
             stream->sector_count++;
         }
         
-        bsize -= size;
+        bsize -= unaligned_size;
         
         if(!bsize) {
             release_file_access(stream->vfile_id);
-            return size;
+            return unaligned_size;
         }
 
-        ptr += size;
+        ptr += unaligned_size;
 
         // if there is still bytes to read,
         // what we wanted is to manage unaligned bytes
@@ -906,7 +906,6 @@ size_t vfs_read_file(void *ptr, size_t size,
         assert(granularity == 1); 
         
         // no need to update the sector offset
-        // 
 
         read_buf_size = rd;
         bsize -= read_blocks - rd;
