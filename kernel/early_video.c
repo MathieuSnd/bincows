@@ -2,6 +2,7 @@
 #include "drivers/terminal/terminal.h"
 #include "memory/vmap.h"
 #include "boot/boot_interface.h"
+#include "lib/logging.h"
 
 typedef struct framebuffer_dev fd_t;
 
