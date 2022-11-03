@@ -248,6 +248,7 @@ static pipefs_file_t* wait_for_buffer(struct pipefs_priv* priv, pipefs_file_t* f
     if(sched_block()) {
         // signal triggered:
         // should return now
+        _cli();
         return NULL;
     }
 
@@ -359,7 +360,8 @@ static int read(struct fs* restrict fs, const file_t* restrict fd,
         }
     }
 
-    spinlock_release(&file->lock);
+    if(file)
+        spinlock_release(&file->lock);
     set_rflags(rf);
     
     
@@ -459,7 +461,8 @@ static int write(struct fs* restrict fs, file_t* restrict fd,
             file = wait_for_buffer(priv, file);
     }
     
-    spinlock_release(&file->lock);
+    if(file)
+        spinlock_release(&file->lock);
     set_rflags(rf);
 
 
