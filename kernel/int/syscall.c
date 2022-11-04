@@ -907,7 +907,7 @@ static uint64_t sc_write(process_t* proc, void* args, size_t args_sz) {
 
     switch(proc->fds[a->fd].type) {
         case FD_FILE:
-            return vfs_write_file(a->buf, 1, a->count, proc->fds[a->fd].file);
+            return vfs_write_file(a->buf, a->count, proc->fds[a->fd].file);
             break;
         // we might use this for writing to a directory
         // to create new entries

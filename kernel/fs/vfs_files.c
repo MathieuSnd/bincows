@@ -949,7 +949,7 @@ size_t vfs_write_file(const void *ptr, size_t size,
 
     // assert that interrupts are enabled
     assert(interrupt_enable());
-
+    assert(stream);
 
 
     if(size == 0) {
@@ -1008,7 +1008,6 @@ size_t vfs_write_file(const void *ptr, size_t size,
 
     int error = 0;
     
-
     // print file_copy
     // if the selected write is perfectly aligned,
     // the we don't need another buffer
@@ -1080,13 +1079,22 @@ size_t vfs_write_file(const void *ptr, size_t size,
             ) {
             if(!stream->buffer_valid || !cachable) {
                 // must read before writing
-                fs->read_file_sectors(
+                int rd = fs->read_file_sectors(
                         fs,
                         &file_copy,
                         write_buf,
                         stream->sector_count,
                         1
                 );
+
+                if(rd != 1) {
+                    // couldn't read enough data.
+
+                    log_warn("isseu");
+                    release_file_access(stream->vfile_id);
+
+                    return -1;
+                }
             }
             else // buf contains cached data of sc block
             {
@@ -1103,7 +1111,7 @@ size_t vfs_write_file(const void *ptr, size_t size,
                     );
             }
         }
-
+        
         uint64_t last_sector = stream->sector_count + write_blocks - 1;
 
         if(last_sector != stream->sector_count) {
@@ -1193,7 +1201,7 @@ size_t vfs_write_file(const void *ptr, size_t size,
     if(error)
         return -1;
 
-    return nmemb;
+    return size;
 }
 
 
