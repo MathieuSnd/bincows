@@ -56,7 +56,7 @@ static void log_tree(const char *path, int level)
 
 static inline
 void test_print_file(int size) {
-    file_handle_t* f = vfs_open_file("/fs/boot/limine.cfg");
+    file_handle_t* f = vfs_open_file("/fs/boot/limine.cfg", VFS_READ);
     assert(f);
     char buf[size+1];
     int read = 0;
@@ -72,7 +72,7 @@ void test_print_file(int size) {
 // read & seek test function
 static inline
 void test_write(void) {
-    file_handle_t* f = vfs_open_file("/fs/file.dat");
+    file_handle_t* f = vfs_open_file("/fs/file.dat", VFS_WRITE);
     assert(f);
     int r = vfs_seek_file(f, 0, SEEK_END);
     assert(!r);
@@ -87,7 +87,7 @@ void test_write(void) {
     for(int i = 0; i < 512; i++)
         buf[i] = 0xff;
 
-    log_warn("WRITE = %u", vfs_write_file(buf, 512, 1, f));
+    log_warn("WRITE = %u", vfs_write_file(buf, 512, f));
 
     vfs_seek_file(f, seek, SEEK_SET);
 
@@ -107,7 +107,7 @@ void test_write(void) {
 void read_seek_big_file(size_t SIZE) {
     assert(SIZE < 1024 * 1024);
 
-    file_handle_t* f = vfs_open_file("/fs/file.dat");
+    file_handle_t* f = vfs_open_file("/fs/file.dat", VFS_READ);
     
     vfs_seek_file(f, 0, SEEK_END);
 
@@ -159,8 +159,8 @@ void read_seek_big_file(size_t SIZE) {
 
 static inline
 void test_file_write_extend(void) {
-    file_handle_t* writer = vfs_open_file("/////fs/boot/limine.cfg//");
-    file_handle_t* reader = vfs_open_file("/fs//./boot//..//boot/limine.cfg");
+    file_handle_t* writer = vfs_open_file("/////fs/boot/limine.cfg//", VFS_WRITE);
+    file_handle_t* reader = vfs_open_file("/fs//./boot//..//boot/limine.cfg", VFS_READ);
 //    exit(0);
 
     assert(writer);
@@ -172,7 +172,7 @@ void test_file_write_extend(void) {
         buf[i] = 0xff;
     
     //vfs_seek_file(writer, 0, SEEK_END);
-    vfs_write_file(buf, 1, dsize, writer);
+    vfs_write_file(buf, dsize, writer);
     assert(reader);
 
     char rdbuf[52];
@@ -199,7 +199,7 @@ void test_file_write_extend(void) {
 
 static inline
 void test_disk_overflow(void) {
-    file_handle_t* f = vfs_open_file("/////fs/boot/limine.cfg//");
+    file_handle_t* f = vfs_open_file("/////fs/boot/limine.cfg//", VFS_RDWR);
 
     const int bsize = 8 * 1024 * 1024;  
 
@@ -215,7 +215,7 @@ void test_disk_overflow(void) {
         log_debug("write %u (%u)", i * bsize, clock() - time);
         time = clock();
         
-        assert(vfs_write_file(buf, bsize, 1, f) == 1); 
+        assert(vfs_write_file(buf, bsize, f) == 1); 
     }
     //assert(0);
 
@@ -223,7 +223,7 @@ void test_disk_overflow(void) {
     //read
     vfs_close_file(f);
     
-    f = vfs_open_file("/////fs/boot/limine.cfg//");
+    f = vfs_open_file("/////fs/boot/limine.cfg//", VFS_RDWR);
 
     time = clock();
     int rsize = bsize;
@@ -245,8 +245,8 @@ void test_disk_overflow(void) {
 
 
 void test_open(void) {
-    vfs_open_file("");
-    vfs_open_file("c");
+    vfs_open_file("", VFS_RDWR);
+    vfs_open_file("c", VFS_RDWR);
     vfs_opendir("");
     vfs_opendir("c");
 }
