@@ -157,7 +157,7 @@ void log_flush(void) {
         assert(file);
 
 
-        vfs_write_file(logs_buffer, i, 1, file);
+        vfs_write_file(logs_buffer, i, file);
 
         vfs_close_file(file);
 

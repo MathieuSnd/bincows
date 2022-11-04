@@ -944,16 +944,15 @@ size_t vfs_read_file(void *ptr, size_t size,
 
 
 
-size_t vfs_write_file(const void *ptr, size_t size, size_t nmemb,
-                      file_handle_t *stream) {
-    unsigned bsize = size * nmemb;
+size_t vfs_write_file(const void *ptr, size_t size, 
+                      file_handle_t* restrict stream) {
 
     // assert that interrupts are enabled
     assert(interrupt_enable());
 
 
 
-    if(bsize == 0) {
+    if(size == 0) {
         return 0;
     }
 
@@ -990,7 +989,7 @@ size_t vfs_write_file(const void *ptr, size_t size, size_t nmemb,
         set_stream_offset(stream, file_copy.file_size);
     }
 
-    unsigned must_write = stream->sector_offset + bsize;
+    unsigned must_write = stream->sector_offset + size;
 
     size_t write_blocks = CEIL_DIV(must_write, granularity);
 
@@ -1001,7 +1000,7 @@ size_t vfs_write_file(const void *ptr, size_t size, size_t nmemb,
 
     unsigned write_buf_size = write_blocks * granularity;
 
-    assert(stream->sector_offset + bsize <= write_buf_size);
+    assert(stream->sector_offset + size <= write_buf_size);
 
     
     // save file address in case it is updated
@@ -1075,8 +1074,8 @@ size_t vfs_write_file(const void *ptr, size_t size, size_t nmemb,
                 // less than 1 sector is written
                 // and the write doesn't reach 
                 // the end of the file
-            || (stream->sector_offset + bsize < granularity
-                && stream->file_offset + bsize 
+            || (stream->sector_offset + size < granularity
+                && stream->file_offset + size 
                     < file_copy.file_size)
             ) {
             if(!stream->buffer_valid || !cachable) {
@@ -1094,12 +1093,12 @@ size_t vfs_write_file(const void *ptr, size_t size, size_t nmemb,
                 memcpy(write_buf, buf, stream->sector_offset);
                 
 
-                int64_t remaning = granularity - (bsize + stream->sector_offset);
+                int64_t remaning = granularity - (size + stream->sector_offset);
                 // if remaning > 0, there is stuff in sc that we need to read
                 if(remaning > 0)
                     memcpy(
-                        write_buf + bsize + stream->sector_offset, 
-                        buf       + bsize + stream->sector_offset, 
+                        write_buf + size + stream->sector_offset, 
+                        buf       + size + stream->sector_offset, 
                         remaning
                     );
             }
@@ -1116,7 +1115,7 @@ size_t vfs_write_file(const void *ptr, size_t size, size_t nmemb,
                 stream->buffer_valid = 0;
             
             if(end_offset != 0 && 
-                stream->file_offset + bsize < 
+                stream->file_offset + size < 
                         file_copy.file_size) {
                 // the end is both unaligned and in the file.
                 // if the end is not aligned and the file is 
@@ -1144,8 +1143,8 @@ size_t vfs_write_file(const void *ptr, size_t size, size_t nmemb,
         }
 
         
-        assert(stream->sector_offset + bsize <= write_buf_size);
-        memcpy(write_buf + stream->sector_offset, ptr, bsize);
+        assert(stream->sector_offset + size <= write_buf_size);
+        memcpy(write_buf + stream->sector_offset, ptr, size);
 
         
         fs->write_file_sectors(
@@ -1163,7 +1162,7 @@ size_t vfs_write_file(const void *ptr, size_t size, size_t nmemb,
 
     // advance the cursor
     stream->sector_offset = end_offset;
-    stream->file_offset += bsize;
+    stream->file_offset += size;
     stream->sector_count = stream->file_offset / granularity;
     
     if((file_copy.file_size != ~0llu && file_copy.file_size < stream->file_offset) // size update

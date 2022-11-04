@@ -22,7 +22,7 @@ void test_disk_write(void) {
 
     const char* s = "Hello, world!";
 
-    vfs_write_file(s, 1, strlen(s), f);
+    vfs_write_file(s, strlen(s), f);
 // check
     //read
     vfs_close_file(f);
@@ -75,7 +75,7 @@ void test_disk_overflow(void) {
         log_debug("write %u (%u)", i * bsize, (clock_ns() - time) / 1000000);
         time = clock_ns();
         
-        size_t r = vfs_write_file(buf, bsize, 1, f);
+        size_t r = vfs_write_file(buf, bsize, f);
         assert(r == 1); 
     }
 

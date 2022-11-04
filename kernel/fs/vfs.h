@@ -318,7 +318,7 @@ void simplify_path(char *dst, const char *src);
 size_t vfs_read_file(void* ptr, size_t size, 
             file_handle_t* stream);
 
-size_t vfs_write_file(const void* ptr, size_t size, size_t nmemb,
+size_t vfs_write_file(const void* ptr, size_t size,
             file_handle_t* stream);
 
 
