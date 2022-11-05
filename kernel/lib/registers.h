@@ -13,7 +13,7 @@ uint16_t _gs(void);
 uint64_t get_rflags(void);
 uint64_t get_cr0(void);
 uint64_t _cr2(void);
-void     _cr3(uint64_t cr3);
+void     _cr3(uint64_t cr3);    
 uint64_t get_cr3(void);
 
 uint64_t get_cr4(void);
@@ -51,6 +51,24 @@ static inline uint8_t inb(uint16_t port)
                    : "=a"(ret)
                    : "Nd"(port) );
     return ret;
+}
+
+
+static inline uint16_t inw(uint16_t port)
+{
+    uint16_t ret;
+    asm volatile ( "inw %1, %0"
+                   : "=a"(ret)
+                   : "Nd"(port) );
+    return ret;
+}
+
+static inline uint32_t ind(uint16_t port)
+{
+    int low  = inw(port);
+    int high = inw(port);
+
+    return (high << 16) | low;
 }
 
 

@@ -30,7 +30,7 @@ union acpi_signature {
 
 
 #define MADT_SIGNATURE 0x43495041
-#define FACP_SIGNATURE 0x50434146
+#define FADT_SIGNATURE 0x50434146
 #define PCIE_SIGNATURE 0x4746434d
 #define HPET_SIGNATURE 0x54455048
 
@@ -181,3 +181,81 @@ struct HPET
     uint16_t minimum_tick;
     uint8_t page_protection;
 } __attribute__((packed));
+
+
+struct generic_address
+{
+  uint8_t  address_space;
+  uint8_t  bit_width;
+  uint8_t  bit_offset;
+  uint8_t  access_size;
+  uint64_t address;
+};
+
+struct FADT
+{
+    struct   ACPISDTHeader h;
+    uint32_t firmware_ctrl;
+    uint32_t DSDT;
+ 
+    // field used in ACPI 1.0; no longer in use, for compatibility only
+    uint8_t  Reserved;
+ 
+    uint8_t  preferred_power_management_profile;
+    uint16_t sci_interrupt;
+    uint32_t smi_command_port;
+    uint8_t  acpi_enable;
+    uint8_t  acpi_disable;
+    uint8_t  s4bios_req;
+    uint8_t  pstate_control;
+    uint32_t pm1a_event_block;
+    uint32_t pm1b_event_block;
+    uint32_t pm1a_control_block;
+    uint32_t pm1b_control_block;
+    uint32_t pm2_control_block;
+    uint32_t pm_timer_block;
+    uint32_t gpe0_block;
+    uint32_t gpe1_block;
+    uint8_t  pm1_event_length;
+    uint8_t  pm1_control_length;
+    uint8_t  pm2_control_length;
+    uint8_t  pm_timer_length;
+    uint8_t  gpe0_length;
+    uint8_t  gpe1_length;
+    uint8_t  gpe1_base;
+    uint8_t  c_state_control;
+    uint16_t worst_c2_latency;
+    uint16_t worst_c3_latency;
+    uint16_t flush_size;
+    uint16_t flush_stride;
+    uint8_t  duty_offset;
+    uint8_t  duty_width;
+    uint8_t  day_alarm;
+    uint8_t  month_alarm;
+    uint8_t  century;
+ 
+    // reserved in ACPI 1.0; used since ACPI 2.0+
+    uint16_t boot_architecture_flags;
+ 
+    uint8_t  reserved2;
+    uint32_t flags;
+ 
+    // 12 byte structure; see below for details
+    struct generic_address reset_reg;
+ 
+    uint8_t  reset_value;
+    uint8_t  reserved3[3];
+ 
+    // 64bit pointers - Available on ACPI 2.0+
+    uint64_t                x_firmware_control;
+    uint64_t                x_DSDT;
+ 
+    struct generic_address X_PM1a_event_block;
+    struct generic_address X_PM1b_event_block;
+    struct generic_address X_PM1a_control_block;
+    struct generic_address X_PM1b_control_block;
+    struct generic_address X_PM2control_block;
+    struct generic_address X_PMtimer_block;
+    struct generic_address X_GPE0_block;
+    struct generic_address X_GPE1_block;
+};

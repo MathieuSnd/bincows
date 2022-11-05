@@ -1,10 +1,8 @@
 
 .PHONY: clean all run_qemu disk kernel force_look threaded_compile\
-	    native_disk_simu local_disk_install test programs lib remake
+	    native_disk_simu local_disk_install test programs lib remake lai
 
 
-
-GNU_PREFIX 			  ?= $(HOME)/cross/bin/
 IMAGE_FILE            ?= disk.bin
 USED_LOOPBACK         ?= /dev/loop2
 QEMU_PATH             ?= qemu-system-x86_64
@@ -13,6 +11,10 @@ QEMU_LOG_FILE         ?= qemu.log
 QEMU_BIOS_FILE        ?= /usr/share/ovmf/OVMF.fd
 QEMU_GRAPHICS_OPTIONS ?= -vga virtio
 QEMU_EXTRA_OPTIONS    ?=
+
+
+CC := $(GNU_PREFIX)x86_64-elf-gcc
+LD := $(GNU_PREFIX)x86_64-elf-ld
 
 
 # default: passing -g -fno-inline
@@ -123,6 +125,7 @@ clean:
 	$(MAKE) clean -C kernel
 	rm -f $(IMAGE_FILE)
 	rm -rf build
+	rm -rf lai/build
 
 force_look:
 	true
@@ -145,8 +148,18 @@ all:
 	cp ./resources/ascii/boot_message.txt ./build/boot
 	cp ./resources/cfg/limine.cfg ./build/boot/
 	cp ./resources/cfg/default.shrc ./build/home/.shrc
+	echo "" > ./build/home/testfile
 
 	
 	make limine_efi_install
 	make programs
 	make kernel
+
+
+
+#LDFLAGS := -shared -fno-pie -fno-pic
+CFLAGS := -O3 -mgeneral-regs-only -Wall -Wextra -mno-red-zone \
+		  -ffreestanding -Iinclude/ -fno-pie -fno-stack-protector -fno-pic -g
+
+lai: 
+	make -C lai

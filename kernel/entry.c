@@ -225,21 +225,22 @@ void kernel_main(struct boot_interface* bi) {
 
     init_memory(bi);
 
-    read_acpi_tables(translate_address((void*)(bi->rsdp_paddr)));
-    
-// map lapic & hpet registers
-    map_acpi_mmios();
 
 
     set_backend_print_fun(empty_terminal_handler);
     append_paging_initialization();
 
 
-    // @todo reclaim bootloader / ACPI memory
-
-
 // init kernel heap
     heap_init();
+
+
+    // @todo reclaim bootloader / ACPI memory
+    
+    acpi_scan(translate_address((void*)(bi->rsdp_paddr)));
+    
+
+
 
 // shutdown procedure
     atshutdown(sched_cleanup);
@@ -248,6 +249,8 @@ void kernel_main(struct boot_interface* bi) {
     atshutdown(gpt_cleanup);
     atshutdown(remove_all_drivers);
     atshutdown(free_all_devices);
+
+    
 
 
     driver_t* terminal = video_init(bi);
@@ -278,6 +281,10 @@ void kernel_main(struct boot_interface* bi) {
 
     pic_init();
     ps2kb_init();
+
+
+    acpi_init();
+    
 
 
     disk_part_t* part = find_main_part(bi);

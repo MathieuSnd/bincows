@@ -34,6 +34,9 @@ OUTPUT := lai.elf
 
 all: $(OUTPUT)
 
+clean:
+	rm -rf $(OBJ) $(OUTPUT)
+
 
 
 

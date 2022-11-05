@@ -11,7 +11,7 @@ ASM:=nasm
 
 
 
-CFLAGS := -O3 -mgeneral-regs-only -Wall -Wextra \
+CFLAGS := -O3 -mgeneral-regs-only -Wall -Wextra -mno-red-zone \
 		  -ffreestanding -Iinclude/ -fno-pie -fno-stack-protector -fno-pic -g
 
 LDFLAGS := -shared -fno-pie -fno-pic
