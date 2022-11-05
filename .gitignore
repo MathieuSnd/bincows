@@ -16,7 +16,6 @@ rm
 mv
 cp
 qemu.log
-lai/
 kernel/symbols.txt
 kernel/symbols.dat
 build/
