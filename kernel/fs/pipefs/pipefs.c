@@ -641,6 +641,9 @@ void init_priv(struct pipefs_priv* priv) {
 void unmount(struct fs* fs) {
     struct pipefs_priv* priv = (void *)(fs + 1);
 
+    assert(interrupt_enable());
+
+    _cli();
     spinlock_acquire(&priv->lock);
 
     assert(priv->n_files == 0);
@@ -651,6 +654,8 @@ void unmount(struct fs* fs) {
     free(pipefs);
     pipefs = NULL;
 
+
+    _sti();
 }
 
 
