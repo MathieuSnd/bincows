@@ -46,8 +46,12 @@ void *laihost_scan(const char * name, size_t c) {
 }
 
 void *laihost_map(size_t, size_t);
-void laihost_outb(uint16_t, uint8_t);
-void laihost_outw(uint16_t, uint16_t);
+void laihost_outb(uint16_t p, uint8_t b) {
+    outb(p,b);
+}
+void laihost_outw(uint16_t p, uint16_t b) {
+    outw(p,b);
+}
 void laihost_outd(uint16_t, uint32_t);
 uint8_t laihost_inb(uint16_t port) {
     return inb(port);

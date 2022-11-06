@@ -84,6 +84,19 @@ void acpi_scan(const void* rsdp) {
         panic("failed ACPI RSDP checksum");
 
     parse_xsdt(translate_address((void*)rsdpd->xsdtAddress));
+
+    
+    log_info("%u ACPI tables found:", table_list_size);
+    for(int i = 0; i < table_list_size; i++) {
+        log_info("    - %4s", table_list[i].signature);
+    }
+
+    // now let LAI scan acpi tables we founds
+#ifdef USE_LAI
+    lai_create_namespace();
+#endif
+    
+    acpi_scan_clean();
 }
 
 
@@ -92,7 +105,6 @@ static void parse_xsdt(struct XSDT* xsdt) {
 
     size_t n_entries = (xsdt->header.length - sizeof(xsdt->header)) / sizeof(void*);
 
-    log_debug("%u ACPI entries found:", n_entries);
 
     bool madt_parsed = false,
          hpet_parsed = false,
@@ -105,8 +117,6 @@ static void parse_xsdt(struct XSDT* xsdt) {
             log_warn("ACPI %s table checksum failed", table->signature.arg);
             panic("ACPI error");
         }
-
-        log_info("    - %4s", table->signature.arg);
 
         add_table(table->signature.arg, table);
 

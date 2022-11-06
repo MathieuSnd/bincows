@@ -6,6 +6,7 @@
 #include "../drivers/ps2kb.h"
 #include "../int/idt.h"
 #include "../memory/heap.h"
+#include <lai/helpers/pm.h>
 
 static void (*funcs[MAX_SHUTDOWN_FUNCS])(void);
 static int n_funcs = 0;
@@ -17,22 +18,7 @@ void atshutdown(void (*fun)(void)) {
     funcs[n_funcs++] = fun;
 }
 
-void shutdown(void) {
-    // cannot shutdown anything yet.
-    // need an AML interpreter.
-
-    // insert a newline as we don't know what's 
-    // being currently printed
-    printf("\n");
-    log_debug("shutdown sequence started");
-
-    reboot();
-}
-
-
-// reboot the computer using the 
-// ps/2 controller
-void reboot(void) {
+static void exit(void) {
     for(int i = 0; i < n_funcs; i++)
         funcs[i]();
 
@@ -41,16 +27,52 @@ void reboot(void) {
     unsigned still_allocated = heap_get_n_allocation();
 
     if(still_allocated) {
-        log_warn("%d FREE BLOCKS AT SHUTDOWN:", still_allocated);
 #ifndef NDEBUG
         heap_defragment();
         heap_print();
-        panic("oui");
+        log_warn("%d ALLOCATED BLOCKS AT SHUTDOWN", still_allocated);
+        panic("memory leaks");
 #endif
     }
-    //panic("non");
-    //_cli();
-    
+}
+
+
+
+void shutdown(void) {
+    exit();
+    // insert a newline as we don't know what's 
+    // being currently printed
+    printf("\n");
+    log_debug("shutdown sequence started");
+
+#ifdef USE_LAI
+    log_debug("ACPI shutdown...");
+    int error = lai_enter_sleep(5);
+    panic("ACPI shutdown failed");
+#else
+    log_warn("cannot make ACPI shutdown, rebooting instead");
+    reboot();
+#endif
+}
+
+
+// reboot the computer using the 
+// ps/2 controller
+void reboot(void) {
+    exit();
+
+#ifdef USE_LAI
+    log_debug("ACPI reboot...");
+
+    int error = lai_acpi_reset();
+
+    log_warn("ACPI reboot failed. Trying ps2 reset instead");
+#else
+    log_warn("ps2 CPU reset...");
+#endif
+
+    // in case it didn't work
+
     ps2_trigger_CPU_reset();
 
     for(;;)

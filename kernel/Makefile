@@ -28,14 +28,22 @@ INTERNALCFLAGS  :=  -mgeneral-regs-only    \
 					-Wmissing-field-initializers \
 					-fcompare-debug-second \
 					-I/opt/cross/include/  \
-					-I../lai/include       \
+					-I../lai/lai/include/  \
 					-fPIE                  \
 					-D_KERNEL_             \
-					-DBIGGER_FONT
+					-DBIGGER_FONT		   \
 
 
-# don't use LAI yet
-# LAI_FILE := ../lai/lai.elf
+USE_LAI ?=1
+
+
+ifeq ($(USE_LAI), 1)
+  INTERNALCFLAGS += -DUSE_LAI
+	LAI_FILE := ../lai/lai.elf
+endif
+
+
+
 
 
 CFILES := $(shell find ./ -type f -name '*.c')
