@@ -283,10 +283,6 @@ void kernel_main(struct boot_interface* bi) {
     ps2kb_init();
 
 
-    acpi_init();
-    
-
-
     disk_part_t* part = find_main_part(bi);
     
     assert(part);
