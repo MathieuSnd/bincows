@@ -453,7 +453,7 @@ void vfs_lazy_flush(void) {
 
     n = n_lazy_flush_entries;
     
-    if(n_lazy_flush_entries > 0) {
+    if(n > 0) {
         local_lazy_flush_entries = malloc(
             n * sizeof(flush_args_t));
         

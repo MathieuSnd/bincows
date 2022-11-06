@@ -1537,6 +1537,8 @@ uint64_t syscall_main(uint8_t   scid,
         log_info("process %u, thread %u: bad syscall", sched_current_pid(), sched_current_tid());
         for(;;)
             asm ("hlt");
+
+        __builtin_unreachable();
     }
     else {
 
