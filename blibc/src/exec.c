@@ -88,16 +88,6 @@ int exec(const char* file,
     _argv[size] = 0;
 
     
-/*
-    for(int i = 1; i < size; i++) {
-        if(strcmp(_argv[i], argv[i])) {
-            for(;;);
-        }
-        if(!strlen(argv[i])) {
-            for(;;);
-        }
-    }
-    */
 
     size_t args_sz = 0, env_sz = 0;
 
