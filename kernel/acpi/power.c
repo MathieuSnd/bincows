@@ -22,6 +22,7 @@ static void exit(void) {
     for(int i = 0; i < n_funcs; i++)
         funcs[i]();
 
+    n_funcs = 0;
 
 
     unsigned still_allocated = heap_get_n_allocation();
@@ -48,6 +49,7 @@ void shutdown(void) {
 #ifdef USE_LAI
     log_debug("ACPI shutdown...");
     int error = lai_enter_sleep(5);
+    log_warn("LAI error %u", error);
     panic("ACPI shutdown failed");
 #else
     log_warn("cannot make ACPI shutdown, rebooting instead");
@@ -66,7 +68,7 @@ void reboot(void) {
 
     int error = lai_acpi_reset();
 
-    log_warn("ACPI reboot failed. Trying ps2 reset instead");
+    log_warn("ACPI reboot failed, error %u. Trying ps2 reset instead", error);
 #else
     log_warn("ps2 CPU reset...");
 #endif
