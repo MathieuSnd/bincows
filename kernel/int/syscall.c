@@ -1555,7 +1555,9 @@ uint64_t syscall_main(uint8_t   scid,
 
     }
 
-    int sig_trigger = (process->sig_pending) && (process->sig_current == NOSIG);
+    int sig_trigger = (process->sig_pending) 
+                   && (process->sig_current == NOSIG) 
+                   && sched_current_tid() == 1;
 
     // the process has received a signal
     // this is a good moment to handle it.
