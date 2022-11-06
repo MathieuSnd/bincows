@@ -23,7 +23,8 @@ static_assert_equals(sizeof(struct PCIE_busgroup), 16);
 struct PCIE_Descriptor {
     size_t size;
     struct PCIE_busgroup array[2];
-    // we only handle PCIE devices with only 4 segment groups max
+    // we only handle PCIE devices with only 2 segment groups max
+    // @todo
 };
 
 
