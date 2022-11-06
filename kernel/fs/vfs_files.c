@@ -996,9 +996,9 @@ size_t vfs_write_file(const void *ptr, size_t size,
 
 
     // offset of the end of the read buffer
-    unsigned end_offset = must_write % granularity;
+    size_t end_offset = must_write % granularity;
 
-    unsigned write_buf_size = write_blocks * granularity;
+    size_t write_buf_size = write_blocks * granularity;
 
     assert(stream->sector_offset + size <= write_buf_size);
 
