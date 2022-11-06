@@ -139,6 +139,11 @@ static void init_pqueue(void) {
     };
 }
 
+static void free_pqueue(void) {
+    free(pqueue.buffer);
+    pqueue.cap = 0;
+}
+
 
 static void pqueue_expand(void) {
     // expand a queue that is full
@@ -728,6 +733,8 @@ void sched_cleanup(void) {
     spinlock_acquire(&sched_lock);
 
     cleanup_sleeping_threads();
+
+    free_pqueue();
 
 
     // remove every process one by one

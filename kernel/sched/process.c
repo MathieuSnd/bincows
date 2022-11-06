@@ -722,7 +722,6 @@ int prepare_process_signal(process_t* process, int signal) {
 
     void* user_rsp;
 
-
     if(thread0->syscall_user_rsp) {
         // the thread is currently in a system call. 
         // the current stack resides in kernel space
