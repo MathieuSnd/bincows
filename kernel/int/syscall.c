@@ -55,7 +55,13 @@ static int check_args_in_program(
 ) {
 
     const uint64_t arg_begin = (uint64_t)args;
-    const uint64_t arg_end   = arg_begin + args_sz;
+    
+    uint64_t arg_end;
+    
+    if(__builtin_add_overflow(arg_begin, args_sz, &arg_end)) {
+        // overflow
+        return 1;
+    }
 
     
     // in the program
@@ -82,7 +88,14 @@ static int check_args(const process_t* proc, const void* args, size_t args_sz) {
     // find a range in which the args are
     
     const uint64_t arg_begin = (uint64_t)args;
-    const uint64_t arg_end   = arg_begin + args_sz;
+    uint64_t arg_end;
+    
+    if(__builtin_add_overflow(arg_begin, args_sz, &arg_end)) {
+        // overflow
+        return 1;
+    }
+
+
 
 
     // in one program's thread stack
@@ -292,9 +305,6 @@ static int atomic_close_fd(process_t* proc, int i) {
     spinlock_release(&proc->lock);
     _sti();
 
-    if(fd.type == -1)
-        return -1;
-
     switch(fd.type) {
         case FD_FILE:
             vfs_close_file(fd.file);
@@ -302,6 +312,8 @@ static int atomic_close_fd(process_t* proc, int i) {
         case FD_DIR:
             vfs_closedir(fd.dir);
             break;
+        case FD_NONE:
+            return -1;
         default:
             assert(0);
     }
@@ -907,6 +919,7 @@ static uint64_t sc_write(process_t* proc, void* args, size_t args_sz) {
 
     switch(proc->fds[a->fd].type) {
         case FD_FILE:
+            log_info("%u: write %ld to file", sched_current_pid(), a->count);
             return vfs_write_file(a->buf, a->count, proc->fds[a->fd].file);
             break;
         // we might use this for writing to a directory
