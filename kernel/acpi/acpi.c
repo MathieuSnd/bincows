@@ -2,6 +2,10 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#ifdef USE_LAI
+#include <lai/core.h>
+#endif
+
 
 #include "acpi.h"
 #include "acpitables.h"
@@ -12,7 +16,7 @@
 #include "../lib/panic.h"
 
 #include "../memory/vmap.h"
-#include "../memory/heap.h"
+//#include "../memory/heap.h"
 #include "../memory/paging.h"
 
 #include "../drivers/pcie/scan.h"
@@ -27,26 +31,33 @@ struct table_d {
     const void* vaddr;
 };
 
-int table_list_size = 0;
-struct table_d* table_list;
+
+#define MAX_ACPI_TABLES 256
+
+static int table_list_size = 0;
+static struct table_d table_list[MAX_ACPI_TABLES];
+
+static int acpi_revision = 0;
 
 
+// 0 on success
+static int add_table(const char signature[4], const void* vaddr) {
 
-static void add_table(const char signature[4], const void* vaddr) {
-    table_list = realloc(table_list, 
-                    sizeof(struct table_d) * (table_list_size+1));
-    
-
+    if(table_list_size >= MAX_ACPI_TABLES - 1) {
+        log_warn("ACPI: dropped table %u", signature);
+        return -1;
+    }
 
     struct table_d* entry = &table_list[table_list_size++];
 
     memcpy(entry->signature, signature, 4);
     entry->vaddr = vaddr;
+
+    return 0;
 }
 
 
 void acpi_scan_clean(void) {
-    free(table_list);
 }
 
 const void* acpi_get_table(const char * signature, size_t c) {
@@ -59,6 +70,17 @@ const void* acpi_get_table(const char * signature, size_t c) {
 }
 
 
+int acpi_map_mmio(void) {
+    // mmios to map: HPET, PCIE
+    // cache disable
+    map_pages((uint64_t)apic_config_base, APIC_VADDR, 1,
+                                 PRESENT_ENTRY | PCD | PL_XD | PL_RW);
+    map_pages((uint64_t)hpet_config_space, HPET_VADDR, 1,
+                                 PRESENT_ENTRY | PCD | PL_XD | PL_RW);
+
+    return 0;
+}
+
 
 
 static void parse_madt(const struct MADT* table);
@@ -68,10 +90,12 @@ static void parse_pcie(const struct PCIETable* table);
 static void parse_xsdt(struct XSDT* xsdt);
 
 
-void acpi_scan(const void* rsdp) {
+void acpi_early_scan(const void* rsdp) {
     const struct RSDPDescriptor20* rsdpd = rsdp;
 
-    if(rsdpd->firstPart.revision < 2)
+    acpi_revision = rsdpd->firstPart.revision;
+
+    if(acpi_revision < 2)
         panic("unsuported ACPI revision");
 
 
@@ -90,9 +114,12 @@ void acpi_scan(const void* rsdp) {
     for(int i = 0; i < table_list_size; i++) {
         log_info("    - %4s", table_list[i].signature);
     }
+}
 
+void acpi_init(void) {
     // now let LAI scan acpi tables we founds
 #ifdef USE_LAI
+    lai_set_acpi_revision(acpi_revision);
     lai_create_namespace();
 #endif
     
@@ -152,14 +179,6 @@ static void parse_xsdt(struct XSDT* xsdt) {
     if(!fadt_parsed) // needed by LAI
         log_warn("could not find ACPI FADT table");
 
-
-        
-    // mmios to map: HPET, PCIE
-    // cache disable
-    map_pages((uint64_t)apic_config_base, APIC_VADDR, 1,
-                                 PRESENT_ENTRY | PCD | PL_XD | PL_RW);
-    map_pages((uint64_t)hpet_config_space, HPET_VADDR, 1,
-                                 PRESENT_ENTRY | PCD | PL_XD | PL_RW);
 }
 
 

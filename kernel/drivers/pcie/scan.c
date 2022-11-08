@@ -15,34 +15,13 @@
 struct PCIE_Descriptor pcie_descriptor = {0};
 
 
-
-__attribute__((pure)) static 
-struct PCIE_config_space*  get_config_space_base(
-        unsigned bus_group,
-        unsigned bus, 
-        unsigned device, 
-        unsigned func
-) {
-    assert(bus_group < pcie_descriptor.size);
-    assert(bus_group == 0);
-    struct PCIE_busgroup* group_desc = 
-                &pcie_descriptor.array[bus_group];
-    
-    
-    return translate_address(group_desc->address) + (
-        (bus - group_desc->start_bus) << 20 
-      | device                        << 15 
-      | func                          << 12);    
-}
-
-
 __attribute__((pure)) 
 static int get_vendorID(unsigned bus_group,
                         unsigned bus, 
                         unsigned device, 
                         unsigned func
 ) {
-    return get_config_space_base(
+    return pcie_config_space_base(
             bus_group, 
             bus,
             device,
@@ -146,7 +125,7 @@ static void new_dev(
 ) { 
     
     struct PCIE_config_space* cs = 
-               get_config_space_base(bus_group,
+               pcie_config_space_base(bus_group,
                                      bus,
                                      device,
                                      func);
@@ -315,6 +294,9 @@ static void map_possible_config_spaces(void) {
         void* phys = pcie_descriptor.array[i].address;
 
         // the corresponding pages
+        // @todo find a better solution,
+        // as it burns > 512 ko of paging
+        // structures
         map_pages(
             (uint64_t)phys, // phys
             (uint64_t)translate_address(phys), // virt

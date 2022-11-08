@@ -129,3 +129,12 @@ struct PCIE_config_space {
 
 static_assert_equals(sizeof(struct PCIE_config_space), 0x40);
 
+
+__attribute__((pure))
+struct PCIE_config_space*  pcie_config_space_base(
+        unsigned bus_group,
+        unsigned bus, 
+        unsigned device, 
+        unsigned func
+);
+

@@ -225,7 +225,8 @@ void kernel_main(struct boot_interface* bi) {
 
     init_memory(bi);
 
-
+    acpi_early_scan(translate_address((void*)(bi->rsdp_paddr)));
+    acpi_map_mmio();
 
     set_backend_print_fun(empty_terminal_handler);
     append_paging_initialization();
@@ -233,12 +234,6 @@ void kernel_main(struct boot_interface* bi) {
 
 // init kernel heap
     heap_init();
-
-
-    // @todo reclaim bootloader / ACPI memory
-    
-    acpi_scan(translate_address((void*)(bi->rsdp_paddr)));
-    
 
 
 
@@ -263,20 +258,29 @@ void kernel_main(struct boot_interface* bi) {
     init_gdt_table();
 
 
+
     // clear screen to append
     // the background color
     puts("\x1b[0m\x0c");
 
     puts(log_get());
 
-
     hpet_init();
     apic_setup_clock();
 
-    vfs_init();
-
     // scan PCIe bus
     pcie_init();
+    
+//  now that errors/panic can be printed, 
+//  finalize acpi initialization 
+    acpi_init();
+
+
+    // @todo reclaim bootloader / ACPI memory
+
+
+    vfs_init();
+
 
 
     pic_init();

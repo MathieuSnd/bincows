@@ -744,12 +744,6 @@ void write_string(driver_t* this, const char *string, size_t length) {
     // writes to /dev/term and write_stirng() calls
     // must by syncrhonized
     // @todo add a lock
-    static char buff[4096];
-
-    if(length > sizeof(buff)) {
-        log_warn("write_string: buffer tooo small for a write of length %u", length);
-        return;
-    }
 
     uint64_t rf = get_rflags();
     _cli();
@@ -757,11 +751,9 @@ void write_string(driver_t* this, const char *string, size_t length) {
     struct data* restrict d = this->data;
     d->need_refresh = false;
 
-    char* ptr = buff;
+    const char* ptr = string;
 
 
-    memcpy(buff, string, length);
-    
     
     for(;length>0; length--) {
         char c = *(ptr++);

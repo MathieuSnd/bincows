@@ -666,6 +666,10 @@ void map_pages(uint64_t physical_addr,
     uint64_t rf = get_rflags();
     _cli();
 
+
+    assert(physical_addr);
+    assert(virtual_addr);
+
     while(count > PTAAB_SIZE) {
         fill_page_table_allocator_buffer(PTAAB_SIZE);
         internal_map_pages(physical_addr, virtual_addr, 64, flags);
@@ -909,6 +913,8 @@ static void* get_entry(void* table, unsigned index) {
 
     void** virtual_addr_table =  translate_address(table);
 
+    assert(virtual_addr_table);
+
     return (void *)virtual_addr_table[index];
 }
 
@@ -965,11 +971,13 @@ void unmap_user(void) {
 
 
 
-uint64_t get_phys_addr(const void* addr) {
-    unsigned pml4i = pml4_offset((uint64_t)addr);
-    unsigned pdpti = pdpt_offset((uint64_t)addr);
-    unsigned pdi   = pd_offset  ((uint64_t)addr);
-    unsigned pti   = pt_offset  ((uint64_t)addr);
+uint64_t get_phys_addr(const void* vaddr) {
+    uint64_t  page_offset = (uint64_t)vaddr &  0xfffllu;
+
+    unsigned pml4i = pml4_offset((uint64_t)vaddr);
+    unsigned pdpti = pdpt_offset((uint64_t)vaddr);
+    unsigned pdi   = pd_offset  ((uint64_t)vaddr);
+    unsigned pti   = pt_offset  ((uint64_t)vaddr);
 
     pml4e restrict pml4entry = get_entry((void**)pml4,      pml4i);
     if(!present_entry(pml4entry))
@@ -987,7 +995,11 @@ uint64_t get_phys_addr(const void* addr) {
     if(!present_entry(ptentry))
         return 0;
 
-    return (uint64_t) ptentry;
 
+    uint64_t ppage_base = (uint64_t) extract_pointer(ptentry);
+
+    assert((ppage_base & 0xfff) == 0);
+    assert(page_offset < 0x1000);
+
+    return ppage_base | page_offset;
 }
-

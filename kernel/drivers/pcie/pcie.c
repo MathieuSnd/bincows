@@ -14,6 +14,25 @@
 #include "../../lib/string.h"
 #include "../../lib/dump.h"
 
+__attribute__((pure))
+struct PCIE_config_space* pcie_config_space_base(
+        unsigned bus_group,
+        unsigned bus, 
+        unsigned device, 
+        unsigned func
+) {
+    assert(bus_group < pcie_descriptor.size);
+    assert(bus_group == 0);
+    struct PCIE_busgroup* group_desc = 
+                &pcie_descriptor.array[bus_group];
+    
+    
+    return translate_address(group_desc->address) + (
+        (bus - group_desc->start_bus) << 20 
+      | device                        << 15 
+      | func                          << 12);    
+}
+
 ////__attribute__((pure))
 unsigned pcie_bar_size(void* config_space, 
                        unsigned i) 

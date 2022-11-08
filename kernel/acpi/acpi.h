@@ -1,14 +1,24 @@
 #pragma once
 
 
-// list acpi tables
+// scan acpi tables
+// retrive APIC, PCIE and HPET information
+// it should be called early to print
+// potential early panics
+void acpi_early_scan(const void* rsdp_location);
+
 // this function should be called when 
 // paging and malloc are initialized
 // and acpi_scan_clean should be called 
 // afterwards
-// It also parse PCIE and HPET tables
-void acpi_scan(const void* rsdp_location);
+// This function needs paging and 
+void acpi_init(void);
 void acpi_scan_clean(void);
+
+
+// this function maps HPET and ACPI register spaces
+// according to vmap.h
+int acpi_map_mmio(void);
 
 
 // Returns the (virtual) address of the c-th table that 

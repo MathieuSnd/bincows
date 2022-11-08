@@ -28,7 +28,7 @@ static void exit(void) {
     unsigned still_allocated = heap_get_n_allocation();
 
     if(still_allocated) {
-#ifndef NDEBUG
+#if !defined(NDEBUG) && !defined(USE_LAI)
         heap_defragment();
         heap_print();
         log_warn("%d ALLOCATED BLOCKS AT SHUTDOWN", still_allocated);
