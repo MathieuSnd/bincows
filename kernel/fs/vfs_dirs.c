@@ -123,7 +123,10 @@ uint16_t path_hash(const char *path)
 // does not remove the root path
 static void free_vtree(vdir_t *root)
 {
+    assert(root);
+
     while(root->n_children) {
+        assert(root->children);
         free_vtree(root->children);
     }
 
