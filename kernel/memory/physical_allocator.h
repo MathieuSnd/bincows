@@ -1,6 +1,6 @@
 
 /**
- * This pmm unsures mutual exclusion 
+ * This pmm ensures mutual exclusion 
  * for allocations.
  * 
  * allocating and freeing can be done in an

@@ -340,7 +340,7 @@ static uint64_t sc_exec(process_t* proc, void* args, size_t args_sz) {
         return -1;
     }
 
-    // this unsures that strlen won't generate a page fault
+    // this ensures that strlen won't generate a page fault
     if(exec_args->args[exec_args->args_sz - 1] != '\0'
     ) {
         sc_warn("bad cmdline", args, args_sz);
@@ -355,7 +355,7 @@ static uint64_t sc_exec(process_t* proc, void* args, size_t args_sz) {
         return -1;
     }
 
-    // this unsures that strlen won't generate a page fault
+    // this ensures that strlen won't generate a page fault
     if(exec_args->env[exec_args->env_sz - 1] != '\0'
     ) {
         sc_warn("bad environment vars", args, args_sz);
@@ -919,7 +919,6 @@ static uint64_t sc_write(process_t* proc, void* args, size_t args_sz) {
 
     switch(proc->fds[a->fd].type) {
         case FD_FILE:
-            log_info("%u: write %ld to file", sched_current_pid(), a->count);
             return vfs_write_file(a->buf, a->count, proc->fds[a->fd].file);
             break;
         // we might use this for writing to a directory
@@ -1442,7 +1441,7 @@ void thread_enter_syscall(process_t* process, tid_t tid, uint64_t* user_sp) {
 // it leaves the intererupts disabled
 // it is important that the interrupts don't get enabled 
 // before the end of the system call
-// @todo unsure that its the case
+// @todo ensure that its the case
 static void thread_leave_syscall(process_t* process, tid_t tid) {
     // disable interrupts if not already
     // to swich to the user stack

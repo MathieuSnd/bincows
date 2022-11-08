@@ -94,7 +94,7 @@ struct thread {
     // if this field is set, the thread cannot
     // be lazily killed. A signal cannot happen
     // either. It is important to have
-    // such a flag to unsure that every system call
+    // such a flag to ensure that every system call
     // eventually returns
     int uninterruptible;
 

@@ -647,7 +647,7 @@ void vfs_close_file(file_handle_t *handle) {
 
 
 
-// these two functions unsure atomicity of
+// these two functions ensure atomicity of
 // file accesses
 
 static void aquire_file_access(uint64_t vfile_id) {
