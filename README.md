@@ -33,16 +33,22 @@ It only uses one processor and Round Robin scheduling.
 
 Bincows __only supports the [Limine](https://github.com/limine-bootloader/limine) bootloader__. 
 
-Limine and GCC/binutils (targeting x86_64) are the only dependencies to build Bincows. However, in order to emulate it, you will need __QEMU__ and an __UEFI BIOS for qemu__ (for example OVMF).
+In order to build Bincows, you will need __x86_64-elf-gcc cross compiler__ along with x86_64_64-elf binutil.
+By default, Bincows uses the [Lightweight AML Interpreter](https://github.com/managarm/lai) to exploit ACPI power
+managment. You can define the `USE_LAI` as `0` to avoid using it.
+
+To emulate Bincows, you will need __QEMU__ and an __UEFI BIOS for qemu__ (for example OVMF, of which a copy is available in this repository). See the [Emulation using QEMU](#emulation-using-qemu) section.
 
 
 ## Build
 
 This section describes how to build the Bincows ecosystem (kernel, libc and programs)
 
-To build the bincows ecosystem, you will need a __cross compiler__ (GCC and the GNU binutils suite) targeting x86_64. You have to define the `GNU_PREFIX` environment variable as the path to GCC and binutils bin directory.
+To build the bincows ecosystem, you will need a __cross compiler__ (GCC and the GNU binutils suite) targeting x86_64 ELF. Consider visiting [this page](https://wiki.osdev.org/GCC_Cross-Compiler) to build one yourself or downloading a build. You have to define the `GNU_PREFIX` environment variable as the path to GCC and binutils bin directory.
 
-From the root of this repository, you can simply build everything by typing:
+If you don't disable the use of LAI by setting `USE_LAI` environment variable to `0`, you must recursively clone the repository to get the submodules.
+
+Then, from the root of this repository, you can build the kernel, libc and programs by typing:
 ```
 $ make all
 ```
