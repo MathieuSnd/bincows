@@ -642,12 +642,16 @@ static void buff_print_char(driver_t* this,
              d->margin_top  + line * TERMINAL_LINE_HEIGHT);
 }
 
+uint64_t fb_copy_ns = 0;
+
 static void update_framebuffer(driver_t* this) {
     struct data* restrict d = this->data;
     struct framebuffer_dev * dev = (struct framebuffer_dev *)this->device;
     
     // 64 bytes = 8 qwords
     const unsigned cache_line = 8;
+
+    uint64_t begin = clock_ns();
 
     uint64_t* devfb = dev->pix;
     uint64_t* buff = d->px_buffers[d->cur_px_buffer];
@@ -659,13 +663,13 @@ static void update_framebuffer(driver_t* this) {
         uint64_t* ptr = buff;
 
         uint64_t* otherptr = otherbuff;
-
+        diff = 0;
 
         // check if something is modified
         // maybe remove the break and unroll
         // the loop?
         for(unsigned i = 0; i < cache_line; i++) {
-            diff = *(ptr++) ^ *(otherptr++);
+            diff |= *(ptr++) ^ *(otherptr++);
             if(diff)
                 break;
         }
@@ -695,6 +699,11 @@ static void update_framebuffer(driver_t* this) {
         devfb     += cache_line;
     }
 
+
+    assert(clock_ns() >= begin);
+    fb_copy_ns = clock_ns() - begin;
+
+    //log_warn("framebuffer update time = %lu ns (%u ms)", fb_copy_ns, fb_copy_ns / (uint64_t)1e6);
 }
 
 

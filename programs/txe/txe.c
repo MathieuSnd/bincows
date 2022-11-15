@@ -364,7 +364,7 @@ void draw_screen(
 
     //size_t len = buf_end - buf_begin;
     // draw the buffer
-    fwrite(sl->buf, 1, sl->buf_sz, stdout);
+    fwrite(sl->buf, 1, strlen(sl->buf), stdout);
     //printf("_");
     // print cursor
     //printf("\x1b[%u;%uHX", cur->col + LEFT_PADDING + 1, cur->row + sl->top_padding + 1);
