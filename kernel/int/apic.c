@@ -69,12 +69,18 @@ void apic_eoi(void) {
 }
 
 
-static uint64_t timer_offset = 0;
+static volatile uint64_t timer_offset = 0;
+
+
+static uint64_t lapic_period = 0;
+static uint64_t lapic_max    = 0;
+
 
 void lapic_timer_handler(void* arg) {
     (void)arg;
 
-    timer_offset += 1000 * 1000 * 1000 / LAPIC_IRQ_FREQ;
+    timer_offset += 1000lu * 1000lu * 1000lu * LAPIC_IRQ_FREQ;
+
 
     wakeup_threads();
 
@@ -85,9 +91,8 @@ void lapic_timer_handler(void* arg) {
 }  
 
 
-static uint64_t lapic_period = 0;
-
-
+static const uint64_t timer_mult = 1;
+static uint64_t old_clk = 0;
 
 uint64_t clock_ns(void)  {
     
@@ -95,8 +100,35 @@ uint64_t clock_ns(void)  {
     if(lapic_period == 0)
         return lapic_period;
 
-    return timer_offset +
-             (apic_config->timer_initial_count.reg - apic_config->timer_current_count.reg) * lapic_period;
+    
+    uint64_t rf = get_rflags();
+
+    _cli();
+
+
+    volatile uint32_t snap = apic_config->timer_current_count.reg;
+
+    uint64_t clk = timer_offset + (lapic_max - snap) * lapic_period / timer_mult;
+
+
+    set_rflags(rf);
+
+    //log_info("%lu > %lu", clk, old_clk);
+    if(clk < old_clk) {
+        // the timer has ticked.
+        // this only work if the maximum time with
+        // interrupts disabled is inferior to one
+        // timer tick
+        clk += 1000lu * 1000lu * 1000lu * LAPIC_IRQ_FREQ;
+
+        if(clk < old_clk)
+            // well...
+            return old_clk;
+    }
+
+
+    old_clk = clk;
+    return clk;
 }
 
 
@@ -128,11 +160,10 @@ void apic_setup_clock(void) {
     // masks the irq, one shot mode
     apic_config->LVT_timer.reg = 0x20000; 
 
-    apic_config->timer_divide_configuration.reg = 3; // divide by 16
+    apic_config->timer_divide_configuration.reg = 0; // divide by 2
 
 
-
-    hpet_prepare_wait_ns(1000 * 1000 * 1000 / LAPIC_IRQ_FREQ);
+    hpet_prepare_wait_ns(1000llu * 1000llu * 1000llu / LAPIC_IRQ_FREQ);
 
 
 
@@ -143,10 +174,13 @@ void apic_setup_clock(void) {
 
     uint32_t t = (UINT32_MAX - apic_config->timer_current_count.reg);
 
-    apic_config->timer_initial_count.reg = t;
+
+    apic_config->timer_initial_count.reg = lapic_max = t;
 
 
-    lapic_period = (1000 * 1000 * 1000 / LAPIC_IRQ_FREQ) / t;
+    lapic_period = (1000lu * 1000lu * 1000lu / LAPIC_IRQ_FREQ * timer_mult) / t;
+
+
 
 
     // enable apic and set spurious int to 0xff

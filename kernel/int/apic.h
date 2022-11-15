@@ -9,7 +9,7 @@
 
 
 // in Hz
-#define LAPIC_IRQ_FREQ 100
+#define LAPIC_IRQ_FREQ 50
 
 
 void apic_setup_clock(void);
