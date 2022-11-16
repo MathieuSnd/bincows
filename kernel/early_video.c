@@ -19,7 +19,7 @@ driver_t* video_init(
     *fb_dev = (fd_t){
         .dev = {
             .type = DEVICE_ID_FRAMEBUFFER,
-            .name = {"stivale2 framebuffer",0},
+            .name = {"framebuffer",0},
             .driver = NULL
         },
         .width  = bi->framebuffer_width,
