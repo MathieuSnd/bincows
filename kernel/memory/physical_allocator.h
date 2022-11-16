@@ -18,13 +18,13 @@
 
 struct boot_interface;
 
-// init the physical allocator
+// init the pmm
 // first phase of initialization:
 // suppose that all the addressable memory is identity mapped
-void init_physical_allocator(const struct boot_interface *);
+void init_pmm(const struct boot_interface *);
 
 //linked list element representing a 64 MB memory region
-struct physical_allocator_data_page_entry {
+struct pmm_data_page_entry {
     void* physical_address;
 
     uint64_t reserved[2];
@@ -38,8 +38,8 @@ struct physical_allocator_data_page_entry {
 // physical_address should be mapped to physical_address | 0x
 //
 // size: the number of entries in the returned array 
-const struct physical_allocator_data_page_entry* 
-                     physical_allocator_data_pages(size_t* size);
+const struct pmm_data_page_entry* 
+                     pmm_data_pages(size_t* size);
 
 
 typedef void (*PHYSALLOC_CALLBACK)(

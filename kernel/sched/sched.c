@@ -7,7 +7,7 @@
 #include "../memory/vmap.h"
 #include "../memory/heap.h"
 #include "../memory/paging.h"
-#include "../memory/physical_allocator.h"
+#include "../memory/pmm.h"
 #include "../drivers/block_cache.h"
 #include "../memory/gdt.h"
 #include "../smp/smp.h"

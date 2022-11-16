@@ -19,7 +19,7 @@
 #include "fs/vfs.h"
 
 #include "memory/gdt.h"
-#include "memory/physical_allocator.h"
+#include "memory/pmm.h"
 #include "memory/paging.h"
 #include "memory/vmap.h"
 
@@ -49,7 +49,7 @@ uint8_t stack_base[KERNEL_THREAD_STACK_SIZE]
 
 static void init_memory(const struct boot_interface* bi) {
     log_debug("init memory...");
-    init_physical_allocator(bi);
+    init_pmm(bi);
     init_paging            (bi);
 
 // map framebuffer
@@ -268,6 +268,7 @@ void kernel_main(struct boot_interface* bi) {
     hpet_init();
     apic_setup_clock();
 
+    
     // scan PCIe bus
     pcie_init();
     

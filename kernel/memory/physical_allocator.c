@@ -10,7 +10,7 @@
 #include "../int/idt.h"
 #include "../boot/boot_interface.h"
 
-#include "physical_allocator.h"
+#include "pmm.h"
 #include "../lib/logging.h"
 #include "vmap.h"
 
@@ -138,25 +138,30 @@ static void init_memory_range(struct memory_range* range, uint64_t addr, size_t 
 }
 
 
-void init_physical_allocator(const struct boot_interface* bi) {
+void init_pmm(const struct boot_interface* bi) {
 // counter of the number of detected pages
     unsigned total_pages = 0;
 
     unsigned j = 0; // index of the current created memory range struct 
 
     struct mmape* e;
+    
+    uint64_t total_addressable = 0;
 
     while((e = bi->mmap_get_next()) != NULL) {
     // memory ranges in account
         
     // ignore kernel and reclaimable memory
+    
         if(e->type == USABLE) {
 
         // ceil the size to the number of pages
 
             uint64_t base = e->pbase;
             size_t size = e->length;
-
+            total_addressable += size;
+            
+            log_info("%lx -> %lx  [memory]", base, base+size);
 
             // align base
 
@@ -192,7 +197,14 @@ void init_physical_allocator(const struct boot_interface* bi) {
                 
             }
         }
+        else {
+            total_addressable += e->length;
+            log_info("%lx -> %lx [reserved]", e->pbase, e->pbase+e->length);
+        }
+
     }
+
+    log_info("TOTAL %lu mb", total_addressable / 1024 / 1024);
 
     n_ranges = j;
     total_memory_pages = total_available_pages = total_pages - n_ranges;
@@ -662,13 +674,13 @@ void physfree(uint64_t physical_page_addr) {
 
 
 static_assert_equals(
-    sizeof(struct physical_allocator_data_page_entry),
+    sizeof(struct pmm_data_page_entry),
     sizeof(struct memory_range));
 
-const struct physical_allocator_data_page_entry* 
-       physical_allocator_data_pages(size_t* size) {
+const struct pmm_data_page_entry* 
+       pmm_data_pages(size_t* size) {
     *size = n_ranges;
-    return (struct physical_allocator_data_page_entry *)memory_ranges_buffer;
+    return (struct pmm_data_page_entry *)memory_ranges_buffer;
 }
 
 

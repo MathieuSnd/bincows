@@ -1,4 +1,4 @@
-#include "../memory/physical_allocator.h"
+#include "../memory/pmm.h"
 #include "../lib/logging.h"
 #include "../lib/assert.h"
 #include "smp.h"

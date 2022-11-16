@@ -1,7 +1,7 @@
 #include "block_cache.h"
 #include "../memory/heap.h"
 #include "../memory/paging.h"
-#include "../memory/physical_allocator.h"
+#include "../memory/pmm.h"
 #include "../sync/spinlock.h"
 #include "../lib/panic.h"
 #include "../lib/assert.h"

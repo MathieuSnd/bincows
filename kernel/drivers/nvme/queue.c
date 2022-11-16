@@ -1,4 +1,4 @@
-#include "../../memory/physical_allocator.h"
+#include "../../memory/pmm.h"
 #include "../../memory/paging.h"
 #include "../../memory/vmap.h"
 #include "../../lib/dump.h"

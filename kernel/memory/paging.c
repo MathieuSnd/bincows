@@ -1,6 +1,6 @@
 #include "../lib/assert.h"
 #include "../lib/string.h"
-#include "physical_allocator.h"
+#include "pmm.h"
 
 #include "paging.h"
 #include "vmap.h"
@@ -127,7 +127,7 @@ static void* extract_pointer(void* c)  {
 
 
 /*
-static void physical_allocator_callback_kernel(
+static void pmm_callback_kernel(
             uint64_t physical_address, 
             uint64_t virtual_address,
             size_t   size) {
@@ -136,7 +136,7 @@ static void physical_allocator_callback_kernel(
     (void)(physical_address + virtual_address + size);
 }
 
-void physical_allocator_callback_user(
+void pmm_callback_user(
             uint64_t physical_address, 
             uint64_t virtual_address,
             size_t   size) {
@@ -147,7 +147,7 @@ void physical_allocator_callback_user(
     (void)(physical_address + virtual_address + size);
 }
 
-void physical_allocator_callback_mmio(
+void pmm_callback_mmio(
             uint64_t physical_address, 
             uint64_t virtual_address,
             size_t   size) {
@@ -244,14 +244,14 @@ static void map_physical_memory(const struct boot_interface* bi) {
 }
 /*
 static void map_allocator_data(void) {
-    const struct physical_allocator_data_page_entry* entries;
+    const struct pmm_data_page_entry* entries;
     size_t size = 0;
 
 // as we are not in a callback function,
 // we can realloc page tables on the fly 
     alloc_page_table_realloc = 1;
     
-    entries = physical_allocator_data_pages(&size);
+    entries = pmm_data_pages(&size);
 
     for(unsigned i = 0; i < size; i++) {
         uint64_t phys_addr = (uint64_t) entries[i].physical_address;

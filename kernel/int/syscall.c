@@ -5,7 +5,7 @@
 #include "../sched/sched.h"
 #include "../sched/thread.h"
 #include "../memory/vmap.h"
-#include "../memory/physical_allocator.h"
+#include "../memory/pmm.h"
 #include "../memory/paging.h"
 #include "../memory/heap.h"
 #include "../lib/time.h"

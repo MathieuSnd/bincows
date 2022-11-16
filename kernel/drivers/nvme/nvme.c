@@ -24,7 +24,7 @@
 #include "../../lib/dump.h"
 #include "../../lib/time.h"
 #include "../../lib/string.h"
-#include "../../memory/physical_allocator.h"
+#include "../../memory/pmm.h"
 #include "../../memory/paging.h"
 #include "../../memory/vmap.h"
 #include "../../int/irq.h"

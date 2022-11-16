@@ -8,7 +8,7 @@
 
 // for freeing a thread stack
 #include "../memory/paging.h"
-#include "../memory/physical_allocator.h"
+#include "../memory/pmm.h"
 
 int create_thread(
             thread_t* thread, 
