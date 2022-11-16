@@ -1,57 +1,64 @@
-#pragma once
-
-#include <stdint.h>
+#ifndef VMAP_H
+#define VMAP_H
 
 /**
  * general virtual memory map for Bincows:
- * 
+ *
  *                         LOWER HALF
  * 0x0000000000000000  +----------------+
+ *        4 KB         |                |
+ * 0x0000000000001000  +----------------+
+ *   512 GB - 4 KB     |      USER      |
+ *                     |     PRIVATE    |
+ * 0x0000008000000000  |----------------|
+ *       512 GB        |                |
+ * 0x0000010000000000  |----------------|
  *       512 GB        |      USER      |
- *                     |     MEMORY     | 
- * 0x0000008000000000  |----------------| 
- *                     |                |
- * 0x0000800000000000  |----------------| 
- *                     +----------------+ 
- * 
- * 
- *                         HIGHER HALF 
+ *                     |     SHARED     |
+ * 0x0000018000000000  +----------------+
+ *
+ *
+ *                         HIGHER HALF
  * 0xffff800000000000  +----------------+
  *       512 GB        |   TRANSLATED   |
  *                     |     MEMORY     |
- * 0xffff808000000000  |----------------| 
- *      31.5 TB        |  BLOCK  CACHE  | 
- * 0xfffffff000000000  |----------------| 
- *                     |                |
+ * 0xffff808000000000  |----------------|
+ *   16 TB - 512 GB    |                |
+ * 0xffff900000000000  |----------------|
+ *       64 TB         |  BLOCK  CACHE  |
+ * 0xffffd00000000000  |----------------|
+ *       16 TB         |                |
+ * 0xffffe00000000000  |----------------|
+ *       16 TB         |   KERNEL TEMP  |
+ * 0xfffff00000000000  |----------------|
+ *    16 TB - 4 GB     |                |
  * 0xffffffff00000000  |----------------|
- *       512 MB        |      MMIO      | 
+ *       512 MB        |      MMIO      |
  * 0xffffffff20000000  |----------------|
- *                     |                | 
- * 0xffffffff40000000  |----------------|
- *        1 GB         |   KERNEL TEMP  | 
+ *                     |                |
  * 0xffffffff80000000  |----------------|
  *        3 MB         |     KERNEL     |
  *                     |      DATA      |
  * 0xffffffff80300000  |----------------|
  *        2 GB         |  KERNEL HEAP   |
  * 0xffffffffffffffff  +----------------+
- * 
- * 
+ *
+ *
  * one pml4 entry is 512 GB: 0x0000008000000000.
- * The block cache is exaclty 63 pml4 entries long,
- * it is important to detect when a page has been 
+ * The block cache is exaclty 128 pml4 entries long,
+ * it is important to detect when a page has been
  * modified.
- * 
- * 
- * 
+ *
+ *
+ *
  * the allocator and the page table manager
  * share the same virtual space, in a translated
  * physical memory space
- * 
- *  
- * 
+ *
+ *
+ *
  * detailed MMIO address space:
- * 
+ *
  * 0xffffffff00000000  |----- PCIE -----|
  *                     |       ...      |
  *                     |   framebuffer  |
@@ -61,55 +68,75 @@
  * 0xffffffff1ffff000  |----------------|
  *                     |      LAPIC     |
  * 0xffffffff20000000  |----------------|
- * 
- * 
- * the KERNEL TEMP memory region is used 
- * for temporary allocations
- * eg: copying data from one process to 
- * another
- * 
- * 
- * 
+ *
+ *
+ * the KERNEL TEMP memory region is used
+ * for temporary mapping. Examples are
+ * - mapping the new process when forking
+ * - mapping a SHM (to allocate it, memset it, free it)
+ *
+ *
  */
 
 #define HPET_VADDR 0xffffffff1fffe000llu
 #define APIC_VADDR 0xffffffff1ffff000llu
 
-
-
 /**
- * early virtual memory map for Bincows:
- * 
- * 
- * 0                   ------------------
- *                     |                | 
- *                     |                | 
+ * early virtual memory map when calling
+ * kernel_main:
+ *
+ * 0x000000000000000   |----------------|
+ *                     |                |
+ *                     |                |
  * 0xffff800000000000  |----------------|
- *                     |   TRANSLATED   | 
- *                     |     MEMORY     | 
+ *                     |   TRANSLATED   |
+ *                     |     MEMORY     |
  * 0xffff8c0000000000  |----------------|
- *                     |                | 
+ *                     |                |
  * 0xffffffff80000000  |----------------|
  *                     |     KERNEL     |
  *                     |      DATA      |
- * 0xffffffffffffffff  ------------------
- * 
- * 
+ * 0xffffffffffffffff  |----------------|
+ *
+ *
  */
 
-#define USER_END            0x0000007fffffffff
+
+////////////////////////////////
+/// user space memory ranges ///
+////////////////////////////////
+#define USER_PRIVATE_BEGIN 0x0000000000001000
+#define USER_PRIVATE_END   0x0000008000000000
+
+#define USER_SHARED_BEGIN  0x0000010000000000
+#define USER_SHARED_END    0x0000018000000000
+
+
+////////////////////////////////
+// kernel space memory ranges //
+////////////////////////////////
+#define HIGHER_HALF_BEGIN 0xffff800000000000llu
+
 #define TRANSLATED_PHYSICAL_MEMORY_BEGIN 0xffff800000000000llu
-#define BLOCK_CACHE_BEGIN   0xffff808000000000llu
-#define MMIO_BEGIN          0xffffffff00000000llu
-#define KERNEL_TEMP_BEGIN   0xffffffff40000000llu
-#define KERNEL_DATA_BEGIN   0xffffffff80000000llu
-#define KERNEL_HEAP_BEGIN   0xffffffff80300000llu
+#define TRANSLATED_PHYSICAL_MEMORY_END   0xffff800000000000llu
+
+#define BLOCK_CACHE_BEGIN 0xffff900000000000llu
+#define BLOCK_CACHE_END 0xffffd00000000000llu
+
+#define KERNEL_TEMP_BEGIN 0xffffffff40000000llu
+#define KERNEL_TEMP_BEGIN 0xffffffff40000000llu
+
+#define MMIO_BEGIN 0xffffffff00000000llu
+#define MMEO_END 0xffffffff20000000llu
+
+#define KERNEL_DATA_BEGIN 0xffffffff80000000llu
+#define KERNEL_HEAP_BEGIN 0xffffffff80300000llu
 
 
-#define BLOCK_CACHE_END     0xfffffff000000000llu
 
-
-// Bincows segmentation
+//////////////////
+// segmentation //
+//////////////////
 
 #define KERNEL_CS 0x08
 #define KERNEL_DS 0x10
@@ -119,28 +146,28 @@
 #define USER_RF 0x202
 
 
+#include <stdint.h>
 
 
-/**
- *  user memory map for Bincows:
- * 
- * 0x0000000000000000  |----------------|
- *                     |      USER      |
- *                     |     MEMORY     | 
- * 0x0000007fffffffff  |----------------|   
- * 
- */
+/////////////////////////////////
+// memory range test functions //
+/////////////////////////////////
 
+static inline int is_user_private(void* vaddr) {
+    return (uint64_t)vaddr >= USER_PRIVATE_BEGIN
+        && (uint64_t)vaddr <  USER_PRIVATE_END;
+}
 
-
-
-
+static inline int is_user_shared(void* vaddr) {
+    return (uint64_t)vaddr >= USER_SHARED_BEGIN
+        && (uint64_t)vaddr <  USER_SHARED_END;
+}
 
 // return non 0 value iif the given address
-// resides in kernel memory
+// resides in user memory
 static inline int is_user(void* vaddr) {
     // user is in the lower half
-    return ((uint64_t)vaddr & ~USER_END) == 0;
+    return is_user_private(vaddr) || is_user_shared(vaddr);
 }
 
 static inline int is_kernel_memory(uint64_t vaddr) {
@@ -149,37 +176,36 @@ static inline int is_kernel_memory(uint64_t vaddr) {
 }
 
 static inline int is_block_cache(uint64_t vaddr) {
-    return vaddr > BLOCK_CACHE_BEGIN && vaddr < BLOCK_CACHE_END;
+    return vaddr >= BLOCK_CACHE_BEGIN && vaddr < BLOCK_CACHE_END;
 }
 
 static inline int is_mmio(uint64_t vaddr) {
     // between -4 GB and -3 GB
-    return (vaddr & (KERNEL_DATA_BEGIN | KERNEL_TEMP_BEGIN)) 
-                == MMIO_BEGIN;
+    return vaddr >= MMIO_BEGIN && vaddr < MMEO_END;
 }
 
 static inline int is_higher_half(uint64_t vaddr) {
     // higher half begins at  TRANSLATED_PHYSICAL_MEMORY_BEGIN
-    return (vaddr & TRANSLATED_PHYSICAL_MEMORY_BEGIN) 
-                 == TRANSLATED_PHYSICAL_MEMORY_BEGIN;
+    return vaddr >= HIGHER_HALF_BEGIN;
 }
+
+
+
+
+/////////////////////////////////
+///// translation functions /////
+/////////////////////////////////
+
 
 // return the physical address of a
-// stivale2 high half pointer
-static inline uint64_t early_virtual_to_physical(
-        const void* vaddr) {
-    
-    if((0xfffff00000000000llu & (uint64_t)vaddr) ==
-                         TRANSLATED_PHYSICAL_MEMORY_BEGIN)
-        return ~TRANSLATED_PHYSICAL_MEMORY_BEGIN & (uint64_t)vaddr;
-    
-    else
-        return ~KERNEL_DATA_BEGIN & (uint64_t)vaddr;
-    
+// early high half pointer
+static inline uint64_t kernel_data_to_physical(
+    const void* vaddr) {
+    assert((uint64_t) vaddr > KERNEL_DATA_BEGIN);
+    return ~KERNEL_DATA_BEGIN & (uint64_t)vaddr;
 }
 
-
-// translated virtual address that is in 
+// translated virtual address that is in
 // the TRANSLATED region to a physical address:
 // (phys + TRANSLATED_PHYSICAL_MEMORY_BEGIN)
 static inline uint64_t trv2p(void* trvaddr) {
@@ -193,5 +219,8 @@ static inline uint64_t trk2p(void* trkaddr) {
 // translate a physical memory address
 // to access it where it is mapped
 static inline void* __attribute__((pure)) translate_address(void* phys_addr) {
-    return (void*)((uint64_t)phys_addr | TRANSLATED_PHYSICAL_MEMORY_BEGIN);
+    return (void *)((uint64_t)phys_addr | TRANSLATED_PHYSICAL_MEMORY_BEGIN);
 }
+
+
+#endif // VMAP_H

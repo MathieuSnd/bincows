@@ -21,7 +21,8 @@
 static void* alloc_stack(process_t* process) {
     assert(!interrupt_enable());
 
-    void* base = (void*)(USER_END + 1) - STACK_SIZE;
+    // first potential stack base
+    void* base = (void*)(USER_PRIVATE_END - STACK_SIZE);
 
 
     assert(process);

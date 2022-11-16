@@ -369,7 +369,7 @@ void append_paging_initialization(void) {
     write_msr(IA32_EFER_MSR, read_msr(IA32_EFER_MSR) | IA32_EFER_NXE_BIT);
 
 // get the physical address of the pml4 table
-    uint64_t pml4_lower_half_ptr = early_virtual_to_physical(pml4);
+    uint64_t pml4_lower_half_ptr = kernel_data_to_physical(pml4);
 
 // finaly set the pml4 to cr3
     _cr3(pml4_lower_half_ptr);
