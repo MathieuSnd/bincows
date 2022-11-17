@@ -106,6 +106,11 @@ static uint32_t pml4_offset(uint64_t virt) {
     return (virt >> 39) & 0x1ff;
 }
 
+
+static inline int is_master_aligned(uint64_t virt) {
+    return virt & (PAGE_MASTER_SIZE - 1) == 0;
+}
+
 // PWT: page level write-through
 // PCD: page level cache disable
 static void* create_table_entry(void* entry, uint64_t flags) {
@@ -804,36 +809,9 @@ uint64_t get_paddr(const void* vaddr) {
 
 
 
-/**
- * @brief return the highest level 
- * map table physical base address
- */
-uint64_t get_user_page_map(void) {
-    // 4 level paging: 
-    // userspace = first 512GB 
-    return (uint64_t)extract_pointer((void*)pml4[0]);
-}
-
 
 static void flush_tlb(void) {
     _cr3(trk2p(pml4));
-}
-
-/**
- * @brief set the highest level 
- * map table physical base address
- */
-void set_user_page_map(uint64_t paddr) {
-    void* old = pml4[0];
-    pml4[0]   = create_table_entry(
-            (void*)paddr,   
-            PRESENT_ENTRY | PL_US // execute enable, read 
-            | PL_RW               // write for all the lower half
-                                  // and accessible from userspace
-    );
-
-    if(pml4[0] != old)
-        flush_tlb();
 }
 
 
@@ -962,12 +940,38 @@ void free_page_range(uint64_t vaddr, size_t count) {
 
 
 
-void unmap_user(void) {
-    pml4[0] = create_table_entry(
-            NULL,
-            0
-    );
+void unmap_master_region(void* base) {
+    // flags 0: unmaped 
+    map_master_region(base, 0, 0);
 }
+
+
+void map_master_region(void* base, uint64_t pd, uint64_t flags) {
+    assert(is_master_aligned(base));
+
+    unsigned pml4i = pml4_offset((uint64_t)base);
+
+    uint64_t old = pml4[pml4i];
+
+    pml4[pml4i] = create_table_entry(
+            NULL,
+            create_table_entry(pd, flags)
+    );
+
+    if(pml4[0] != old)
+        flush_tlb();
+}
+
+
+uint64_t get_master_pd(void* base) {
+    assert(is_master_aligned(base));
+
+    unsigned pml4i = pml4_offset((uint64_t)base);
+
+
+    extract_pointer(pml4[0]);
+}
+
 
 
 

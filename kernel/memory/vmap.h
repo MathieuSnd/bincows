@@ -70,13 +70,9 @@
  * 0xffffffff20000000  |----------------|
  *
  *
- * the KERNEL TEMP memory region is used
- * for temporary mapping. Examples are
- * - mapping the new process when forking
- * - mapping a SHM (to allocate it, memset it, free it)
- *
  *
  */
+
 
 #define HPET_VADDR 0xffffffff1fffe000llu
 #define APIC_VADDR 0xffffffff1ffff000llu
@@ -121,13 +117,13 @@
 #define TRANSLATED_PHYSICAL_MEMORY_END   0xffff800000000000llu
 
 #define BLOCK_CACHE_BEGIN 0xffff900000000000llu
-#define BLOCK_CACHE_END 0xffffd00000000000llu
+#define BLOCK_CACHE_END   0xffffd00000000000llu
 
-#define KERNEL_TEMP_BEGIN 0xffffffff40000000llu
-#define KERNEL_TEMP_BEGIN 0xffffffff40000000llu
+#define KERNEL_TEMP_BEGIN 0xffffe00000000000llu
+#define KERNEL_TEMP_END   0xfffff00000000000llu
 
-#define MMIO_BEGIN 0xffffffff00000000llu
-#define MMEO_END 0xffffffff20000000llu
+#define MMIO_BEGIN        0xffffffff00000000llu
+#define MMEO_END            0xffffffff20000000llu
 
 #define KERNEL_DATA_BEGIN 0xffffffff80000000llu
 #define KERNEL_HEAP_BEGIN 0xffffffff80300000llu
@@ -180,12 +176,14 @@ static inline int is_block_cache(uint64_t vaddr) {
 }
 
 static inline int is_mmio(uint64_t vaddr) {
-    // between -4 GB and -3 GB
     return vaddr >= MMIO_BEGIN && vaddr < MMEO_END;
 }
 
+static inline int is_kernel_temp(uint64_t vaddr) {
+    return vaddr >= KERNEL_TEMP_BEGIN && vaddr < KERNEL_TEMP_END;
+}
+
 static inline int is_higher_half(uint64_t vaddr) {
-    // higher half begins at  TRANSLATED_PHYSICAL_MEMORY_BEGIN
     return vaddr >= HIGHER_HALF_BEGIN;
 }
 

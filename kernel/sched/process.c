@@ -141,6 +141,14 @@ static int create_main_thread(process_t* process) {
     return 0;
 }
 
+
+static struct process_mem_map process_create_mem_map(void) {
+    return (struct process_mem_map) {
+        .private_pd = create_empty_pd(),
+        .shared_pd  = create_empty_pd(),
+    };
+}
+
 int create_process(
         process_t*  process, 
         process_t*  pparent, 
@@ -152,7 +160,7 @@ int create_process(
     assert(!interrupt_enable());
 
     // assert that no userspace is mapped
-    assert(get_user_page_map() == 0);
+    assert(is_process_mapped(NULL) == 0);
 
     uint64_t user_page_map = alloc_user_page_map();
 
@@ -375,7 +383,7 @@ void free_process(process_t* process) {
 
 int replace_process(process_t* process, void* elffile, size_t elffile_sz) {
     // assert that the process is already mapped
-    assert(get_user_page_map() == process->page_dir_paddr);
+    assert(is_process_mapped(process));
 
     unmap_user();
     free_user_page_map(process->page_dir_paddr);
@@ -425,6 +433,60 @@ int replace_process(process_t* process, void* elffile, size_t elffile_sz) {
 }
 
 
+static const void* private_base = (void*)(0 * PAGE_MASTER_SIZE);
+static const void* shared_base  = (void*)(3 * PAGE_MASTER_SIZE);
+
+// if proc is NULL, then return whether any 
+// process is mapped
+static int is_process_mapped(process_t* proc) {
+    uint64_t proc_private_pd = proc ? proc->mem_map.private_pd : 0;
+    uint64_t proc_shared_pd  = proc ? proc->mem_map.shared_pd  : 0;
+
+    int mapped_private = get_master_pd(private_base) != proc_private_pd;
+    int mapped_shared  = get_master_pd(shared_base)  != proc_shared_pd;
+
+    assert(mapped_private == mapped_shared);
+
+    return mapped_private;
+}
+
+
+static void map(struct process_mem_map* map) {
+
+    assert(get_master_pd(private_base) == 0);
+    assert(get_master_pd(shared_base)  == 0);
+
+
+    map_master_region(private_base, map->private_pd,
+            PRESENT_ENTRY | PL_US);
+
+    map_master_region(shared_base, map->shared_pd, 
+            PRESENT_ENTRY | PL_US | PL_XD);
+}
+
+
+void process_map(process_t* p) {
+    assert(!interrupt_enable());
+    
+    return map(&p->mem_map);
+}
+
+
+// unmap the current process's memory
+// (private and shared)
+void process_unmap(void) {
+    assert(!interrupt_enable());
+    
+    assert(get_master_pd(private_base) != 0);
+    assert(get_master_pd(shared_base)  != 0);
+
+    unmap_master_region(private_base);
+    unmap_master_region(shared_base);
+}
+
+
+
+
 
 /**
  *  
@@ -470,7 +532,7 @@ tid_t process_create_thread(process_t* proc, void* entry, void* argument) {
     assert(!interrupt_enable());
 
     // assert that the process is already mapped
-    assert(get_user_page_map() == proc->page_dir_paddr);
+    assert(is_process_mapped(proc));
 
     if(!proc)
         return 0;
@@ -824,7 +886,7 @@ void __attribute__((noreturn)) _restore_context(struct gp_regs* rsp);
 int process_end_of_signal(process_t* process) {
     assert(!interrupt_enable());
 
-    assert(get_user_page_map() == process->page_dir_paddr);    
+    assert(is_process_mapped(process));
 
     // map the right process memory
     //map_process_memory(process);

@@ -48,12 +48,31 @@ typedef struct file_descriptor {
 } file_descriptor_t;
 
 
+// process wide user mapping descriptor
+struct process_mem_map {
+    // page diectory for the private process
+    // memory. For now, represents a 512 GB PML4 
+    // page entry, to the [0 -> 512 GB] memory range:
+    // 1st PML4 entry
+    uint64_t private_pd;
+
+    // page diectory for the sharedprocess
+    // memory. For now, represents a 512 GB PML4 
+    // page entry, to the [1024 -> 1536 GB] memory range:
+    // 3rd PML4 entry
+    uint64_t shared_pd;
+};
 
 
 typedef struct process {
     pid_t pid;
 
     pid_t ppid;
+
+    // memory map structure.
+    // it should be passed to process_map()
+    // and process_unmap().
+    struct process_mem_map mem_map;
 
     uint64_t page_dir_paddr;
 
@@ -105,6 +124,10 @@ typedef struct process {
      * for the process. It resides in userspace
      * and is registered to the kernel using
      * the REGISTER_SIGNALS system call.
+     * 
+     * @todo it introduces a major security issue:
+     * if the user puts sig_table in a temporary memory
+     * then frees it, this will crash
      * 
      */
     sighandler_t* sig_table;
@@ -235,6 +258,17 @@ void free_process(process_t* process);
  * The process stays mapped
  */
 int replace_process(process_t* process, void* elffile, size_t elffile_sz);
+
+
+// map the process memory (private and shared)
+// on the lower half. No process should be mapped
+// already
+void process_map(process_t* p);
+
+// unmap the current process's memory
+// (private and shared)
+// a process should be mapped already
+void process_unmap(void);
 
 
 

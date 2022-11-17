@@ -12,6 +12,9 @@
 
 struct boot_interface;
 
+#define PAGE_MAP_LEVEL 4
+#define PAGE_MASTER_SIZE (512*1024*1024*1024llu)
+
 /**
  * enable PML4 4K paging
  * identity maps all addressable the memory except kernel 
@@ -98,13 +101,6 @@ void free_user_page_map(uint64_t);
 
 
 /**
- * @brief return the top level 
- * map table physical base address
- */
-uint64_t get_user_page_map(void);
-
-
-/**
  * @brief set the highest level 
  * map table physical base address
  */
@@ -122,7 +118,41 @@ void set_user_page_map(uint64_t paddr);
 uint64_t get_phys_addr(const void* vaddr);
 
 
-void unmap_user(void);
+
+// a master region is a range controlled
+// by one highest level paging structure entry.
+// 
+// this function unmaps the master region
+// with given base address.
+// The base address must be aligned on
+// PAGE_MASTER_SIZE bytes.
+// This function does not free any memory and
+// should be used with care.
+// This function does flush the core's TLB
+void unmap_master_region(void* base);
+
+
+// map a master page direcory to a given
+// PAGE_MASTER_SIZE aligned base address.
+// This function does flush the core's TLB
+void map_master_region(void* base, uint64_t pd, uint64_t flags);
+
+
+// return the master page direcory currently mapped
+// on a given PAGE_MASTER_SIZE aligned base address.
+uint64_t get_master_pd(void* base);
+
+
+// create an empty page directory and return its
+// physical address. The result must be freed
+// using physfree(). It can be used by
+// map_master_region(). 
+//
+// The point of using this function is to 
+// This
+uint64_t create_empty_pd(void);
+
+
 
 
 /**
