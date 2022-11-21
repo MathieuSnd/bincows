@@ -32,9 +32,8 @@ typedef int shmid_t;
 struct shm {
     shmid_t id;
 
-    // list of processes that share this shm
-    pid_t*   processes;
-    unsigned n_processes;
+    // number of SHM instances
+    int n_insts;
 
     // physical address of the 1 GB
     // page directory (level 3 page structure)
@@ -51,8 +50,8 @@ struct shm {
  * memory view from a process
  * 
  */
-struct shm_handler {
-    struct shm* target;
+struct shm_instance {
+    shmid_t target;
     void* vaddr;
 };
 
@@ -61,16 +60,22 @@ struct shm_handler {
  * object, given its initial size
  * 
  * @param initial_size byte size
- * @return struct shm* NULL if it couldn't 
+ * @return struct_instance* NULL if it couldn't 
  * be created
  */
-struct shm* create_shm(size_t initial_size);
+struct shm_instance* shm_create(size_t initial_size);
+
 
 /**
- * @brief remove an shm object
- * @return 0 on success, non-0 on failure
+ * 
+ * resize the shm size
+ * 
+ * @param shm shm to truncate
+ * @return 0 on success, non 0 on failure
  */
-int remove_shm(struct shm* shm);
+int shm_truncate(shmid_t shm, size_t new_size);
+
+
 
 /**
  * open an shm object given its id.
@@ -80,9 +85,20 @@ int remove_shm(struct shm* shm);
  * shm handler structure
  * 
  * On failure, NULL is returned
+ * 0xffff80000bfa5000
+ * 0xffff80000bf98000
  *
  */
-struct shm_handler* shm_open(shmid_t id);
+struct shm_instance* shm_open(shmid_t id);
 
+/**
+ * 
+ * close and unmap the SHM instance
+ * 
+ */
+int shm_close(const struct shm_instance* instance);
+
+
+void shm_cleanup(void);
 
 #endif

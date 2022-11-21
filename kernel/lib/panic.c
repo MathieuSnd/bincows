@@ -57,12 +57,13 @@ clock_ns();
     printf("paniced at %u.%u ms\n", clock_ns() / 1000000, (clock_ns() / 1000) % 1000);
     printf("current pid: %d ; tid: %d\n", sched_current_pid(), sched_current_tid());
 
-    if(sched_current_pid() != 0 && get_user_page_map() != 0) {
+    if(sched_current_pid() != 0 && is_process_mapped(NULL) == 0) {
         // map user
         //_cli();
         process_t* pr = sched_get_process(sched_current_pid());
 
-        set_user_page_map(pr->saved_page_dir_paddr);
+        process_map(pr);
+        // set_user_page_map(pr->saved_page_dir_paddr);
 
         //_sti();
     }

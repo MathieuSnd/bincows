@@ -324,6 +324,8 @@ static int add_killed_process(process_t* process) {
 
 
 static int remove_process(pid_t pid) {
+    assert(!interrupt_enable());
+
     // first lock the sched lock
     spinlock_acquire(&sched_lock);
 
@@ -637,7 +639,8 @@ void  sched_save(gp_regs_t* rsp) {
         t->rsp = rsp;
 
         // save page table
-        p->saved_page_dir_paddr = get_user_page_map();
+        // @todo remove
+        p->saved_page_dir_paddr = 0;//get_user_page_map();
 
         // release process lock
         spinlock_release(&p->lock);
@@ -671,9 +674,10 @@ gp_regs_t* sched_saved_context(void) {
 }
 
 
-
+static
 void sched_free_killed_processes(void) {
     assert(!currently_in_nested_irq);
+    assert(interrupt_enable());
     
     if(n_killed_processes == 0)
         return;
@@ -694,12 +698,20 @@ void sched_free_killed_processes(void) {
         sizeof(process_t*) * n
     );
 
+
+    // every lock should be taken
+    // when freeing the processes
+    for(int i = 0; i < n_killed_processes; i++)
+        assert(&killed_processes[i]->lock);
+
+
     free(killed_processes);
 
     killed_processes = NULL;
 
     n_killed_processes = 0;
     spinlock_release(&sched_lock);
+
 
     // CS end
     _sti();
@@ -708,11 +720,14 @@ void sched_free_killed_processes(void) {
 
     for(unsigned i = 0; i < n; i++) {
         process_t* p = to_kill[i];
+        log_warn("lazy freed process %u", p->pid);
 
         // free the process
         free_process(p);
+
     }
     free(to_kill);
+
 }
 
 
@@ -748,8 +763,7 @@ void sched_cleanup(void) {
 
 
         // free it
-
-        set_user_page_map(p->page_dir_paddr);
+        process_map(p);
 
         for(unsigned j = 0; j < p->n_threads; j++) {
             thread_t* t = &p->threads[j];
@@ -1158,9 +1172,15 @@ void schedule(void) {
     // map the user space
 
     // only flush tlb if the process changed
-    if(p->pid != current_pid)
-        set_user_page_map(p->saved_page_dir_paddr);
+    if(p->pid != current_pid) {
 
+        if(is_process_mapped(NULL))
+            process_unmap();
+        if(p->pid != 0)
+            process_map(p);
+    }
+    else
+        assert(is_process_mapped(p));
 
 
     void* kernel_sp;
@@ -1193,7 +1213,7 @@ void schedule(void) {
     current_pid = p->pid;
     current_tid = t->tid;
 
-    set_user_page_map(p->saved_page_dir_paddr);
+
 
     gp_regs_t* context = t->rsp;
 
@@ -1327,7 +1347,6 @@ void memory_check(void) {
 
 void kernel_process_entry(void) {
 
-
     assert(current_pid == KERNEL_PID);
     assert(!currently_in_irq);
     assert(interrupt_enable());
@@ -1335,7 +1354,8 @@ void kernel_process_entry(void) {
     kernel_process_running = 0;
 
 
-
+    // the kernel process must not map any user memory
+    // with the interrupts enabled
 
 
     uint64_t log_flush_last = 0;

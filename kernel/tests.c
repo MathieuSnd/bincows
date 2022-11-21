@@ -149,12 +149,6 @@ void test_disk_read(void) {
 
     for(int i = 0; i < 30; i++) {
 
-        // alloc user memory
-        uint64_t pm = alloc_user_page_map();
-
-        // map user memory
-        set_user_page_map(pm);
-
         uint8_t* buf = malloc(size);
         memset(buf, 0, size);        
 
@@ -191,8 +185,6 @@ void test_disk_read(void) {
             panic("test failed");
         }
 
-        unmap_user();
-        free_user_page_map(pm);
         free(buf);
 
         printf(".");

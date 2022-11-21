@@ -7,6 +7,10 @@
 typedef void (*sighandler_t)(int);
 
 
+#define SIGMASK_T
+typedef uint32_t sigmask_t;
+
+
 #define SIGHUP     1 
 #define SIGINT     2 
 #define SIGQUIT    3 

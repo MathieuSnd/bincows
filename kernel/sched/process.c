@@ -7,6 +7,7 @@
 #include "../lib/string.h"
 #include "../int/apic.h"
 #include "../int/idt.h"
+#include "../memory/pmm.h"
 
 #include "sched.h"
 
@@ -149,6 +150,37 @@ static struct process_mem_map process_create_mem_map(void) {
     };
 }
 
+// This function deep frees the process memory.
+// at this point, no shared memory should be mapped
+static void free_process_memory(struct process_mem_map map) {
+    assert(map.private_pd);
+    assert(map.shared_pd);
+
+    free_master_region(map.private_pd);
+    free_master_region(map.shared_pd);
+}
+
+
+#define PRIVATE_BASE ((void*)USER_PRIVATE_BEGIN)
+#define SHARED_BASE  ((void*)USER_SHARED_BEGIN)
+
+
+static void user_map(struct process_mem_map* map) {
+
+    assert(get_master_pd(PRIVATE_BASE) != map->private_pd);
+    assert(get_master_pd(SHARED_BASE)  != map->shared_pd);
+
+
+    map_master_region(PRIVATE_BASE, map->private_pd,
+            PRESENT_ENTRY | PL_RW | PL_US);
+
+    map_master_region(SHARED_BASE, map->shared_pd, 
+            PRESENT_ENTRY | PL_RW | PL_US | PL_XD);
+}
+
+
+
+
 int create_process(
         process_t*  process, 
         process_t*  pparent, 
@@ -162,9 +194,10 @@ int create_process(
     // assert that no userspace is mapped
     assert(is_process_mapped(NULL) == 0);
 
-    uint64_t user_page_map = alloc_user_page_map();
+    // alloc and map process virtual memory
+    struct process_mem_map map = process_create_mem_map();
 
-    set_user_page_map(user_page_map);
+    user_map(&map);
 
     // we have to have the userspace map ready
     // before calling this
@@ -172,6 +205,8 @@ int create_process(
 
     
     if(!program) {
+        free_process_memory(map);
+
         log_debug("create_process: elf_load failed");
         return 0;
     }
@@ -224,8 +259,8 @@ int create_process(
         .fds   = fds,
         .n_threads = 0, // no thread yet. The thread is added right after
         .threads = threads,
-        .page_dir_paddr = user_page_map,
-        .saved_page_dir_paddr = user_page_map,
+        .mem_map = map,
+        // .saved_page_dir_paddr = private_pd,
         .pid = pid,
         .ppid = ppid,
         .cwd  = cwd,
@@ -233,11 +268,12 @@ int create_process(
         .clock_begin = clock_ns(),
 
 
-        .sig_table = NULL,
+        .ign_mask = 0xffffffff,
+        .blk_mask = 0,
+        .sighandler = NULL,
         .sig_current = NOSIG,
         .sig_pending = 0,
         .sig_return_context = NULL,
-        .sig_return_function = NULL,
     };
 
     // empty heap
@@ -251,11 +287,13 @@ int create_process(
         free(cwd);
         free(threads);
         free(fds);
-        free_user_page_map(user_page_map);
+        free_process_memory(map);
         elf_free(program);
         return 0;
     }
 
+
+    process_unmap();
 
     return 1;
 }
@@ -321,13 +359,13 @@ int create_kernel_process(process_t* process) {
         .program = NULL,
         .clock_begin = clock_ns(),
 
-        .sig_table = NULL,
+        .ign_mask = 0xffffffff,
+        .blk_mask = 0,
+        .sighandler = NULL,
         .sig_current = NOSIG,
         .sig_pending = 0,
         .sig_return_context = NULL,
-        .sig_return_function = NULL,
     };
-
 
 
 
@@ -367,6 +405,8 @@ void free_process(process_t* process) {
     free(process->fds);
     free(process->cwd);
 
+    
+
 
     if(process->threads)
         // thread buffer hasn't been freed yet
@@ -375,6 +415,10 @@ void free_process(process_t* process) {
     if(process->program)
         elf_free(process->program);
 
+    // free process memory
+    _cli();
+    free_process_memory(process->mem_map);
+    _sti();
 
     free(process);
 }
@@ -385,14 +429,13 @@ int replace_process(process_t* process, void* elffile, size_t elffile_sz) {
     // assert that the process is already mapped
     assert(is_process_mapped(process));
 
-    unmap_user();
-    free_user_page_map(process->page_dir_paddr);
+    process_unmap();
+    free_process_memory(process->mem_map);
 
-    // recreate page directory
-    process->saved_page_dir_paddr =
-    process->page_dir_paddr = alloc_user_page_map();
+    // recreate process virtual memory
+    process->mem_map = process_create_mem_map();
 
-    set_user_page_map(process->page_dir_paddr);
+    process_map(process);
 
 
     // only one thread
@@ -433,42 +476,30 @@ int replace_process(process_t* process, void* elffile, size_t elffile_sz) {
 }
 
 
-static const void* private_base = (void*)(0 * PAGE_MASTER_SIZE);
-static const void* shared_base  = (void*)(3 * PAGE_MASTER_SIZE);
-
 // if proc is NULL, then return whether any 
 // process is mapped
-static int is_process_mapped(process_t* proc) {
+int is_process_mapped(process_t* proc) {
     uint64_t proc_private_pd = proc ? proc->mem_map.private_pd : 0;
     uint64_t proc_shared_pd  = proc ? proc->mem_map.shared_pd  : 0;
 
-    int mapped_private = get_master_pd(private_base) != proc_private_pd;
-    int mapped_shared  = get_master_pd(shared_base)  != proc_shared_pd;
+    int mapped_private = get_master_pd(PRIVATE_BASE) == proc_private_pd;
+    int mapped_shared  = get_master_pd(SHARED_BASE)  == proc_shared_pd;
 
     assert(mapped_private == mapped_shared);
 
-    return mapped_private;
+    if(proc)
+        return mapped_private;
+    else
+        return !mapped_private;
+
 }
 
-
-static void map(struct process_mem_map* map) {
-
-    assert(get_master_pd(private_base) == 0);
-    assert(get_master_pd(shared_base)  == 0);
-
-
-    map_master_region(private_base, map->private_pd,
-            PRESENT_ENTRY | PL_US);
-
-    map_master_region(shared_base, map->shared_pd, 
-            PRESENT_ENTRY | PL_US | PL_XD);
-}
 
 
 void process_map(process_t* p) {
     assert(!interrupt_enable());
     
-    return map(&p->mem_map);
+    return user_map(&p->mem_map);
 }
 
 
@@ -477,11 +508,11 @@ void process_map(process_t* p) {
 void process_unmap(void) {
     assert(!interrupt_enable());
     
-    assert(get_master_pd(private_base) != 0);
-    assert(get_master_pd(shared_base)  != 0);
+    assert(get_master_pd(PRIVATE_BASE) != 0);
+    assert(get_master_pd(SHARED_BASE)  != 0);
 
-    unmap_master_region(private_base);
-    unmap_master_region(shared_base);
+    unmap_master_region(PRIVATE_BASE);
+    unmap_master_region(SHARED_BASE);
 }
 
 
@@ -680,21 +711,21 @@ int set_process_entry_arguments(process_t* process,
 }
 
 
-
-
 int process_register_signal_setup(
         process_t* process, 
-        void* function, 
-        sighandler_t* table
+        void* user_handler, 
+        sigmask_t ign_mask,
+        sigmask_t blk_mask
 ) {
     // the table should be in userspace
     assert(!interrupt_enable());
 
-    if(!is_user(table) || !is_user(function))
+    if(!is_user_private(user_handler))
         return -1;
 
-    process->sig_table = table;
-    process->sig_return_function = function;
+    process->ign_mask   = ign_mask;
+    process->blk_mask   = blk_mask;
+    process->sighandler = user_handler;
 
     return 0;    
 }
@@ -711,15 +742,10 @@ int prepare_process_signal(process_t* process, int signal) {
      * keep track of what signal is executing
      * 2. simulate a call to the signal handler.
      * 
-     * While 1. is pretty easy, 2. is more tricky.
+     * 1.: pretty straight forward
      * 
-     * 2.: the idea is to prepare the stack to call:
-     * - signal_handler_fun[signal](signal);
-     * 
-     * - put a return address on the stack,
-     *   pointing to a cleanup function: sig_return_function
-     *   that should invoke a SIGRETURN syscall, that will
-     *   call process_end_of_signal(...).
+     * 2.: to prepare the stack to call:
+     * - sighandler(signal);
      * 
      * to do that, we need to:
      * - save the context to sig_return_context (which will 
@@ -753,9 +779,6 @@ int prepare_process_signal(process_t* process, int signal) {
      */
     assert(!interrupt_enable());
 
-    set_user_page_map(process->page_dir_paddr);
-
-
     process->sig_current = signal;
 
     
@@ -763,7 +786,7 @@ int prepare_process_signal(process_t* process, int signal) {
     assert((process->sig_pending & (1 << signal)) != 0);
 
     // disable pending bit
-    process->sig_pending ^= (1 << signal);
+    process->sig_pending &= ~(1 << signal);
 
     // @todo make sure thread0 is not running on any core
     assert(process->n_threads >= 1);
@@ -777,11 +800,10 @@ int prepare_process_signal(process_t* process, int signal) {
 
     process->sig_return_context = thread0->rsp;
 
-    ////////////////////////////////////////////////
-    //////////////// return address ////////////////
-    ////////////////////////////////////////////////
-    // set return address. to do that, we must 
-    // move the context a bit higher in the stack
+
+    // map the process to push context on the user stack
+
+
 
     void* user_rsp;
 
@@ -789,6 +811,11 @@ int prepare_process_signal(process_t* process, int signal) {
         // the thread is currently in a system call. 
         // the current stack resides in kernel space
 
+        // !!! @todo urgent !!! make this situation impossible
+        // so that system calls can be used within signal handlers
+        // for example, ask user function syscall() to invoke 
+        // INT $YIELD_IRQ whenever a signal hits to handle it
+        // in properly saved usermode context
         user_rsp = thread0->syscall_user_rsp;
     }
     else {
@@ -798,18 +825,6 @@ int prepare_process_signal(process_t* process, int signal) {
 
     assert(is_user(user_rsp));
 
-
-    // allocate memory for return address
-    user_rsp -= sizeof(void*);
-
-    if(user_rsp < (void*)thread0->stack.base) {
-        // stack overflow!
-        log_warn("stackoverflow when signaling process %d", process->pid);
-
-        return -1;
-    }
-
-    *(void**)user_rsp = process->sig_return_function;
 
 
     thread0->rsp --;
@@ -825,8 +840,12 @@ int prepare_process_signal(process_t* process, int signal) {
     thread0->rsp->rsp = (uint64_t)user_rsp;
     
     // don't execute the user code with CPL=1 :)
+    // @todo deprecated when removing 
+    // syscall_user_rsp (replace these two assigns 
+    // with assertions)
     thread0->rsp->cs = USER_CS;
     thread0->rsp->ss = USER_DS;
+
     thread0->rsp->rflags = USER_RF;
 
     // argument to function
@@ -834,8 +853,8 @@ int prepare_process_signal(process_t* process, int signal) {
 
 
     // jump to signal handler
-    assert(process->sig_table[signal]);
-    thread0->rsp->rip = (uint64_t)process->sig_table[signal];
+    assert(process->sighandler);
+    thread0->rsp->rip = (uint64_t)process->sighandler;
 
 
     // cancel the thread sleep if it is sleeping
@@ -956,7 +975,7 @@ void unblock_sigwait_threads_and_release(process_t* process, uint64_t rflags) {
 
 
 int process_trigger_signal(pid_t pid, int signal) {
-
+    // @todo check block mask
     uint64_t rf = get_rflags();
 
     // grab the process
@@ -966,21 +985,18 @@ int process_trigger_signal(pid_t pid, int signal) {
     if(!process) {
         // no such process
         set_rflags(rf);
+        log_warn("no proc");
         return -1;
     }
 
 
-    // map the process memory into lower half
-    uint64_t saved_proc_page_map = get_user_page_map();
-    set_user_page_map(process->page_dir_paddr);
-
-    if(!process->sig_table) {
-        // no signal table: signal ignored
-    }
-    else if(process->sig_table[signal] == SIG_IGN) {
+    if(process->ign_mask & (1 << signal)) {
         // signal ignored
+        log_warn("IGNORED SIGNAL %u", pid);
+        return 0;
     }
     else {
+        log_warn("pendign");
         assert(process->n_threads > 0);
         process->sig_pending |= (1 << signal);
     }
@@ -991,9 +1007,6 @@ int process_trigger_signal(pid_t pid, int signal) {
     // unblock the thread
     sleep_cancel (pid, 1);
     sched_unblock(pid, 1);
-
-    // restore the process memory map
-    set_user_page_map(saved_proc_page_map);
 
     return 0;
 }

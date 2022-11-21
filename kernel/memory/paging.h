@@ -78,33 +78,9 @@ void remap_pages(void* virtual_addr,
 
 
 
-/**
- * @brief allocate a user page map
- * and return the paddr of
- * the top level table physical
- * base address.
- * 
- * This page table should eventually
- * be freed with alloc_user_page_map
- * 
- */
-uint64_t alloc_user_page_map(void);
-
-
-/**
- * @brief free a user page map
- * returned by alloc_user_page_map
- * 
- */
-void free_user_page_map(uint64_t);
 
 
 
-/**
- * @brief set the highest level 
- * map table physical base address
- */
-void set_user_page_map(uint64_t paddr);
 
 
 /**
@@ -136,6 +112,13 @@ void unmap_master_region(void* base);
 // PAGE_MASTER_SIZE aligned base address.
 // This function does flush the core's TLB
 void map_master_region(void* base, uint64_t pd, uint64_t flags);
+
+
+/**
+ * @brief deep free a master region mapping
+ * given its page directory's physical address.
+ */
+void free_master_region(uint64_t pd);
 
 
 // return the master page direcory currently mapped

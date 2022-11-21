@@ -6,9 +6,7 @@
  *
  *                         LOWER HALF
  * 0x0000000000000000  +----------------+
- *        4 KB         |                |
- * 0x0000000000001000  +----------------+
- *   512 GB - 4 KB     |      USER      |
+ *       512 GB        |      USER      |
  *                     |     PRIVATE    |
  * 0x0000008000000000  |----------------|
  *       512 GB        |                |
@@ -101,7 +99,7 @@
 ////////////////////////////////
 /// user space memory ranges ///
 ////////////////////////////////
-#define USER_PRIVATE_BEGIN 0x0000000000001000
+#define USER_PRIVATE_BEGIN 0x0000000000000000
 #define USER_PRIVATE_END   0x0000008000000000
 
 #define USER_SHARED_BEGIN  0x0000010000000000
@@ -143,6 +141,7 @@
 
 
 #include <stdint.h>
+#include "../lib/assert.h"
 
 
 /////////////////////////////////
@@ -150,8 +149,13 @@
 /////////////////////////////////
 
 static inline int is_user_private(void* vaddr) {
+    // GCC generates warning as >= USER_PRIVATE_BEGIN 
+    // is always true since USER_PRIVATE_BEGIN = 0
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wtype-limits"
     return (uint64_t)vaddr >= USER_PRIVATE_BEGIN
         && (uint64_t)vaddr <  USER_PRIVATE_END;
+#pragma GCC diagnostic pop
 }
 
 static inline int is_user_shared(void* vaddr) {

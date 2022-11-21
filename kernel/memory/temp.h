@@ -27,7 +27,7 @@
  * or the KERNEL TEMP range size could be increased.
  */
 
-#define TEMP_SIZE (512*1024*1024*1024)
+#define TEMP_SIZE (512*1024*1024*1024llu)
 
 #include <stdint.h>
 
@@ -61,4 +61,4 @@ void temp_release(void);
 
 
 
-#endif TEMP_H
+#endif// TEMP_H

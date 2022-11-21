@@ -119,18 +119,25 @@ typedef struct process {
     /// signal fields ///
     /////////////////////
 
+    // user signal handler
+    void* sighandler;
+
     /**
-     * this table contains the signal handlers
-     * for the process. It resides in userspace
-     * and is registered to the kernel using
-     * the REGISTER_SIGNALS system call.
-     * 
-     * @todo it introduces a major security issue:
-     * if the user puts sig_table in a temporary memory
-     * then frees it, this will crash
-     * 
+     * bitmask of ignored signals.
+     * If ignored, a signal shouldn't set
+     * the corresponding sig_pending bit
      */
-    sighandler_t* sig_table;
+    sigmask_t ign_mask;
+
+
+    /**
+     * bitmask of blocked signals.
+     * when blocked, a corresponding sig_pending
+     * bit shouldn't be cleared and no handler should be
+     * called.
+     */
+    sigmask_t blk_mask;
+
 
     // bitmask of pending signals
     // if at least one bit is set, then
@@ -144,10 +151,6 @@ typedef struct process {
     // otherwise, the signal number
     int sig_current;
 
-    // address of the beginning of the return function
-    // this function should be a non return function
-    // that simply invokes a SIGRETURN system call
-    void* sig_return_function;
 
     // context before the signal handler was called
     // which is to be restored when the signal handler
@@ -164,12 +167,18 @@ typedef struct process {
 // 0 on success
 // the process is supposed to be locked,
 // interrupts are disabled
-int process_register_signal_setup(
-            process_t* process, void* function, sighandler_t* table);
+int process_register_signal_setup(process_t* process, 
+    void* user_handler,sigmask_t ign_mask,sigmask_t blk_mask);
 
 
 // returns 0 on success
 int process_trigger_signal(pid_t pid, int signal);
+
+
+
+// if proc is NULL, then return whether any 
+// process is mapped
+int is_process_mapped(process_t* proc);
 
 
 // this function should be executed when a thread reaches the
@@ -200,6 +209,12 @@ int process_handle_signal(process_t* process);
  * this functions initializes a process with:
  *  - no opened file
  *  - single thread executing the elf entry 
+ * 
+ * no user memory should be mapped before calling
+ * this function, and no user memory is mapped
+ * when it returns.
+ * 
+ * On failure, no process is allocated
  *  
  * 
  * @param process output process structure
@@ -261,7 +276,7 @@ int replace_process(process_t* process, void* elffile, size_t elffile_sz);
 
 
 // map the process memory (private and shared)
-// on the lower half. No process should be mapped
+// on the lower half. The process should be mapped
 // already
 void process_map(process_t* p);
 

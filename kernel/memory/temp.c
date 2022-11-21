@@ -21,7 +21,7 @@ void* temp_lock(void) {
 
 uint64_t temp_pd(void) {
     assert(!interrupt_enable());
-    return //get_phys_addr(cpu_temp_addr());
+    return get_master_pd(cpu_temp_addr);
 }
 
 void temp_release(void) {

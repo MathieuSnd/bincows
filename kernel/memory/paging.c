@@ -108,7 +108,7 @@ static uint32_t pml4_offset(uint64_t virt) {
 
 
 static inline int is_master_aligned(uint64_t virt) {
-    return virt & (PAGE_MASTER_SIZE - 1) == 0;
+    return (virt & (PAGE_MASTER_SIZE - 1)) == 0;
 }
 
 // PWT: page level write-through
@@ -321,16 +321,16 @@ void init_paging(const struct boot_interface* bi) {
     alloc_page_table_realloc = 1;
 
 
-
+// @todo add missing regions (see vmap.h)
 // first, let's create the main memory regions:
 // 1st   user:       0x0000000000000000 -> 0x0000007fffffffff
 // 256th supervisor: 0xffff800000000000 -> 0xffff807fffffffff
 // 511st supervisor: 0xffffff8000000000 -> 0xffffffffffffffff
 
 // we don't map the user space yet.
-// for every process, we need to allocate a new page map
-// structure, meaning allocating the pml4's first entry
-// using the alloc_user_page_map() function
+// for every process, we need to allocate new page map
+// structures, meaning allocating the pml4's entries entry
+// and mapping it using the map_master_region() function
 
 // the two high half memory regions are supervisor only
 // so that no user can access it eventhough the entry
@@ -427,6 +427,9 @@ static void fill_page_table_allocator_buffer(size_t n) {
 
 // return a newly allocated zeroed page
 static void* alloc_page_table(void) {
+    uint64_t rf = get_rflags();
+    _cli();
+
     if(! page_table_allocator_buffer_size) {
         if(!alloc_page_table_realloc)
             panic(
@@ -435,6 +438,7 @@ static void* alloc_page_table(void) {
             );
 
         physalloc(PTAAB_REFILL, 0, page_table_allocator_callback);
+
         page_table_allocator_buffer_size = PTAAB_REFILL;
         
         for(int i = 0; i < PTAAB_REFILL; i++)
@@ -442,7 +446,11 @@ static void* alloc_page_table(void) {
 
     }
 
-    return page_table_allocator_buffer[--page_table_allocator_buffer_size];
+    void* ptable = page_table_allocator_buffer[--page_table_allocator_buffer_size];
+
+    set_rflags(rf);
+
+    return ptable;
 }
 
 
@@ -815,7 +823,7 @@ static void flush_tlb(void) {
 }
 
 
-uint64_t alloc_user_page_map(void) {
+uint64_t create_empty_pd(void) {
     // mutual exclusion
     uint64_t rf = get_rflags();
     _cli();
@@ -872,13 +880,13 @@ static void deep_free_map(uint64_t page_table, int level) {
 }
 
 
-void free_user_page_map(uint64_t user_page_map) {
+void free_master_region(uint64_t pd) {
     // mutual exclusion
     uint64_t rf = get_rflags();
     _cli();
 
     // deep free the page map
-    deep_free_map(user_page_map, 3);
+    deep_free_map(pd, 3);
 
     // end of mutual exclusion
     set_rflags(rf);
@@ -947,15 +955,15 @@ void unmap_master_region(void* base) {
 
 
 void map_master_region(void* base, uint64_t pd, uint64_t flags) {
-    assert(is_master_aligned(base));
+    assert(is_master_aligned((uint64_t)base));
 
     unsigned pml4i = pml4_offset((uint64_t)base);
 
-    uint64_t old = pml4[pml4i];
+    pml4e old = pml4[pml4i];
 
     pml4[pml4i] = create_table_entry(
-            NULL,
-            create_table_entry(pd, flags)
+            (void*)pd,
+            flags
     );
 
     if(pml4[0] != old)
@@ -964,12 +972,12 @@ void map_master_region(void* base, uint64_t pd, uint64_t flags) {
 
 
 uint64_t get_master_pd(void* base) {
-    assert(is_master_aligned(base));
+    assert(is_master_aligned((uint64_t)base));
 
     unsigned pml4i = pml4_offset((uint64_t)base);
 
 
-    extract_pointer(pml4[0]);
+    return (uint64_t)extract_pointer(pml4[pml4i]);
 }
 
 
