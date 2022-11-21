@@ -220,14 +220,6 @@ void init_pmm(const struct boot_interface* bi) {
         n_ranges
     );
 
-
-    pmm_check();
-    for(int i = 0; i < 2; i++)
-        physalloc_single();
-
-    pmm_check();
-
-    for(;;);
 }
 
 
@@ -314,16 +306,18 @@ static struct MR_header* get_header_base(const struct memory_range* range) {
 // the ith page in the 64 MB segment
 static void alloc_page_bitmaps(struct MR_header* restrict header, unsigned page) {
 // process on bytes: calculate the right masks
-    uint8_t mask_level0 = 1 <<  page       % 8,
-            mask_level1 = 1 << (page /  4) % 8,
-            mask_level2 = 1 << (page /  8) % 8,
-            mask_level3 = 1 << (page / 16) % 8;
+    uint8_t mask_level0 = 1 << ( page       % 8),
+            mask_level1 = 1 << ((page /  4) % 8),
+            mask_level2 = 1 << ((page /  8) % 8),
+            mask_level3 = 1 << ((page / 16) % 8);
+            
 
 // calculate the new number of free blocks for all the sizes
 
     assert((header->bitmap_level0[page/8] & mask_level0) == 0);
 
     header->available[0]--;
+
     if((header->bitmap_level1[page/8/4] & mask_level1) == 0)
         header->available[1]--;
     if((header->bitmap_level2[page/8/8] & mask_level2) == 0)
@@ -355,26 +349,41 @@ static void free_page_bitmaps(struct MR_header* header, unsigned page) {
             mask_level3 = 1 << (page / 16) % 8;
 
 
-// assert that the page was previously allocated: the bit is set 
-// in mask level 0 bit
-    assert((header->bitmap_level0[page/8] & mask_level0) != 0);
+    uint8_t lv1_0_mask  = 0xf << (4 * ((page /  4) % 2));
+    uint8_t lv2_1_mask  = 0x3 << (2 * ((page /  8) % 4));
+    uint8_t lv3_2_mask  = 0x3 << (2 * ((page / 16) % 4));
 
 // unset the corresponding bits
-    header->bitmap_level0[page/8]    &= ~mask_level0;
-    header->bitmap_level1[page/8/4]  &= ~mask_level1;
-    header->bitmap_level2[page/8/8]  &= ~mask_level2;
-    header->bitmap_level3[page/8/16] &= ~mask_level3;
+    uint8_t* lv0 = &header->bitmap_level0[page/8]   ;
+    uint8_t* lv1 = &header->bitmap_level1[page/8/4] ;
+    uint8_t* lv2 = &header->bitmap_level2[page/8/8] ;
+    uint8_t* lv3 = &header->bitmap_level3[page/8/16];
+
+
+    // assert that the page is already allocated
+    assert(*lv0 & mask_level0);
+    assert(*lv1 & mask_level1);
+    assert(*lv2 & mask_level2);
+    assert(*lv3 & mask_level3);
 
 // calculate the new number of free blocks for all the sizes
 
-    //if((header->bitmap_level0[page/8] & mask_level0) == 0)
+    {
+        *lv0 &= ~mask_level0;
         header->available[0]++;
-    if((header->bitmap_level1[page/8/4] & mask_level1) == 0)
+    }
+    if((*lv0 & lv1_0_mask) == 0) {
+        *lv1 &= ~mask_level1;
         header->available[1]++;
-    if((header->bitmap_level2[page/8/8] & mask_level2) == 0)
+    }
+    if((*lv1 & lv2_1_mask) == 0) {
+        *lv2 &= ~mask_level2;
         header->available[2]++;
-    if((header->bitmap_level3[page/8/16] & mask_level3) == 0)
+    }
+    if((*lv2 & lv3_2_mask) == 0) {
+        *lv3 &= ~mask_level3;
         header->available[3]++;
+    }
 
 }
 
@@ -438,142 +447,146 @@ static int popcount8(uint8_t x) {
 }
 
 // available count fields check
-void pmm_avail_check(void) {
+static void pmm_avail_check(struct memory_range* mr) {
+    struct MR_header* header = get_header_base(mr);
+
+    // check available field
+    volatile size_t available[4] = {0,0,0,0};
+
+
+    unsigned bound0 = (mr->length+7) / 8;
+    unsigned bound1 = (bound0 +  3) /  4;
+    unsigned bound2 = (bound0 +  7) /  8;
+    unsigned bound3 = (bound0 + 15) / 16;
+
+
+    unsigned overrun0 = bound0 * 8 - mr->length;
+    unsigned overrun1 = bound1 * 8 - (mr->length +  3) / 4;
+    unsigned overrun2 = bound2 * 8 - (mr->length +  7) / 8;
+    unsigned overrun3 = bound3 * 8 - (mr->length + 15) / 16;
+
+
+    unsigned max0 = 8 * bound0 - overrun0;
+    unsigned max1 = 8 * bound1 - overrun1;
+    unsigned max2 = 8 * bound2 - overrun2;
+    unsigned max3 = 8 * bound3 - overrun3;
+
+    uint8_t*  lv0 = header->bitmap_level0;
+    uint8_t*  lv1 = header->bitmap_level1;
+    uint8_t*  lv2 = header->bitmap_level2;
+    uint8_t*  lv3 = header->bitmap_level3;
+
+    
+    for(size_t i = 0; i < bound0; i++)
+        available[0] += popcount8(~lv0[i]);
+
+    for(size_t i = 0; i < bound1; i++)
+        available[1] += popcount8(~lv1[i]);
+
+    for(size_t i = 0; i < bound2; i++)
+        available[2] += popcount8(~lv2[i]);
+
+    for(size_t i = 0; i < bound3; i++)
+        available[3] += popcount8(~lv3[i]);
+    
+
+    available[0] -= overrun0;
+    available[1] -= overrun1;
+    available[2] -= overrun2;
+    available[3] -= overrun3;
+
+
+    for(int i = 0;i < 4; i++)
+        if(available[i] != header->available[i]) {
+            log_info("available[%u] = %u =/= %u", 
+                i, available[i], header->available[i]);
+            panic("pmm available check failed");
+        }
+
+    assert(available[0] <= mr->length);
+    assert(available[1] <= (mr->length +  4 - 1) /  4);
+    assert(available[2] <= (mr->length +  8 - 1) /  8);
+    assert(available[3] <= (mr->length + 16 - 1) / 16);
+
+
+    volatile unsigned alloc0 = max0 - available[0];
+    volatile unsigned alloc1 = max1 - available[1];
+    volatile unsigned alloc2 = max2 - available[2];
+    volatile unsigned alloc3 = max3 - available[3];
+
+    assert(alloc0 >= alloc0);
+    assert(alloc0 >= alloc0);
+    assert(alloc0 >= alloc0);
+
+    assert(alloc0 <= 4 * alloc1);
+    assert(alloc1 <= 2 * alloc2);
+    assert(alloc2 <= 2 * alloc3);
+}
+
+
+static void pmm_bitmap_check(struct memory_range* mr) {
+    struct MR_header* header = get_header_base(mr);
+    
+    size_t checklen = ((mr->length+7) / 8 + 1) / 2;
+
+    uint16_t* lv0 = (uint16_t*)header->bitmap_level0;
+    uint8_t*  lv1 = header->bitmap_level1;
+    uint8_t*  lv2 = header->bitmap_level2;
+    uint8_t*  lv3 = header->bitmap_level3;
+
+    for(size_t i = 0; i < checklen; i++) {
+        uint16_t used_0 = lv0[i];
+
+
+        volatile uint8_t used_1 = (lv1[i / 2] >> (4 * (i % 2))) & 0xf;
+        volatile uint8_t used_2 = (lv2[i / 4] >> (2 * (i % 4))) & 0x3;
+        volatile uint8_t used_3 = (lv3[i / 8] >> (i % 8)) & 0x1;
+
+        
+        // level1
+        for(int j = 0; j < 4; j++) {
+            uint16_t u0 = used_0 >> (4*j) & 0xf;
+            uint16_t u1 = (used_1 >> j) & 0x1;
+
+            assert((u0 == 0) == (u1 == 0));
+        }
+
+
+        // level2
+        for(int j = 0; j < 2; j++) {
+            uint16_t u0 = used_0 >> (8*j) & 0xff;
+            uint16_t u2 = (used_2 >> j) & 0x1;
+
+            assert((u0 == 0) == (u2 == 0));
+        }
+
+        // level3
+        {
+            uint16_t u0 = used_0;
+            uint16_t u3 = used_3;
+
+            assert((u0 == 0) == (u3 == 0));
+        }
+    }    
+}
+
+void pmm_check(void) {
+
     for(int i = 0; i < 4; i++) {
         struct memory_range* mr = mr_lists[i];
+
 
         while(mr) {
             assert((mr->length) <= MAX_SIZE);
             assert(mr->length > 0);
 
-
-            struct MR_header* header_base = get_header_base(mr);
-
-            // check available field
-            volatile size_t available[4] = {0,0,0,0};
-
-
-            unsigned bound0 = (mr->length+7) / 8;
-            unsigned bound1 = (bound0 +  3) /  4;
-            unsigned bound2 = (bound0 +  7) /  8;
-            unsigned bound3 = (bound0 + 15) / 16;
-
-
-            unsigned overrun0 = bound0 * 8 - mr->length;
-            unsigned overrun1 = bound1 * 8 - (mr->length +  3) / 4;
-            unsigned overrun2 = bound2 * 8 - (mr->length +  7) / 8;
-            unsigned overrun3 = bound3 * 8 - (mr->length + 15) / 16;
-
-
-            unsigned max0 = 8 * bound0 - overrun0;
-            unsigned max1 = 8 * bound1 - overrun1;
-            unsigned max2 = 8 * bound2 - overrun2;
-            unsigned max3 = 8 * bound3 - overrun3;
-
-            if(!mr->length)
-                log_warn("ahi");
-            
-            for(size_t i = 0; i < bound0; i++)
-                available[0] += popcount8(~header_base->bitmap_level0[i]);
-
-            for(size_t i = 0; i < bound1; i++)
-                available[1] += popcount8(~header_base->bitmap_level0[i]);
-
-            for(size_t i = 0; i < bound2; i++)
-                available[2] += popcount8(~header_base->bitmap_level0[i]);
-
-            for(size_t i = 0; i < bound3; i++)
-                available[3] += popcount8(~header_base->bitmap_level0[i]);
-            
-
-            available[0] -= overrun0;
-            available[1] -= overrun1;
-            available[2] -= overrun2;
-            available[3] -= overrun3;
-
-
-            for(int i = 0;i < 4; i++)
-                if(available[i] != header_base->available[i]) {
-                    log_info("available[%u] = %u =/= %u", 
-                        i, available[i], header_base->available[i]);
-                    panic("pmm available check failed");
-                }
-
-            assert(available[0] <= mr->length);
-            assert(available[1] <= (mr->length +  4 - 1) /  4);
-            assert(available[2] <= (mr->length +  8 - 1) /  8);
-            assert(available[3] <= (mr->length + 16 - 1) / 16);
-
-
-            volatile unsigned alloc0 = max0 - available[0];
-            volatile unsigned alloc1 = max1 - available[1];
-            volatile unsigned alloc2 = max2 - available[2];
-            volatile unsigned alloc3 = max3 - available[3];
-
-            assert(alloc0 >= alloc0);
-            assert(alloc0 >= alloc0);
-            assert(alloc0 >= alloc0);
-
-            assert(alloc0 <= 4 * alloc1);
-            assert(alloc1 <= 2 * alloc2);
-            assert(alloc2 <= 2 * alloc3);
-         
-            mr = mr->next;
-        }
-    }
-}
-
-void pmm_bitmap_check(void) {
-    for(int i = 0; i < 4; i++) {
-        struct memory_range* mr = mr_lists[i];
-
-
-        while(mr) {
-            struct MR_header* header_base = get_header_base(mr);
-
-            for(size_t i = 0; i < sizeof(header_base->bitmap_level0) / 2; i++) {
-                uint16_t used_0 = ((uint16_t*)(header_base->bitmap_level0))[i];
-
-
-                uint8_t used_1 = (header_base->bitmap_level1[i / 2] >> (i % 2)) & 0xf;
-                uint8_t used_2 = (header_base->bitmap_level2[i / 4] >> (i % 4)) & 0x3;
-                uint8_t used_3 = (header_base->bitmap_level3[i / 8] >> (i % 8)) & 0x1;
-                
-                // level1
-                for(int j = 0; j < 4; j++) {
-                    uint16_t u0 = used_0 >> (4*j) & 0xff;
-                    uint16_t u1 = (used_1 >> j) & 0x1;
-
-                    assert((u0 == 0) == (u1 == 0));
-                }
-
-
-                // level2
-                for(int j = 0; j < 2; j++) {
-                    uint16_t u0 = used_0 >> (4*j) & 0xffff;
-                    uint16_t u2 = (used_2 >> j) & 0x1;
-
-                    assert((u0 == 0) == (u2 == 0));
-                }
-
-                // level3
-                {
-                    uint16_t u0 = used_0;
-                    uint16_t u3 = used_3;
-
-                    assert((u0 == 0) == (u3 == 0));
-                }
-            }
-            
+            pmm_bitmap_check(mr);
+            pmm_avail_check (mr);
 
             mr = mr->next;
         }
     }
-}
 
-void pmm_check(void) {
-    pmm_avail_check();
-    pmm_bitmap_check();
 }
 
 
