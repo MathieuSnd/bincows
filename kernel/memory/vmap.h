@@ -58,9 +58,13 @@
  * detailed MMIO address space:
  *
  * 0xffffffff00000000  |----- PCIE -----|
- *                     |       ...      |
- *                     |   framebuffer  |
- *                     |       ...      |
+ *        256 MB       |       ...      |
+ * 0xffffffff10000000  |----------------|
+ *        128 MB       |      empty     |
+ * 0xffffffff18000000  |----------------|
+ *         32 MB       |   framebuffer  |
+ * 0xffffffff1a000000  |----------------|
+ *     96 MB - 8KB     |      empty     |
  * 0xffffffff1fffe000  |----------------|
  *                     |      HPET      |
  * 0xffffffff1ffff000  |----------------|
@@ -74,6 +78,8 @@
 
 #define HPET_VADDR 0xffffffff1fffe000llu
 #define APIC_VADDR 0xffffffff1ffff000llu
+#define FB_VADDR   0xffffffff18000000llu
+
 
 /**
  * early virtual memory map when calling
@@ -121,7 +127,7 @@
 #define KERNEL_TEMP_END   0xfffff00000000000llu
 
 #define MMIO_BEGIN        0xffffffff00000000llu
-#define MMEO_END            0xffffffff20000000llu
+#define MMEO_END          0xffffffff20000000llu
 
 #define KERNEL_DATA_BEGIN 0xffffffff80000000llu
 #define KERNEL_HEAP_BEGIN 0xffffffff80300000llu

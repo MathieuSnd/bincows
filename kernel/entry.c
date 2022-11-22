@@ -55,10 +55,13 @@ static void init_memory(const struct boot_interface* bi) {
 // map framebuffer
     map_pages(
         bi->framebuffer_paddr, 
-        MMIO_BEGIN,
+        FB_VADDR,
         // round to one page
         (bi->framebuffer_size + 0x0fff) / 0x1000,
-        PRESENT_ENTRY | PL_RW  | PL_XD
+        PRESENT_ENTRY | PL_RW  | PL_XD 
+      | PL_US // user can access the framebuffer
+              // if it is mapped inside its
+              // shared memory
     );
 }
 

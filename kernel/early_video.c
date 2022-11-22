@@ -27,7 +27,7 @@ driver_t* video_init(
         .bpp    = bi->framebuffer_bpp,
         .pitch  = bi->framebuffer_pitch,
 
-        .pix = (void *)MMIO_BEGIN,
+        .pix = (void *)FB_VADDR,
     };
 
     log_info("screen resolution: %ux%u", 
