@@ -325,7 +325,11 @@ void init_paging(const struct boot_interface* bi) {
 // first, let's create the main memory regions:
 // 1st   user:       0x0000000000000000 -> 0x0000007fffffffff
 // 256th supervisor: 0xffff800000000000 -> 0xffff807fffffffff
+//                  contains the translated physical memory
+// 
 // 511st supervisor: 0xffffff8000000000 -> 0xffffffffffffffff
+//                  contains kernel memory and mmios
+//  
 
 // we don't map the user space yet.
 // for every process, we need to allocate new page map
@@ -894,6 +898,20 @@ void free_master_region(uint64_t pd) {
 
 
 
+void free_r1_region(uint64_t pd) {
+    // mutual exclusion
+    uint64_t rf = get_rflags();
+    _cli();
+
+    // deep free the page map
+    deep_free_map(pd, 2);
+
+    // end of mutual exclusion
+    set_rflags(rf);
+}
+
+
+
 static void* get_entry(void* table, unsigned index) {    
     assert(index < 512);
 
@@ -978,6 +996,141 @@ uint64_t get_master_pd(void* base) {
 
 
     return (uint64_t)extract_pointer(pml4[pml4i]);
+}
+
+
+uint64_t get_pd(void* base, int level) {
+    if(level < 0)
+        return 0;
+    if(level > 2)
+        // PML4
+        return 0;
+
+    // @todo refractor using a loop...
+
+
+    unsigned pml4i = pml4_offset((uint64_t)base);
+    unsigned pdpti = pdpt_offset((uint64_t)base);
+    unsigned pdi   = pd_offset  ((uint64_t)base);
+    //unsigned pti   = pt_offset  ((uint64_t)base);
+
+    uint64_t pd = (uint64_t)extract_pointer(pml4[pml4i]);
+    int present = present_entry            (pml4[pml4i]);
+    void** vpd = translate_address((void *)pd);
+
+
+    if(!present)
+        return 0;
+
+    if(level == 0)
+        return pd;
+
+
+    pd = (uint64_t)extract_pointer(vpd[pdpti]);
+    present = present_entry       (vpd[pdpti]);
+    vpd = translate_address((void *)pd);
+
+    if(!present_entry(pml4[pml4i]))
+        return 0;
+
+    if(level == 1)
+        return pd;
+
+    pd = (uint64_t)extract_pointer(vpd[pdi]);
+    present = present_entry       (vpd[pdpti]);
+    vpd = translate_address((void *)pd);
+
+    if(!present)
+        return 0;
+
+    return pd;
+}
+
+
+
+int map_pd(uint64_t target_pd, void* base, int level, uint64_t flags) {
+    if(level < 0)
+        return -1;
+    if(level > 2)
+        // PML4
+        return -1;
+
+    // @todo refractor using a loop...
+
+    unsigned pml4i = pml4_offset((uint64_t)base);
+    unsigned pdpti = pdpt_offset((uint64_t)base);
+    unsigned pdi   = pd_offset  ((uint64_t)base);
+    //unsigned pti   = pt_offset  ((uint64_t)base);
+
+
+    /////////////////////////
+    //////   LEVEL 0   //////
+    /////////////////////////
+
+    uint64_t pd = (uint64_t)extract_pointer(pml4[pml4i]);
+    int present = present_entry            (pml4[pml4i]);
+    void** vpd = translate_address((void *)pd);
+
+    if(level == 0) {
+        if(present)
+            // the memory is already mapped
+            return -1;
+
+        pml4[pml4i] = create_table_entry(
+            (void*)target_pd, flags
+        );
+        return 0;
+    }
+    else if(!present)
+        // cannot map with level > 0 if
+        // level 0 is unmaped
+        return -1;
+
+
+    /////////////////////////
+    //////   LEVEL 1   //////
+    /////////////////////////
+
+    pd = (uint64_t)extract_pointer(vpd[pdpti]);
+    present = present_entry       (vpd[pdpti]);
+    vpd = translate_address((void *)pd);
+
+
+    if(level == 1) {
+        if(present)
+            // the memory is already mapped
+            return -1;
+
+        vpd[pdpti] = create_table_entry(
+            (void*)target_pd, flags
+        );
+        return 0;
+    }
+    else if(!present)
+        return -1;
+
+
+    /////////////////////////
+    //////   LEVEL 2   //////
+    /////////////////////////
+    
+    assert(level == 2);
+
+
+    pd = (uint64_t)extract_pointer(vpd[pdi]);
+    present = present_entry       (vpd[pdi]);
+    vpd = translate_address((void *)pd);
+
+    if(present)
+        // the memory is already mapped
+        return -1;
+
+    vpd[pdi] = create_table_entry(
+        (void*)target_pd, flags
+    );
+    
+
+    return 0;
 }
 
 

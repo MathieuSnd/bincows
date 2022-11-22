@@ -14,6 +14,8 @@ struct boot_interface;
 
 #define PAGE_MAP_LEVEL 4
 #define PAGE_MASTER_SIZE (512*1024*1024*1024llu)
+#define PAGE_R1_SIZE     (    1024*1024*1024llu)
+#define PAGE_R2_SIZE     (       2*1024*1024llu)
 
 /**
  * enable PML4 4K paging
@@ -115,15 +117,74 @@ void map_master_region(void* base, uint64_t pd, uint64_t flags);
 
 
 /**
- * @brief deep free a master region mapping
- * given its page directory's physical address.
+ * Deep free a master region memory along 
+ * with paging structures.
  */
 void free_master_region(uint64_t pd);
 
 
+/**
+ * Deep free a level 1 range memory 
+ * along with paging structures given 
+ * the level 1 page directory.
+ */
+void free_r1_region(uint64_t pd);
+
+
 // return the master page direcory currently mapped
 // on a given PAGE_MASTER_SIZE aligned base address.
+// corresponds to get_pd(base, 0)
 uint64_t get_master_pd(void* base);
+
+
+// return the physical address of the page direcory 
+// currently mapped at a given well aligned base address.
+// level 0 corresponds to the master page directory.
+// level 1 corresponds to an entry in the master
+// page directory, and so on.
+// 
+// base alignment constraint:
+//    level = 0: PAGE_MASTER_SIZE
+//    level = 1: PAGE_R1_SIZE
+//    level = 2: PAGE_R2_SIZE
+//    level > 3: undefined
+// 
+// 0 is returned if no pd with the given level is 
+// mapped at the given base address, or in case the level 
+// is beyond the paging system level: 
+//        >= 2 if PML4 is used,
+//        >= 3 if PML5 is used.
+uint64_t get_pd(void* base, int level);
+
+
+
+// map the page direcory with the given physical
+// address and given directory level to a given
+// well aligned virt base address.
+// level 0 corresponds to the master page directory.
+// level 1 corresponds to an entry in the master
+// page directory, and so on.
+// 
+// base alignment constraint:
+//    level = 0: PAGE_MASTER_SIZE
+//    level = 1: PAGE_R1_SIZE
+//    level = 2: PAGE_R2_SIZE
+//    level > 3: undefined
+//
+// No memory should be mapped at the virtual address
+// when callong map_pd(...).
+// 
+// On success, 0 is returned. 
+// Failure can happend if some memory is already mapped
+// at the given virtual address or if no pd with the 
+// given level is mapped at the given base address,
+// or in case the level is beyond the paging system level: 
+//        >= 2 if PML4 is used,
+//        >= 3 if PML5 is used.
+//
+// if level > 0, the page table with levels < level
+// should be mapped already.
+int map_pd(uint64_t pd, void* base, int level, uint64_t flags);
 
 
 // create an empty page directory and return its
