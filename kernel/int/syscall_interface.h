@@ -147,10 +147,16 @@ typedef void (*sighandler_t)(int);
 
 #endif
 
-struct sc_sigsetup_args {
-    sighandler_t* handler_table;
+#ifndef SIGMASK_T
+#define SIGMASK_T
+typedef uint32_t sigmask_t;
+#endif//SIGMASK_T
 
-    void (*signal_end)(void);
+struct sc_sigsetup_args {
+    void (*signal_handler)(int);
+
+    sigmask_t ign_mask;
+    sigmask_t blk_mask;
 };
 
 struct sc_sigkill_args {

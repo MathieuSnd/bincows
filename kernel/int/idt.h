@@ -24,7 +24,8 @@ static_assert(sizeof(struct IFrame) == 40);
 
 void setup_idt(void);
 
-void set_irs_handler(uint16_t number, void* handler);
+// set an IRS handler, invokable with a given priviledge level 
+void set_irs_handler(uint16_t number, void* handler, int dpl);
 void set_irq_handler(uint16_t number, void* handler);
 void _cli(void);
 void _sti(void);

@@ -275,13 +275,17 @@ void setup_isrs(void) {
     set_irq_handler(44, _int_handler44);
     set_irq_handler(45, _int_handler45);
     set_irq_handler(46, _int_handler46);
-    set_irq_handler(47, _int_handler47);
+    
+    // yield interrupt: available from userspace
+    set_irs_handler(47, _int_handler47, 3);
+    
+    // timer IRQ
     set_irq_handler(48, _int_handler48);
 
     for(int i = 49; i <= 254; i++)
-        set_irs_handler(i, IRQ_dummy_handler);
+        set_irq_handler(i, IRQ_dummy_handler);
 
-    set_irs_handler(255, IRQ_LAPIC_spurious);
+    set_irq_handler(255, IRQ_LAPIC_spurious);
 
 
     setup_idt();

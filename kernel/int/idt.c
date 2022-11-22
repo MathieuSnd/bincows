@@ -51,14 +51,14 @@ void setup_idt(void) {
 }
 
 
-static type_attr_t make_type_attr_t(uint8_t gate_type) {
+static type_attr_t make_type_attr_t(uint8_t gate_type, int dpl) {
     
     assert((gate_type & 0xf0) == 0);
     
     return (type_attr_t) {
         .gate_type = gate_type,
         .z         = 0,
-        .dpl       = 0,
+        .dpl       = dpl,
         .p         = 1,
     };
 }
@@ -78,26 +78,24 @@ static IDTE make_idte(void* handler, type_attr_t type_attr) {
     };
 }
 
-static IDTE make_isr(void* handler) {
-    return make_idte(handler, make_type_attr_t(ATTR_64_GATE));
+static IDTE make_gate(void* handler, int dpl) {
+    return make_idte(handler, make_type_attr_t(ATTR_64_GATE, dpl));
 }
-static IDTE make_irq(void* handler) {
-    return make_idte(handler, make_type_attr_t(ATTR_64_TRAP));
-}
+
 
 
 void set_rflags(uint64_t RFLAGS);
 uint64_t get_rflags(void);
 
 
-void set_irs_handler(uint16_t number, void* handler) {
+void set_irs_handler(uint16_t number, void* handler, int dpl) {
 // make sure to disable interrupts
 // while updating the idt
 // then save IF to its old state
     uint64_t rflags = get_rflags();
     _cli();
 
-    idt[number] = make_isr(handler);
+    idt[number] = make_gate(handler, dpl);
 
     set_rflags(rflags);
 }
@@ -107,8 +105,8 @@ void set_irq_handler(uint16_t number, void* handler) {
 // same as above
     uint64_t rflags = get_rflags();
     _cli();
-
-    idt[number] = make_irq(handler);
+    
+    idt[number] = make_gate(handler, 0); // kernel DPL: 0
 
     set_rflags(rflags);
 }

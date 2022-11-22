@@ -327,6 +327,7 @@ static uint64_t sc_exec(process_t* proc, void* args, size_t args_sz) {
         return -1;
     }
 
+
     ////////////////////////////////////////////
     /////       checking arguments         /////
     ////////////////////////////////////////////
@@ -362,6 +363,7 @@ static uint64_t sc_exec(process_t* proc, void* args, size_t args_sz) {
         return -1;
     }
 
+
     ////////////////////////////////////////////
     /////       open executable file       /////
     ////////////////////////////////////////////
@@ -383,6 +385,7 @@ static uint64_t sc_exec(process_t* proc, void* args, size_t args_sz) {
     size_t file_sz = vfs_tell_file(elf_file);
 
     vfs_seek_file(elf_file, 0, SEEK_SET);
+
 
     void* elf_data = malloc(file_sz);
 
@@ -454,21 +457,27 @@ static uint64_t sc_exec(process_t* proc, void* args, size_t args_sz) {
         }
     }
     else {
-        unmap_user();
+        assert(!interrupt_enable());
+        // unmaping the process deny us from using
+        // the exec arguments
+        // @todo fd_mask_t?
+        uint32_t fd_mask = exec_args->fd_mask;
+        process_unmap();
 
         // sched_create_process needs the user to be unmaped
         pid_t p = sched_create_process(
                         proc->pid, // PPID
-                        elf_data, file_sz, exec_args->fd_mask);
+                        elf_data, file_sz, fd_mask);
 
         free(elf_data);
+        assert(!interrupt_enable());
 
         if(p == -1) {
             sc_warn("failed to create process", args, args_sz);
 
             // even if the process creation failed, we 
             // still need to remap the process
-            set_user_page_map(proc->page_dir_paddr);
+            process_map(proc);
 
             free(args_copy);
             free(env_copy);
@@ -488,8 +497,9 @@ static uint64_t sc_exec(process_t* proc, void* args, size_t args_sz) {
     ////////////////////////////////////////////
     //// set process arguments and env vars ////
     ////////////////////////////////////////////
+    assert(!interrupt_enable()&& "before processmap");
 
-    set_user_page_map(new_proc->page_dir_paddr);
+    process_map(new_proc);
 
     int res = set_process_entry_arguments(new_proc, 
         args_copy, cmd_args_sz, env_copy, env_sz
@@ -507,7 +517,7 @@ static uint64_t sc_exec(process_t* proc, void* args, size_t args_sz) {
         
         // even if the process creation failed, we 
         // still need to remap the process
-        set_user_page_map(proc->page_dir_paddr);
+        process_map(proc);
         return -1;
     }
 
@@ -515,9 +525,6 @@ static uint64_t sc_exec(process_t* proc, void* args, size_t args_sz) {
 
     spinlock_release(&new_proc->lock);
 
-
-
-    _sti();
 
 
     // unblock the process's main thread
@@ -528,24 +535,16 @@ static uint64_t sc_exec(process_t* proc, void* args, size_t args_sz) {
     // now we must restore the current process 
     // memory map before returning
 
-    set_user_page_map(proc->page_dir_paddr);
-/*
-    dump(
-        ((uint64_t)new_proc->threads[0].rsp & ~16llu),
-        
-        new_proc->threads[0].stack.base 
-        + new_proc->threads[0].stack.size 
-        - (void*)new_proc->threads[0].rsp,
+    process_map(proc);
 
-        16,
+    spinlock_release(&new_proc->lock);
 
-        DUMP_HEX8
-    );
-*/
+
+    _sti();
 
     //sched_yield();
 
-    return new_pid;
+    return 0;// new_pid;
 }   
 
 // return the fd if found or -1 otherwise
@@ -1161,9 +1160,7 @@ uint64_t sc_sigsetup(process_t* proc, void* args, size_t args_sz) {
     struct sc_sigsetup_args* a = args;
 
     // check that handler_table is mapped
-    if(check_args(proc, args, args_sz) 
-    || check_args_in_program(proc, a->handler_table, sizeof(void*) * MAX_SIGNALS)
-    ) {
+    if(check_args(proc, args, args_sz)) {
         sc_warn("bad arg", args, args_sz);
         return -1;
     }    
@@ -1173,7 +1170,8 @@ uint64_t sc_sigsetup(process_t* proc, void* args, size_t args_sz) {
     _cli();
     spinlock_acquire(&proc->lock);
     {
-        res = process_register_signal_setup(proc, a->signal_end, a->handler_table);
+        res = process_register_signal_setup(proc, 
+            a->signal_handler, a->ign_mask, a->blk_mask);
     }
     
 
@@ -1514,11 +1512,23 @@ static void handle_signal(process_t* process) {
     redisable_signals(process, 1);
 }
 
+
+struct sc_return {
+    // this value is placed saved in rax
+    uint64_t result; 
+
+    // 1 if the user should invoke the
+    // yield software interrupt right after
+    // the syscall ends.
+    // this value is placed in rdx
+    uint64_t yield_int;
+};
+
 // called from syscall_entry
-uint64_t syscall_main(uint8_t   scid, 
-                      void*     args, 
-                      size_t    args_sz, 
-                      uint64_t* user_sp
+struct sc_return syscall_main(uint8_t   scid, 
+                              void*     args, 
+                              size_t    args_sz, 
+                              uint64_t* user_sp
 ) {
     // syscall_main is called from a safe interrupt disabled context
     assert(!interrupt_enable());
@@ -1554,7 +1564,7 @@ uint64_t syscall_main(uint8_t   scid,
     }
     else {
 
-        //log_debug("%u.%u: %s", sched_current_pid(), sched_current_tid(), scname[scid]);
+        // log_debug("%u.%u: %s", sched_current_pid(), sched_current_tid(), scname[scid]);
 
         sc_fun_t fun = sc_funcs[scid];
         assert(fun);
@@ -1573,16 +1583,14 @@ uint64_t syscall_main(uint8_t   scid,
                    && (process->sig_current == NOSIG) 
                    && sched_current_tid() == 1;
 
+    struct sc_return ret = {
+        .result = res,
     // the process has received a signal
     // this is a good moment to handle it.
-    // to do so, we must yield right ater the 
-    // signal is prepared
-    if(sig_trigger) {
-        handle_signal(process);
-    }
+    // to do so, the user is asked to yield
+        .yield_int  = sig_trigger
+    };
 
     thread_leave_syscall(process, sched_current_tid());
-
-
-    return res;
+    return ret;
 }
