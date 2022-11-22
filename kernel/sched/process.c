@@ -807,27 +807,15 @@ int prepare_process_signal(process_t* process, int signal) {
 
 
 
-    void* user_rsp;
-
-    if(thread0->syscall_user_rsp) {
-        // the thread is currently in a system call. 
-        // the current stack resides in kernel space
-
-        // !!! @todo urgent !!! make this situation impossible
-        // so that system calls can be used within signal handlers
-        // for example, ask user function syscall() to invoke 
-        // INT $YIELD_IRQ whenever a signal hits to handle it
-        // in properly saved usermode context
-        user_rsp = thread0->syscall_user_rsp;
-    }
-    else {
-        user_rsp = (void*)thread0->rsp->rsp;
-    }
-
+    void* user_rsp = (void*)thread0->rsp->rsp;
 
     assert(is_user(user_rsp));
 
 
+    // a signal should be invoked in user mode 
+    // (not in a syscall)    
+    assert(thread0->rsp->cs == USER_CS);
+    assert(thread0->rsp->ss == USER_DS);
 
     thread0->rsp --;
 
@@ -840,13 +828,10 @@ int prepare_process_signal(process_t* process, int signal) {
 
 
     thread0->rsp->rsp = (uint64_t)user_rsp;
-    
-    // don't execute the user code with CPL=1 :)
-    // @todo deprecated when removing 
-    // syscall_user_rsp (replace these two assigns 
-    // with assertions)
+
     thread0->rsp->cs = USER_CS;
     thread0->rsp->ss = USER_DS;
+    
 
     thread0->rsp->rflags = USER_RF;
 
@@ -855,7 +840,6 @@ int prepare_process_signal(process_t* process, int signal) {
 
 
     // jump to signal handler
-    assert(process->sighandler);
     thread0->rsp->rip = (uint64_t)process->sighandler;
 
 

@@ -30,8 +30,6 @@ typedef uint64_t(*sc_fun_t)(process_t*, void*, size_t);
 static sc_fun_t sc_funcs[SC_END];
 
 
-static void enable_signals   (process_t* process, tid_t tid);
-static void redisable_signals(process_t* process, tid_t tid);
 static void thread_leave_syscall(process_t* process, tid_t tid);
 
 static inline void sc_warn(const char* msg, void* args, size_t args_sz) {
@@ -158,14 +156,9 @@ static uint64_t sc_sleep(process_t* proc, void* args, size_t args_sz) {
 
     uint64_t ms = *(uint64_t*)args;
 
-// @todo cancel the sleep using its
-// return value 
 
-// this syscall is cancellable
-// it means that it should be possible that a signal occur  
-// when the thread is put to sleep
-    enable_signals(proc, sched_current_tid());
-    
+    int sig = 0;
+
 // not essential, needed for both sched_yield and sleep
 // because yielding or sleeping with interrupts disabled
 // is error prone.
@@ -173,14 +166,11 @@ static uint64_t sc_sleep(process_t* proc, void* args, size_t args_sz) {
     if(ms == 0)
         sched_yield();
     else
-        sleep(*(uint64_t*)args);
+        sig = sleep(*(uint64_t*)args);
 
     assert(!proc->lock);
 
-    redisable_signals(proc, sched_current_tid());
-
-
-    return 0;
+    return sig;
 }
 
 
@@ -1409,11 +1399,6 @@ void thread_enter_syscall(process_t* process, tid_t tid, uint64_t* user_sp) {
     
     thread_t* t = sched_get_thread_by_tid(process, tid);
 
-    // save the user stack pointer of the thread
-    // while the irqs are still disable
-    t->syscall_user_rsp = user_sp;
-
-
     // a thread cannot be terminated during a system call
     assert(!t->uninterruptible);
 
@@ -1449,67 +1434,10 @@ static void thread_leave_syscall(process_t* process, tid_t tid) {
 
     thread_t* t = sched_get_thread_by_tid(process, tid);    
     
-    t->syscall_user_rsp = NULL;
     assert(t->uninterruptible);
     t->uninterruptible = 0;
 
     spinlock_release(&process->lock);
-}
-
-// this functions allows a signal to spawn
-// it is to call before sleeping in a cancellable 
-// system call ususally
-static void enable_signals(process_t* process, tid_t tid) {
-    // this function looks like thread_leave_syscall,
-    // but keeps t->syscall_user_rsp saved, so that
-    // a signal can find the user stack pointer
-
-    assert(interrupt_enable());
-    _cli();
-    
-    spinlock_acquire(&process->lock);
-    
-    thread_t* t = sched_get_thread_by_tid(process, tid);    
-    
-    
-    assert(t->uninterruptible);
-    t->uninterruptible = 0;
-
-    spinlock_release(&process->lock);
-
-    _sti();
-}
-
-
-
-// this functions is similar to thread_enter_syscall
-// but do not save the user RSP, as is has been already
-static
-void redisable_signals(process_t* process, tid_t tid) {
-    assert(interrupt_enable());
-
-    _cli();
-    spinlock_acquire(&process->lock);
-    
-    thread_t* t = sched_get_thread_by_tid(process, tid);
-    
-
-    assert(!t->uninterruptible);
-
-    t->uninterruptible = 1;
-
-    spinlock_release(&process->lock);
-    _sti();
-}
-
-static void handle_signal(process_t* process) {
-    assert(sched_current_tid() == 1);
-
-    enable_signals(process, 1);
-
-    sched_yield();
-
-    redisable_signals(process, 1);
 }
 
 

@@ -35,7 +35,6 @@ int create_thread(
         .n_exit_hooks = 0,
         .running_cpu_id = -1,
         .sig_wait = 0,
-        .syscall_user_rsp = NULL,
     // flags
         .should_block = 0,
         .should_exit = 0,
@@ -63,11 +62,6 @@ int create_thread(
         .base = malloc(KERNEL_THREAD_STACK_SIZE),
         .size = KERNEL_THREAD_STACK_SIZE,
     };
-
-
-    thread->syscall_user_rsp = NULL;
-
-
 
     return 0;
 }
