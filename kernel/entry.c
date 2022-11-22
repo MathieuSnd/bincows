@@ -180,6 +180,8 @@ void launch_shell(void) {
 
     assert(proc);
 
+    process_map(proc);
+
     set_process_entry_arguments(
         proc, 
         argv, sizeof(argv), envp, sizeof(envp)
@@ -191,6 +193,8 @@ void launch_shell(void) {
     spinlock_release(&proc->lock);
 
     sched_unblock(pid, 1);
+
+    process_unmap();
     _sti();
 
     assert(pid);
