@@ -415,10 +415,12 @@ void free_process(process_t* process) {
     if(process->program)
         elf_free(process->program);
 
-    // free process memory
-    _cli();
-    free_process_memory(process->mem_map);
-    _sti();
+    if(process->pid != 0) {
+        // free process memory
+        _cli();
+        free_process_memory(process->mem_map);
+        _sti();
+    }
 
     free(process);
 }
@@ -996,7 +998,6 @@ int process_trigger_signal(pid_t pid, int signal) {
         return 0;
     }
     else {
-        log_warn("pendign");
         assert(process->n_threads > 0);
         process->sig_pending |= (1 << signal);
     }

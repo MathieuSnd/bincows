@@ -720,7 +720,6 @@ void sched_free_killed_processes(void) {
 
     for(unsigned i = 0; i < n; i++) {
         process_t* p = to_kill[i];
-        log_warn("lazy freed process %u", p->pid);
 
         // free the process
         free_process(p);
@@ -742,8 +741,11 @@ void sched_cleanup(void) {
     // start by setting current pid to 0
     current_pid = KERNEL_PID;
 
+    _sti();
+
     sched_free_killed_processes();
 
+    _cli();
 
     spinlock_acquire(&sched_lock);
 
@@ -1179,8 +1181,10 @@ void schedule(void) {
         if(p->pid != 0)
             process_map(p);
     }
-    else
+    else if(p->pid != 0)
         assert(is_process_mapped(p));
+    else
+        assert(!is_process_mapped(NULL));
 
 
     void* kernel_sp;
