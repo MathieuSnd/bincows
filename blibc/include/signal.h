@@ -27,9 +27,6 @@ extern sighandler_t signal(int sig, sighandler_t handler);
 // same as kill(get_pid(), sig)
 #define raise(sig) sigsend(get_pid(), sig)
 
-// unused in Bincows
-#define sigreturn() -1
-
 
 #define kill(pid, sig) sigsend(pid, sig)
 

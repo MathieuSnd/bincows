@@ -9,5 +9,13 @@ syscall:
 
     syscall
 
+    ; if rdx != 0,
+    ; the system wants us to
+    ; trigger the YIELD(47) software interrupt
+    ;test rdx, rdx
+    ;jne _ret
+    int 47
+
+_ret:
     leave
     ret

@@ -21,13 +21,26 @@ typedef void (*signal_end_fun_t)(void) __attribute__((noreturn));
 #define MAX_SIGNALS 32
 #define MAX_FDS 32
 
+
+#ifndef SIGMASK_T
+#define SIGMASK_T
+typedef uint32_t sigmask_t;
+#endif//SIGMASK_T
+
+struct sigsetup {
+    sighandler_t handler;
+    sigmask_t ign_mask;
+    sigmask_t blk_mask;
+    signal_end_fun_t sigend;
+};
+
 /**
  * setup the signal handlers and the signal end function.
  * this should normally be called by the crt0 before calling
  * any program. It can though be changed at any time
  * 
  */
-extern int sigsetup(signal_end_fun_t sigend, sighandler_t* handler_table);
+extern int sigsetup(struct sigsetup state);
 
 /**
  * return from a signal handler.

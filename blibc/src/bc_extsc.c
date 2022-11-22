@@ -7,18 +7,19 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
+#include <stdio.h>
 #include <sprintf.h>
 
 // for system call numbers
 #include "../../kernel/int/syscall_interface.h"
 
-
-
-int sigsetup(signal_end_fun_t sigend, sighandler_t* handler_table) {
+int sigsetup(struct sigsetup state) {
     struct sc_sigsetup_args args = {
-        .handler_table = handler_table,
-        .signal_end = sigend,
+        .ign_mask       = state.ign_mask,
+        .blk_mask       = state.blk_mask,
+        .signal_handler = state.handler,
     };
+
     return syscall(SC_SIGSETUP, &args, sizeof(args));
 }
 

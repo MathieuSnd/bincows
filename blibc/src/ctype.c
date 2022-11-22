@@ -41,7 +41,8 @@ int isprint(int c) {
 }
 
 int ispunct(int c) {
-    return c >= '!' && c <= '/' || c >= ':' && c <= '@' || c >= '[' && c <= '`' || c >= '{' && c <= '~';
+    return (c >= '!' && c <= '/') || (c >= ':' && c <= '@') 
+        || (c >= '[' && c <= '`') || (c >= '{' && c <= '~');
 }
 
 int isspace(int c) {

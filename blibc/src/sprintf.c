@@ -50,7 +50,7 @@ static char* utohex(char* str, uint64_t x, int min_digits, int max_digits) {
 // unsigned to string
 // return a ptr to the end of the string
 static char* utos(char* str, uint64_t x, int min_digits, size_t max_digits) {
-    size_t digits = 1;
+    int digits = 1;
 
     uint64_t _x = x;
     while(_x > 9) {
@@ -60,7 +60,7 @@ static char* utos(char* str, uint64_t x, int min_digits, size_t max_digits) {
 
 
     if(digits > max_digits) {
-        for(unsigned i = digits; i > max_digits; i--)
+        for(int i = digits; i > max_digits; i--)
             x /= 10;
 
         digits = max_digits;
