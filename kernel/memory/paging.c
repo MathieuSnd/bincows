@@ -585,7 +585,8 @@ void remap_pages(void*    vaddr_ptr,
                 pdi   = pd_offset(virtual_addr),
                 pti   = pt_offset(virtual_addr);
 
-        assert(pml4i == 0 || pml4i == 511 || pml4i == 256);
+        //assert(pml4i == 0 || pml4i == 511 || pml4i == 256);
+
         // those entries should exist
         pml4e restrict pml4entry = extract_pointer(get_entry_or_allocate((void**)pml4,      pml4i));
         pdpte restrict pdptentry = extract_pointer(get_entry_or_allocate((void**)pml4entry, pdpti));
@@ -723,7 +724,7 @@ static pte* get_page_table_or_panic(uint64_t vaddr) {
              pdpti = pdpt_offset(vaddr),
              pdi   = pd_offset(vaddr);
 
-    assert(pml4i == 0 || pml4i == 511 || pml4i == 256);
+    //assert(pml4i == 0 || pml4i == 511 || pml4i == 256);
     // those entries should exist
 
     pml4e restrict pml4entry = extract_pointer(
