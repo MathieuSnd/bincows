@@ -361,6 +361,7 @@ typedef struct fs {
 #define FS_TYPE_FAT 1
 #define FS_TYPE_DEVFS 2
 #define FS_TYPE_PIPEFS 3
+#define FS_TYPE_MEMFS 3
 
 // seek whence field values
 #define SEEK_SET 0

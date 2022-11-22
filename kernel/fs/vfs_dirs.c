@@ -15,6 +15,7 @@
 #include "fat32/fat32.h"
 #include "devfs/devfs.h"
 #include "pipefs/pipefs.h"
+#include "memfs/memfs.h"
 
 typedef struct vdir
 {
@@ -1033,6 +1034,43 @@ int vfs_mount_pipefs(void) {
 
     return 1;
 }
+
+
+int vfs_mount_memfs(void) {
+
+    const char* path = "/mem";
+
+    vdir_t* new = emplace_vdir(path);
+
+    log_info("mounting %s", path);
+
+    // if it cannot be inserted
+    if (!new)
+    {
+        log_warn(
+            "cannot mount %s,"
+            "impossible to create virtual directory %s",
+            "pipefs",
+            path);
+
+        return 0;
+    }
+
+    fs_t *fs = memfs_mount();
+
+    if (!fs)
+    {
+        log_warn("cannot mount %s", path);
+        return 0;
+    }
+
+    new->fs = fs;
+
+    check_fs_struct(fs);
+
+    return 1;
+}
+
 
 
 

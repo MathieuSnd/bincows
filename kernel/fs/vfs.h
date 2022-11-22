@@ -25,6 +25,11 @@ int vfs_mount_devfs(void);
 int vfs_mount_pipefs(void);
 
 
+
+// mount the memfs to /mem
+int vfs_mount_memfs(void);
+
+
 // for vfs_open
 #define FS_NO ((fs_t*)0)
 /**
