@@ -52,7 +52,6 @@ struct shm {
  */
 struct shm_instance {
     shmid_t target;
-    void* vaddr;
 };
 
 /**
@@ -64,6 +63,22 @@ struct shm_instance {
  * be created
  */
 struct shm_instance* shm_create(size_t initial_size);
+
+
+// base: 1 GB aligned virtual base address of a
+// currently mapped memory range. The level 2 page
+// directory (that controls 1 GB of memory) is
+// extracted so users can access the range.
+//
+// this function is intended to allow the kernel to 
+// share MMIO or higher half memory.
+// The kernel should use this function with care
+// so that only the desired memory is shared: 
+// The whole 1 GB range with given base is shared.
+// The initial_size field is just a hint
+//
+struct shm_instance* shm_create_from(size_t size, void* base);
+
 
 
 /**
