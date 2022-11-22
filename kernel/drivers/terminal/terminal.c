@@ -4,6 +4,7 @@
 
 #include "terminal.h"
 #include "video.h"
+#include "../video/video.h"
 
 #include "../../lib/string.h"
 #include "../../lib/registers.h"
@@ -123,7 +124,7 @@ static void terminal_clear(driver_t* this);
 
 
 
-char terminal_install(driver_t* this) {
+int terminal_install(driver_t* this) {
     log_info("installing terminal...");
     struct framebuffer_dev* dev = 
             (struct framebuffer_dev *)this->device;

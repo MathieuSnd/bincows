@@ -10,6 +10,7 @@
 #include "int/syscall.h"
 
 #include "drivers/terminal/terminal.h"
+#include "drivers/video/video.h"
 #include "drivers/hpet.h"
 #include "drivers/ps2kb.h"
 #include "drivers/pcie/pcie.h"
@@ -34,7 +35,6 @@
 
 #include "sched/sched.h"
 #include "sync/spinlock.h"
-#include "early_video.h"
  
 
 // accessible by other compilation units
@@ -260,7 +260,7 @@ void kernel_main(struct boot_interface* bi) {
 
     set_backend_print_fun(print_fun);
 
-// so we need to load our gdt after our
+// so we need to load our gdt after the
 // terminal is successfully installed 
     init_gdt_table();
 
@@ -307,13 +307,17 @@ void kernel_main(struct boot_interface* bi) {
 
 
     r = vfs_mount_devfs();      assert(r);
-    r = vfs_mount_pipefs();      assert(r);
+    r = vfs_mount_pipefs();     assert(r);
+    r = vfs_mount_memfs();      assert(r);
 
     // /dev/term
     terminal_register_dev_file("term", terminal);
 
     // /dev/ps2kb
     ps2kb_register_dev_file("ps2kb");
+
+    // /mem/video
+    video_create_file("video");
 
 
     log_debug("init sched");

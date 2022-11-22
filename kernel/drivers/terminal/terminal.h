@@ -33,24 +33,11 @@ static_assert(TERMINAL_CHARMAP_H % 4 == 0);
 #define TERMINAL_N_PAGES 2
 
 
-#define DEVICE_ID_FRAMEBUFFER (0xfa30bffe)
-
-// virtual device
-struct framebuffer_dev {
-    struct dev dev;
-
-    void*    pix;
-    unsigned width, height;
-    unsigned pitch;
-    unsigned bpp;
-};
-
-struct stivale2_struct_tag_framebuffer;
 typedef void (*terminal_handler_t)(driver_t* dr, const char *string, size_t length);
 
-// the default terminal handler 
 
-char terminal_install(driver_t* this);
+
+int  terminal_install(driver_t* this);
 void terminal_remove (driver_t* this);
 void terminal_update (driver_t* this);
 
