@@ -1,8 +1,11 @@
 #include "sched.h"
+#include "process.h"
 #include "shm.h"
+
 #include "../memory/heap.h"
 #include "../memory/temp.h"
 #include "../memory/paging.h"
+#include "../memory/vmap.h"
 #include "../lib/math.h"
 #include "../int/idt.h"
 #include "../sync/spinlock.h"
@@ -15,7 +18,7 @@ static unsigned n_shms = 0;
 static fast_spinlock_t shm_lock;
 
 static shmid_t shm_nextid(void) {
-    assert(interrupt_enable());
+
     static _Atomic shmid_t cur = 0;
 
     return ++cur;
@@ -52,7 +55,92 @@ static struct shm* get_shm(shmid_t id) {
     return NULL;
 }
 
-struct shm_instance* shm_create_from(size_t initial_size, void* base) {
+
+static void* map_shm(struct shm* shm, pid_t pid) {
+    assert(!interrupt_enable());
+
+    // acquire the process
+    process_t* proc = sched_get_process(pid);
+
+    uint64_t target_pd = shm->pd_paddr;
+
+    if(!proc) {
+        return NULL;
+    }
+
+    uint64_t master_pd = proc->mem_map.shared_pd;
+
+    // search available slot
+    uint64_t* tr_master_pd = translate_address((void*)master_pd);
+
+    void* vaddr = NULL;
+
+    // @todo this seems dirty,
+    // might move that to /memory/paging.h
+    for(int i = 0; i < 512; i++) {
+        int av = tr_master_pd[i] & PRESENT_ENTRY;
+        
+        if(av) {
+            vaddr = (void*)(USER_SHARED_BEGIN | (i * PAGE_R1_SIZE));
+        
+            // map the shm
+            uint64_t flags = PL_XD | PL_US | PL_RW | PRESENT_ENTRY;
+
+            tr_master_pd[i] = flags | target_pd;
+            break;
+        }
+    }
+
+    spinlock_release(&proc->lock);
+
+    
+    return vaddr;
+}
+
+
+// 0 on success
+static int unmap_shm(pid_t pid, void* vaddr) {
+    assert(!interrupt_enable());
+
+    assert((uint64_t)vaddr > USER_SHARED_BEGIN);
+    assert((uint64_t)vaddr <= USER_SHARED_END - PAGE_R1_SIZE);
+
+    // acquire the process
+    process_t* proc = sched_get_process(pid);
+
+    if(!proc) {
+        return -1;
+    }
+
+    uint64_t master_pd = proc->mem_map.shared_pd;
+
+    // search available slot
+    uint64_t* tr_master_pd = translate_address((void*)master_pd);
+
+
+    int i = ((uint64_t)vaddr - USER_SHARED_BEGIN) / PAGE_R1_SIZE;
+
+    assert(i > 0);
+    assert(i < 512);
+
+    int av = tr_master_pd[i] & PRESENT_ENTRY;
+
+    // the shm shold be present
+    assert(av);
+
+    tr_master_pd[i] = 0;
+
+
+    spinlock_release(&proc->lock);
+
+    
+    return 0;
+}
+
+
+
+
+struct shm_instance* shm_create_from_kernel(size_t initial_size, void* base) {
     assert(!interrupt_enable());
 
     if(initial_size == 0 || initial_size > SHM_SIZE_MAX)
@@ -83,6 +171,8 @@ struct shm_instance* shm_create_from(size_t initial_size, void* base) {
 
     *ins = (struct shm_instance) {
         .target = id,
+        .pid    = 0,
+        .vaddr  = NULL,
     };
 
     return ins;
@@ -136,43 +226,66 @@ static uint64_t shm_alloc(size_t size) {
 
 
 
-struct shm_instance* shm_create(size_t initial_size) {
+struct shm_instance* shm_create(size_t initial_size, pid_t pid) {
 
     if(initial_size == 0 || initial_size > SHM_SIZE_MAX)
         return NULL;
+
+    void* vaddr = NULL;
 
     uint64_t rf = get_rflags();
     _cli();
 
     uint64_t pd = shm_alloc(initial_size);
+
     if(!pd) {
-        _sti();
+        set_rflags(rf);
         return NULL;
     }
 
-    // spinlock acquired
-    struct shm* shm = insert_shm();
 
-    *shm = (struct shm) {
-        .id       = shm_nextid(),
-        .n_insts  = 1,
-        .pd_paddr = pd,
-        .size     = initial_size
-    };
+    shmid_t id = shm_nextid();
+
+    {
+        // spinlock acquired
+        struct shm* shm = insert_shm();
+
+        *shm = (struct shm) {
+            .id       = id,
+            .n_insts  = 1,
+            .pd_paddr = pd,
+            .size     = initial_size
+        };
+
+        void* vaddr = map_shm(shm, pid);
+
+        if(!vaddr) {
+            remove_shm(shm);
+            spinlock_release(&shm_lock);
+            set_rflags(rf);
+            return NULL;
+        }
+
+        spinlock_release(&shm_lock);
+    }
+
     set_rflags(rf);
 
-    struct shm_instance* inst = malloc(sizeof(struct shm_instance*));
+    struct shm_instance* ins = malloc(sizeof(struct shm_instance*));
 
-    *inst = (struct shm_instance) {
-        .target = shm->id
+    *ins = (struct shm_instance) {
+        .target = id,
+        .vaddr  = vaddr,
+        .pid    = pid,
     };
 
-    return inst;
+    return ins;
 }
 
 
-struct shm_instance* shm_open(shmid_t id) {
+struct shm_instance* shm_open(shmid_t id, pid_t pid) {
     int found;
+    void* vaddr = NULL;
 
     uint64_t rf = get_rflags();
     _cli();
@@ -186,7 +299,12 @@ struct shm_instance* shm_open(shmid_t id) {
     else {
         found = 1;
 
-        shm->n_insts++;
+        // map to memory
+        void* vaddr = map_shm(shm, pid);
+
+        if(vaddr) {
+            shm->n_insts++;
+        }
     }
 
     spinlock_release(&shm_lock);
@@ -194,15 +312,22 @@ struct shm_instance* shm_open(shmid_t id) {
 
     if(!found)
         return NULL;
+    if(vaddr == NULL)
+        return NULL;
+
     
     struct shm_instance* ins = malloc(sizeof(struct shm_instance));
-    ins->target = id;
+    *ins = (struct shm_instance) {
+        .target = id,
+        .vaddr  = vaddr,
+        .pid    = pid,
+    };
     
     return ins;
 }
 
 
-int shm_close(const struct shm_instance* ins) {
+int shm_close(struct shm_instance* ins) {
     assert(ins);
     shmid_t id = ins->target;
     int found;
@@ -228,9 +353,16 @@ int shm_close(const struct shm_instance* ins) {
         remove_shm(shm);
     }
 
+    int unmap_error = 0;
+
+    if(ins->pid != KERNEL_PID)
+        unmap_error = unmap_shm(ins->pid, ins->vaddr);
+
+    free(ins);
+
     spinlock_release(&shm_lock);
     set_rflags(rf);
 
-    return found ? 0 : -1;
+    return (found && !unmap_error) ? 0 : -1;
 }
 

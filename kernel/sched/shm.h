@@ -52,6 +52,8 @@ struct shm {
  */
 struct shm_instance {
     shmid_t target;
+    void* vaddr;
+    pid_t pid;
 };
 
 /**
@@ -62,7 +64,7 @@ struct shm_instance {
  * @return struct_instance* NULL if it couldn't 
  * be created
  */
-struct shm_instance* shm_create(size_t initial_size);
+struct shm_instance* shm_create(size_t initial_size, pid_t pid);
 
 
 // base: 1 GB aligned virtual base address of a
@@ -77,7 +79,7 @@ struct shm_instance* shm_create(size_t initial_size);
 // The whole 1 GB range with given base is shared.
 // The initial_size field is just a hint
 //
-struct shm_instance* shm_create_from(size_t size, void* base);
+struct shm_instance* shm_create_from_kernel(size_t size, void* base);
 
 
 
@@ -97,23 +99,26 @@ int shm_truncate(shmid_t shm, size_t new_size);
  *  
  * On success, the current process is marked as 
  * having the given shm opened and returns a
- * shm handler structure
+ * shm handler structure. The shm is then mapped
+ * to the process shared memory range, at the base
+ * address in shm_instance::vaddr.
  * 
- * On failure, NULL is returned
- * 0xffff80000bfa5000
- * 0xffff80000bf98000
+ * On failure, NULL is returned.
+ * Failure can happen if the user virtual shared memory
+ * is full or if the pid is not found.
  *
  */
-struct shm_instance* shm_open(shmid_t id);
+struct shm_instance* shm_open(shmid_t id, pid_t pid);
 
 /**
  * 
  * close and unmap the SHM instance
  * 
  */
-int shm_close(const struct shm_instance* instance);
+int shm_close(struct shm_instance* instance);
 
 
 void shm_cleanup(void);
+
 
 #endif
