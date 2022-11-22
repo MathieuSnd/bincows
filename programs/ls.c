@@ -59,7 +59,7 @@ int main(int argc, char** argv) {
             // print size
             char reclen[32];
 
-            int s = snprintf(reclen, 32, "%lu", ent->d_reclen);
+            int s = snprintf(reclen, 32, "%ld", ent->d_reclen);
 
             int nspaces = 10 - s;
 

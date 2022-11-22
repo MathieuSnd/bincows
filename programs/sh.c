@@ -259,6 +259,11 @@ char* eval_env(char* cmd) {
 
 
 
+void print_prompt(void) {
+    printf("%s > _\b", cwd);
+}
+
+
 void type_character(char ch) {
 
 
@@ -420,8 +425,8 @@ void type_character(char ch) {
 
 
             if(execute(line_cpy) == -1) {
-                print_prompt();
             }
+            print_prompt();
             free(line_cpy);
             break;
         }
@@ -440,10 +445,7 @@ void sigchld_handler(int s) {
         return;
     }
 
-    //printf("sh: sigchld_handler\n");
-
     sigchld_flag = 1;
-    print_prompt();
 }
 
 
@@ -471,7 +473,7 @@ static int execute(char* cmd) {
     // 2 - stdout
     // 3 - stderr
     // all the others are to be masked
-    const fd_mask_t fdmask = ~7llu;
+    const fd_mask_t fdmask = ~(fd_mask_t)7;
 
 
     // setup pipe
@@ -515,10 +517,15 @@ static int execute(char* cmd) {
 
 
         while(1) {
+            if(sigchld_flag) {
+                // SIGCHLD is catched interrputed 
+                break;
+            }
             int r = fgetc(stdin);
+            
 
             if(r <= 0) {
-                printf("broken terminal %lu\n", r);
+                // end of stdin, or a signal is received
                 break;
             }
 
@@ -537,12 +544,12 @@ static int execute(char* cmd) {
                     // eof: close pipe
                         printf("^D\n");
                         close(pipe_ends[1]);
-                        printf("closed pipe");
                         //if(sigchld_flag)
                         //    pause();
 
                         //free(argv);
                         //return pid;
+                        break;
                     case 'C': // CTRL-C
                         // kill the child process
 
@@ -593,11 +600,6 @@ static int execute(char* cmd) {
     return pid;
 }
 
-
-
-void print_prompt(void) {
-    printf("%s > _\b", cwd);
-}
 
 
 void script_exec(char* line) {

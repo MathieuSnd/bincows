@@ -4,6 +4,7 @@
 
 #define BUFF_SIZE 1024*1024
 
+
 static void cat(FILE *f)
 {
     
@@ -14,7 +15,9 @@ static void cat(FILE *f)
 
     do {
         rd = read(fileno(f), buff, BUFF_SIZE);
-        rd = write(1, buff, rd);
+
+        if(rd >= 0)
+            rd = write(1, buff, rd);
     }
     while(rd > 0);
 

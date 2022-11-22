@@ -29,7 +29,7 @@ int main() {
     _thread_create(thread_entry, "thread 2");
 
     
-    for(int i = 0; i < 0; i++) {
+    for(int i = 0; i < 10; i++) {
         printf("thread 0\n");
         usleep(0);
     }
