@@ -85,7 +85,7 @@ static int read_file(struct memfsf* file,
     };
     assert(begin + n <= sizeof(struct mem_desc));
 
-    memcpy(buf, &md - begin, n);
+    memcpy(buf, (void*)&md + begin, n);
 
     return n;
 }
@@ -251,6 +251,8 @@ fs_t* memfs_mount(void) {
 
     fs->open_file          = NULL;
     fs->close_file         = NULL;
+    fs->open_instance      = NULL;
+    fs->close_instance     = NULL;
     fs->read_file_sectors  = read;
     fs->write_file_sectors = write;
     fs->read_dir           = read_dir;

@@ -273,6 +273,8 @@ fs_t* devfs_mount(void) {
 
     fs->open_file          = NULL;
     fs->close_file         = NULL;
+    fs->open_instance      = NULL;
+    fs->close_instance     = NULL;
     fs->read_file_sectors  = read;
     fs->write_file_sectors = write;
     fs->read_dir           = read_dir;

@@ -264,6 +264,7 @@ typedef struct fs {
      */
     void (*open_file)(struct fs* restrict fs, uint64_t addr);
 
+
     /**
      * notify the filesystem that the file with address addr
      *  is being closed. The closing is VFS wide,
@@ -276,6 +277,37 @@ typedef struct fs {
     void (*close_file)(struct fs* restrict fs, uint64_t addr);
 
 
+
+    /**
+     * notify the filesystem that a file handle is beeing opened
+     * on the specific address. This function is called each
+     * time a process opens a file, even if it is already opened
+     * in the VFS table, unlike open_file.
+     * 
+     * If this function returns non0, the vfs_open_file call fails
+     * so that one FS can only give access to its files to some
+     * processes.
+     * 
+     * If the file is not yet opened in the VFS table, this 
+     * function is called before open_file, and open_file is not
+     * called if this function returns non 0.
+     * 
+     * this function can be NULL, in this case it won't be called
+     * and the FS assumes the file can be opened.
+     * 
+     */
+    int (*open_instance)(struct fs* restrict fs, uint64_t addr);
+
+    /**
+     * notify the filesystem that the file with address addr
+     * is being closed. unlike close_file, this function
+     * is called each time a handler is closed and not when
+     * no more handler is opened for this file.
+     * 
+     * this function can be NULL, in this case it won't be called
+     * 
+     */
+    void (*close_instance)(struct fs* restrict fs, uint64_t addr);
 
     /**
      * @brief read a directory and return its

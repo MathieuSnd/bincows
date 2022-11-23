@@ -271,7 +271,8 @@ static void register_handle_to_vfile(
  * The path don't have to be in
  * canonical form
  * @return file_handle_t* the
- * created handler
+ * created handler or NULL on
+ * failure
  */
 static 
 file_handle_t* create_handler(
@@ -279,6 +280,16 @@ file_handle_t* create_handler(
                     fast_dirent_t* dirent, 
                     const char* path
 ) {
+    
+    int shouldnt_open = 0;
+    
+    if(fs->open_instance)
+        shouldnt_open = fs->open_instance(fs, dirent->ino);
+
+    if(shouldnt_open) {
+        return NULL;
+    }
+
     // big allocation to allocate the
     // sector buffer too
     file_handle_t *handle = malloc(
@@ -357,6 +368,10 @@ file_handle_t* vfs_open_file_from(fs_t* fs, fast_dirent_t* dirent, const char* p
     
 
     file_handle_t* h = create_handler(fs, dirent, path);
+
+    if(!h) {
+        return NULL;
+    }
 
     if(flags & VFS_APPEND)
         set_stream_offset(h, dirent->file_size);
@@ -541,6 +556,9 @@ void vfs_close_file(file_handle_t *handle) {
     _cli();
     struct file_ent* restrict open_file = aquire_vfile(handle->vfile_id);
 
+
+    if(fs->close_instance)
+        fs->close_instance(fs, open_file->addr);
 
     open_file->n_insts--;
 

@@ -673,6 +673,8 @@ fs_t* pipefs_mount(void) {
     fs->update_dirent      = update_dirent;
     fs->close_file         = close_file;
     fs->open_file          = NULL;
+    fs->open_instance      = NULL;
+    fs->close_instance     = NULL;
     fs->read_file_sectors  = read;
     fs->write_file_sectors = write;
     fs->truncate_file      = truncate_file;
