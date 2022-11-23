@@ -59,6 +59,7 @@ static int read_file(struct memfsf* file,
 
     struct shm_instance* instance = NULL;
 
+
     for(int i = 0; i < file->n_instances; i++) {
         if(file->instances[i]->pid == current_pid) {
             instance = file->instances[i];
@@ -74,6 +75,7 @@ static int read_file(struct memfsf* file,
             // couldn't map or open
             return -1;
         }
+        file->instances = realloc(file->instances, sizeof(struct shm_instance) * file->n_instances);
         file->instances[file->n_instances++] = instance;
     }
     
@@ -108,6 +110,8 @@ static int read(struct fs* restrict fs, const file_t* restrict fd,
             return read_file(f, buf, begin, n);
         }
     }
+
+    panic("unreachable");
 
     return -1;
 }

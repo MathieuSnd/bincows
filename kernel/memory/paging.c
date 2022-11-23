@@ -822,7 +822,6 @@ uint64_t get_paddr(const void* vaddr) {
 
 
 
-
 static void flush_tlb(void) {
     _cr3(trk2p(pml4));
 }
@@ -1031,7 +1030,7 @@ uint64_t get_pd(void* base, int level) {
     present = present_entry       (vpd[pdpti]);
     vpd = translate_address((void *)pd);
 
-    if(!present_entry(pml4[pml4i]))
+    if(!present)
         return 0;
 
     if(level == 1)

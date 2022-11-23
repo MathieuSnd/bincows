@@ -1,15 +1,16 @@
-#include "../terminal/terminal.h"
-#include "../../memory/vmap.h"
-#include "../../boot/boot_interface.h"
-#include "../../lib/logging.h"
-
 #include "video.h"
+#include "../terminal/terminal.h"
 #include "../driver.h"
 #include "../../sched/shm.h"
+#include "../../boot/boot_interface.h"
 #include "../../fs/memfs/memfs.h"
 #include "../../memory/temp.h"
 #include "../../memory/paging.h"
+#include "../../memory/vmap.h"
+#include "../../memory/pmm.h"
 #include "../../int/idt.h"
+
+#include "../../lib/logging.h"
 
 struct data {
     struct shm_instance* shm;
@@ -63,6 +64,7 @@ int video_install(driver_t* this) {
               // shared memory
     );
 
+
     struct shm_instance* shm = shm_create_from_kernel(fb_size, tmp_vaddr);
     
     assert(shm);
@@ -70,7 +72,11 @@ int video_install(driver_t* this) {
     data->shm = shm;
 
 
-    unmap_pages((uint64_t)tmp_vaddr, fb_pages, 0);
+    uint64_t master_pd = get_master_pd(tmp_vaddr);
+
+    unmap_master_region(tmp_vaddr);
+    physfree(master_pd);
+
 
     temp_release();
     _sti();

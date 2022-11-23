@@ -5,6 +5,7 @@
 #include "../memory/heap.h"
 #include "../memory/temp.h"
 #include "../memory/paging.h"
+#include "../memory/pmm.h"
 #include "../memory/vmap.h"
 #include "../lib/math.h"
 #include "../int/idt.h"
@@ -78,13 +79,15 @@ static void* map_shm(struct shm* shm, pid_t pid) {
     // @todo this seems dirty,
     // might move that to /memory/paging.h
     for(int i = 0; i < 512; i++) {
-        int av = tr_master_pd[i] & PRESENT_ENTRY;
+        int av = !(tr_master_pd[i] & PRESENT_ENTRY);
         
         if(av) {
             vaddr = (void*)(USER_SHARED_BEGIN | (i * PAGE_R1_SIZE));
         
             // map the shm
             uint64_t flags = PL_XD | PL_US | PL_RW | PRESENT_ENTRY;
+
+            log_warn("mapped at %lx", vaddr);
 
             tr_master_pd[i] = flags | target_pd;
             break;
@@ -123,10 +126,10 @@ static int unmap_shm(pid_t pid, void* vaddr) {
     assert(i > 0);
     assert(i < 512);
 
-    int av = tr_master_pd[i] & PRESENT_ENTRY;
+    int present = tr_master_pd[i] & PRESENT_ENTRY;
 
     // the shm shold be present
-    assert(av);
+    assert(present);
 
     tr_master_pd[i] = 0;
 
@@ -215,7 +218,13 @@ static uint64_t shm_alloc(size_t size) {
         PRESENT_ENTRY | PL_XD | PL_RW | PL_US
     );
 
-    unmap_pages((uint64_t)temp, pages, 0);
+    uint64_t master_pd = get_master_pd(temp);
+
+    unmap_master_region(temp);
+    physfree(master_pd);
+
+
+    // unmap_pages((uint64_t)temp, pages, 0);
 
     uint64_t pd = get_pd(temp, 1);
 
@@ -300,7 +309,7 @@ struct shm_instance* shm_open(shmid_t id, pid_t pid) {
         found = 1;
 
         // map to memory
-        void* vaddr = map_shm(shm, pid);
+        vaddr = map_shm(shm, pid);
 
         if(vaddr) {
             shm->n_insts++;
