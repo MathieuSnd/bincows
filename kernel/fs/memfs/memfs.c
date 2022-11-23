@@ -52,8 +52,20 @@ void memfs_register_file(char* name, shmid_t id) {
 }
 
 
-static int read_file(struct memfsf* file,
-        void* restrict buf, uint64_t begin, size_t n) {
+static memfsf_t* find_file(struct fs* restrict fs, shmid_t id) {
+    assert(fs->type == FS_TYPE_MEMFS);
+    struct memfs_priv* priv = (void *)(fs + 1);
+
+    for (size_t i = 0; i < priv->n_files; i++) {
+        memfsf_t* f = &priv->files[i];
+        if (f->id == id)
+            return f;
+    }
+
+    return NULL;
+}
+
+static struct shm_instance* find_instance(struct memfsf* file, int* index) {
     pid_t current_pid = sched_current_pid();
     // search for current pid
 
@@ -62,24 +74,89 @@ static int read_file(struct memfsf* file,
 
     for(int i = 0; i < file->n_instances; i++) {
         if(file->instances[i]->pid == current_pid) {
-            instance = file->instances[i];
-            break;
+            if(index)
+                *index = i;
+            return instance = file->instances[i];
         }
     }
+    // not found
+    return NULL;
+}
+
+
+
+
+static int open_instance(fs_t* restrict fs, uint64_t addr) {
+    shmid_t id = (shmid_t)addr;
+
+    memfsf_t* file = find_file(fs, id);
+
+
+    // @todo locking ?
+    assert(file);
+
+    struct shm_instance* instance = find_instance(file, NULL);
+
+    if(instance) {
+        // the PID already opened an instance.
+        // it is one instance per process max
+        return -1;
+    }
+
+
+    instance = shm_open(id, sched_current_pid());
 
     if(!instance) {
-        // not found. share with the process
-        instance = shm_open(file->id, current_pid);
+        // couldn't map or open
+        return -1;
+    }
 
-        if(!instance) {
-            // couldn't map or open
-            return -1;
-        }
-        file->instances = realloc(file->instances, sizeof(struct shm_instance) * file->n_instances);
-        file->instances[file->n_instances++] = instance;
+    file->instances = realloc(
+        file->instances, 
+        sizeof(struct shm_instance) * (file->n_instances+1));
+
+    file->instances[file->n_instances++] = instance;
+
+    return 0;
+}
+
+
+static void close_instance(fs_t* restrict fs, uint64_t addr) {
+    shmid_t id = (shmid_t)addr;
+
+    memfsf_t* file = find_file(fs, id);
+
+    int i;
+
+    struct shm_instance* instance = find_instance(file, &i);
+
+    assert(instance);
+
+    // @todo lock
+
+
+
+    if(i != file->n_instances - 1) {
+        file->instances[i] = file->instances[file->n_instances - 1];
     }
     
-    // found
+    file->n_instances--;
+
+
+    shm_close(instance);
+
+}
+
+
+
+static int read_file(struct memfsf* file,
+        void* restrict buf, uint64_t begin, size_t n) {
+
+    struct shm_instance* instance = find_instance(file, NULL);
+
+
+    assert(instance);
+    
     struct mem_desc md = {
         .vaddr = instance->vaddr,
     };
@@ -91,29 +168,15 @@ static int read_file(struct memfsf* file,
 }
 
 
+
 static int read(struct fs* restrict fs, const file_t* restrict fd,
         void* restrict buf, uint64_t begin, size_t n)  {
 
-    assert(fs->type == FS_TYPE_MEMFS);
+    memfsf_t* f = find_file(fs, (shmid_t)fd->addr);
 
+    assert(f);
 
-    struct memfs_priv* priv = (void *)(fs + 1);
-
-    shmid_t id = (shmid_t)fd->addr;
-
-    for (size_t i = 0; i < priv->n_files; i++) {
-        memfsf_t* f = &priv->files[i];
-        if (f->id == id) {
-            
-            assert(interrupt_enable());
-
-            return read_file(f, buf, begin, n);
-        }
-    }
-
-    panic("unreachable");
-
-    return -1;
+    return read_file(f, buf, begin, n);
 }
 
 
@@ -251,8 +314,8 @@ fs_t* memfs_mount(void) {
 
     fs->open_file          = NULL;
     fs->close_file         = NULL;
-    fs->open_instance      = NULL;
-    fs->close_instance     = NULL;
+    fs->open_instance      = open_instance;
+    fs->close_instance     = close_instance;
     fs->read_file_sectors  = read;
     fs->write_file_sectors = write;
     fs->read_dir           = read_dir;

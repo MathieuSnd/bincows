@@ -11,6 +11,10 @@
  * reading from a file always return
  * the mem_desc structure.
  * 
+ * a process cannot open the same file
+ * twice at the same time.
+ * 
+ * 
  */
 
 struct mem_desc {
