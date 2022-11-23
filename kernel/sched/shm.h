@@ -25,26 +25,6 @@
 typedef int shmid_t;
 
 /**
- * global shm structure:
- * one of this entry represents a
- * shared memory object
- */
-struct shm {
-    shmid_t id;
-
-    // number of SHM instances
-    int n_insts;
-
-    // physical address of the 1 GB
-    // page directory (level 3 page structure)
-    uint64_t pd_paddr;
-
-    // byte size of the region
-    uint32_t size;
-};
-
-
-/**
  * process local shared memory structure
  * one of this entry represents a shared
  * memory view from a process
@@ -79,7 +59,11 @@ struct shm_instance* shm_create(size_t initial_size, pid_t pid);
 // The whole 1 GB range with given base is shared.
 // The initial_size field is just a hint
 //
-struct shm_instance* shm_create_from_kernel(size_t size, void* base);
+// If pfree is 0, the underlying physical memory is 
+// not to be freed. It is useful in case of MMIO
+// mapping. The paging structures are freed anyway.
+// see page_unmap(..., free)
+struct shm_instance* shm_create_from_kernel(size_t size, void* base, int pfree);
 
 
 

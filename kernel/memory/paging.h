@@ -127,8 +127,12 @@ void free_master_region(uint64_t pd);
  * Deep free a level 1 range memory 
  * along with paging structures given 
  * the level 1 page directory.
+ * 
+ * if pfree == 0, the underlying physical 
+ * memory is not freed. Paging structures
+ * are freed anyway. 
  */
-void free_r1_region(uint64_t pd);
+void free_r1_region(uint64_t pd, int pfree);
 
 
 // return the master page direcory currently mapped

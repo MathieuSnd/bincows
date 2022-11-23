@@ -857,26 +857,32 @@ uint64_t create_empty_pd(void) {
 // argument:
 // level: 4: pml4, 3: pdpt, 2: pd, 1: pt
 // level: 0: page
-static void deep_free_map(uint64_t page_table, int level) {
+//
+// pfree: if 0, the memory is not freed, only the paging 
+// structures are.
+static void deep_free_map(uint64_t page_table, int level, int pfree) {
     if(!level) {
-        physfree(page_table);
+        if(pfree)
+            physfree(page_table);
         return;
     }
 
     void** translated = (void**)translate_address((void*)page_table);
 
-    for(unsigned i = 0; i < 512; i++) {
-        if(present_entry(translated[i])) {
-            uint64_t page_table_addr = (uint64_t)extract_pointer(translated[i]);
+    if(level != 1 || pfree) {
+        for(unsigned i = 0; i < 512; i++) {
+            if(present_entry(translated[i])) {
+                uint64_t page_table_addr = (uint64_t)extract_pointer(translated[i]);
 
-            if(level == 1) {
-                // shortcut the last level
-                physfree(page_table_addr);
+                if(level == 1) {
+                    // shortcut the last level
+                    physfree(page_table_addr);
+                }
+                else
+                    deep_free_map(page_table_addr, level - 1, pfree);
+                
+                translated[i] = 0;
             }
-            else
-                deep_free_map(page_table_addr, level - 1);
-            
-            translated[i] = 0;
         }
     }
 
@@ -890,7 +896,7 @@ void free_master_region(uint64_t pd) {
     _cli();
 
     // deep free the page map
-    deep_free_map(pd, 3);
+    deep_free_map(pd, 3, 1);
 
     // end of mutual exclusion
     set_rflags(rf);
@@ -898,13 +904,13 @@ void free_master_region(uint64_t pd) {
 
 
 
-void free_r1_region(uint64_t pd) {
+void free_r1_region(uint64_t pd, int pfree) {
     // mutual exclusion
     uint64_t rf = get_rflags();
     _cli();
 
     // deep free the page map
-    deep_free_map(pd, 2);
+    deep_free_map(pd, 2, pfree);
 
     // end of mutual exclusion
     set_rflags(rf);
@@ -952,7 +958,7 @@ void free_page_range(uint64_t vaddr, size_t count) {
         assert(vaddr % (1llu << 39) == 0);
         // vaddr is aligned on 512 GB
         // let's free 512 GB
-        deep_free_map(pdpt_paddr, 3);
+        deep_free_map(pdpt_paddr, 3, 1);
         // unmap
         pml4[pml4i] = 0;
         vaddr += 1llu << 39;

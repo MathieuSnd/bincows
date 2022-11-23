@@ -12,6 +12,33 @@
 #include "../sync/spinlock.h"
 
 
+/**
+ * global shm structure:
+ * one of this entry represents a
+ * shared memory object
+ */
+struct shm {
+    shmid_t id;
+
+    // number of SHM instances
+    int n_insts;
+
+    // physical address of the 1 GB
+    // page directory (level 3 page structure)
+    uint64_t pd_paddr;
+
+    // byte size of the region
+    uint32_t size;
+
+    // if 0, don't free the physical memory when
+    // removing the structure. The paging 
+    // structures are freed anyway
+    int pfree;
+};
+
+
+
+
 static struct shm* shms = NULL;
 static unsigned n_shms = 0;
 
@@ -105,7 +132,7 @@ static void* map_shm(struct shm* shm, pid_t pid) {
 static int unmap_shm(pid_t pid, void* vaddr) {
     assert(!interrupt_enable());
 
-    assert((uint64_t)vaddr > USER_SHARED_BEGIN);
+    assert((uint64_t)vaddr >= USER_SHARED_BEGIN);
     assert((uint64_t)vaddr <= USER_SHARED_END - PAGE_R1_SIZE);
 
     // acquire the process
@@ -123,7 +150,7 @@ static int unmap_shm(pid_t pid, void* vaddr) {
 
     int i = ((uint64_t)vaddr - USER_SHARED_BEGIN) / PAGE_R1_SIZE;
 
-    assert(i > 0);
+    assert(i >= 0);
     assert(i < 512);
 
     int present = tr_master_pd[i] & PRESENT_ENTRY;
@@ -143,7 +170,8 @@ static int unmap_shm(pid_t pid, void* vaddr) {
 
 
 
-struct shm_instance* shm_create_from_kernel(size_t initial_size, void* base) {
+struct shm_instance* 
+shm_create_from_kernel(size_t initial_size, void* base, int pfree) {
     assert(!interrupt_enable());
 
     if(initial_size == 0 || initial_size > SHM_SIZE_MAX)
@@ -165,7 +193,8 @@ struct shm_instance* shm_create_from_kernel(size_t initial_size, void* base) {
         .id       = id,
         .n_insts  = 1,
         .pd_paddr = pd,
-        .size     = initial_size
+        .size     = initial_size,
+        .pfree    = pfree,
     };
 
     spinlock_release(&shm_lock);
@@ -195,8 +224,7 @@ static void free_shm(struct shm* shm) {
     // the page manager
     assert(!interrupt_enable());
 
-    free_r1_region(shm->pd_paddr);
-
+    free_r1_region(shm->pd_paddr, shm->pfree);
 }
 
 // return the page directory of the freshly
@@ -263,7 +291,8 @@ struct shm_instance* shm_create(size_t initial_size, pid_t pid) {
             .id       = id,
             .n_insts  = 1,
             .pd_paddr = pd,
-            .size     = initial_size
+            .size     = initial_size,
+            .pfree    = 1,
         };
 
         void* vaddr = map_shm(shm, pid);
@@ -336,7 +365,7 @@ struct shm_instance* shm_open(shmid_t id, pid_t pid) {
 }
 
 
-int shm_close(struct shm_instance* ins) {
+int     shm_close(struct shm_instance* ins) {
     assert(ins);
     shmid_t id = ins->target;
     int found;
