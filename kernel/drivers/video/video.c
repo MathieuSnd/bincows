@@ -2,8 +2,10 @@
 #include "../terminal/terminal.h"
 #include "../driver.h"
 #include "../../sched/shm.h"
+#include "../../lib/string.h"
 #include "../../boot/boot_interface.h"
 #include "../../fs/memfs/memfs.h"
+#include "../../fs/devfs/devfs.h"
 #include "../../memory/temp.h"
 #include "../../memory/paging.h"
 #include "../../memory/vmap.h"
@@ -65,7 +67,7 @@ int video_install(driver_t* this) {
     );
 
 
-    struct shm_instance* shm = shm_create_from_kernel(fb_size, tmp_vaddr);
+    struct shm_instance* shm = shm_create_from_kernel(fb_size, tmp_vaddr, 0);
     
     assert(shm);
 
@@ -141,8 +143,47 @@ driver_t* video_init(const struct boot_interface* bi) {
 }
 
 
+static
+int dev_video_read(void* arg, void* buf, size_t begin, size_t count) {
+    (void) arg;
+    assert(video_driver);
+
+
+    fb_t* fb = (fb_t*)video_driver->device;
+
+    struct dev_video dv = {
+        .width  = fb->width,
+        .height = fb->height,
+        .pitch  = fb->pitch,
+        .bpp    = fb->bpp,
+    };
+
+    assert(begin + count <= sizeof(struct dev_video));
+
+    memcpy(buf, (void*)&dv + begin, count);
+
+    return count;
+}
+
+
 void video_create_file(char* name) {
     struct data* d = video_driver->data;
 
     memfs_register_file(name, d->shm->target);
+
+    devfs_map_device((devfs_file_interface_t){
+        .arg       = NULL,
+        .file_size = sizeof(struct dev_video),
+
+        .read  = dev_video_read,
+        .write = NULL,
+
+        .rights = {
+            .exec = 0,
+            .write = 0,
+            .read = 1,
+            .seekable = 1,
+        },
+
+    }, "video");
 }

@@ -21,6 +21,12 @@ struct framebuffer_dev {
     unsigned bpp;
 };
 
+struct dev_video {
+    unsigned width, height;
+    unsigned pitch;
+    unsigned bpp;
+};
+
 struct boot_interface;
 
 // return the terminal driver
