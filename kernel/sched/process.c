@@ -979,6 +979,7 @@ int process_trigger_signal(pid_t pid, int signal) {
     if(process->ign_mask & (1 << signal)) {
         // signal ignored
         log_warn("IGNORED SIGNAL %u", pid);
+        spinlock_release(&process->lock);
         return 0;
     }
     else {
@@ -988,6 +989,9 @@ int process_trigger_signal(pid_t pid, int signal) {
 
     // unblock threads that wait for a signal if necessary
     unblock_sigwait_threads_and_release(process, rf);
+
+    spinlock_release(&process->lock);
+
 
     // unblock the thread
     sleep_cancel (pid, 1);
