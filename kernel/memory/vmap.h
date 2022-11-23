@@ -209,7 +209,7 @@ static inline int is_higher_half(uint64_t vaddr) {
 // early high half pointer
 static inline uint64_t kernel_data_to_physical(
     const void* vaddr) {
-    assert((uint64_t) vaddr > KERNEL_DATA_BEGIN);
+    assert((uint64_t) vaddr >= KERNEL_DATA_BEGIN);
     return ~KERNEL_DATA_BEGIN & (uint64_t)vaddr;
 }
 
