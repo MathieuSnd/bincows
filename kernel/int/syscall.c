@@ -534,7 +534,7 @@ static uint64_t sc_exec(process_t* proc, void* args, size_t args_sz) {
 
     //sched_yield();
 
-    return 0;// new_pid;
+    return new_pid;
 }   
 
 // return the fd if found or -1 otherwise
@@ -1225,7 +1225,6 @@ uint64_t sc_sigreturn(process_t* proc, void* args, size_t args_sz) {
 
 
 uint64_t sc_kill(process_t* proc, void* args, size_t args_sz) {
-
     (void) proc;
 
 
@@ -1237,6 +1236,7 @@ uint64_t sc_kill(process_t* proc, void* args, size_t args_sz) {
     struct sc_sigkill_args* a = args;
     pid_t pid = a->pid;
     int signal = a->signal;
+
 
 
     if(signal < 0 || signal >= MAX_SIGNALS) {

@@ -575,22 +575,26 @@ static dirent_t* read_dir(struct fs* restrict fs, uint64_t dir_addr, size_t* res
     _cli();
     spinlock_acquire(&priv->lock);
 
-    *n = priv->n_files;
     dirent_t* dirents = malloc(sizeof(dirent_t) * priv->n_files);
+
+    unsigned j = 0;
 
     for(unsigned i = 0; i < priv->n_files; i++) {
         pipefs_file_t* file = &priv->files[i];
         if(file->broken & (in ? 1 : 2))
             continue;
 
-        sprintf(dirents[i].name, "%u", file->id);
-        dirents[i].ino = file->id;
-        dirents[i].type = DT_REG;
-        dirents[i].file_size = (size_t) -1;
-        dirents[i].rights.value = in ? 2 : 1; 
+        sprintf(dirents[j].name, "%u", file->id);
+        dirents[j].ino = file->id;
+        dirents[j].type = DT_REG;
+        dirents[j].file_size = (size_t) -1;
+        dirents[j].rights.value = in ? 2 : 1; 
+
+        j++;
         // just readable (1) or just writable (2)
     }
 
+    *n = j;
     
 
     spinlock_release(&priv->lock);
