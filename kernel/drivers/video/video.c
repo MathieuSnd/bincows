@@ -22,7 +22,7 @@ struct data {
 static 
 void video_remove(driver_t* this) {
     struct data* d = this->data;
-    shm_close(d->shm);
+    shm_close(NULL, d->shm);
 }
 
 static

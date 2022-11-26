@@ -5,6 +5,12 @@
 #include "process.h"
 
 
+#ifndef SHMID_T
+#define SHMID_T
+typedef int shmid_t;
+#endif
+
+
 /**
  * every SHM has a size between 1 byte and
  * 1 GB. It is 1 GB-aligned.
@@ -21,8 +27,6 @@
 
 // = 1 GB
 #define SHM_SIZE_MAX (1024 * 1024 * 1024)
-
-typedef int shmid_t;
 
 /**
  * process local shared memory structure
@@ -45,6 +49,8 @@ struct shm_instance {
  * be created
  */
 struct shm_instance* shm_create(size_t initial_size, pid_t pid);
+
+
 
 
 // base: 1 GB aligned virtual base address of a
@@ -99,7 +105,7 @@ struct shm_instance* shm_open(shmid_t id, pid_t pid);
  * close and unmap the SHM instance
  * 
  */
-int shm_close(struct shm_instance* instance);
+int shm_close(process_t* proc, struct shm_instance* ins);
 
 
 void shm_cleanup(void);

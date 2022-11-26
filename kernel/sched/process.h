@@ -15,8 +15,14 @@
 typedef int pid_t;
 typedef int32_t tid_t;
 
+#ifndef SHMID_T
+#define SHMID_T
+typedef int shmid_t;
+#endif
 
 typedef unsigned fd_t;
+struct shm_instance;
+
 
 #define MAX_FDS 32
 typedef uint32_t fd_mask_t;
@@ -158,7 +164,13 @@ typedef struct process {
     // it resides in the kernel thread stack
     struct gp_regs* sig_return_context;
 
-    // address of the return context
+
+    // set of SHMs opened by the process and registered
+    // using process_register_shm()
+    struct shm_instance** shms;
+
+    // number of registered SHM
+    int n_shms;
 
 
 } process_t;
@@ -179,6 +191,22 @@ int process_trigger_signal(pid_t pid, int signal);
 // if proc is NULL, then return whether any 
 // process is mapped
 int is_process_mapped(process_t* proc);
+
+
+
+// register an shm object. This object will be
+// released using process_remove_shm.
+// When the process is freed, the remaining
+// shm objects are also freed, before the 
+// process memory mapping so that the memory
+// can be correctly freed.
+int process_register_shm(process_t*, struct shm_instance*);
+void process_remove_shm(process_t*, struct shm_instance*);
+
+// return the virtual base address of the the shm with
+// given id. NULL is returned on failure:
+// if the shm is not registered to the process.
+void* process_get_shm_vbase(process_t*, shmid_t id);
 
 
 // this function should be executed when a thread reaches the

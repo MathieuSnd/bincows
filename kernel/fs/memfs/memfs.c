@@ -13,11 +13,19 @@
 #include "../../sched/sched.h"
 
 typedef
+struct file_instance {
+    struct shm_instance* shm;
+    // file handler id
+    uint64_t hid;
+    pid_t pid;
+} file_instance_t;
+
+typedef
 struct memfsf {
     shmid_t id;
     char* name;
     int n_instances;
-    struct shm_instance** instances;
+    file_instance_t* instances;
     
     // 0:    the file was created by a user process
     // non0: the file shouldn't be removed when the file
@@ -27,7 +35,7 @@ struct memfsf {
 
 
 struct memfs_priv {
-    size_t n_files;
+    int n_files;
     memfsf_t* files;
 };
 
@@ -46,7 +54,7 @@ void memfs_register_file(char* name, shmid_t id) {
         .id = id,
         .name = name,
         .n_instances = 0,
-        .instances = 0,
+        .instances = NULL,
         .kernel = 1
     };
 }
@@ -56,7 +64,7 @@ static memfsf_t* find_file(struct fs* restrict fs, shmid_t id) {
     assert(fs->type == FS_TYPE_MEMFS);
     struct memfs_priv* priv = (void *)(fs + 1);
 
-    for (size_t i = 0; i < priv->n_files; i++) {
+    for (int i = 0; i < priv->n_files; i++) {
         memfsf_t* f = &priv->files[i];
         if (f->id == id)
             return f;
@@ -65,18 +73,31 @@ static memfsf_t* find_file(struct fs* restrict fs, shmid_t id) {
     return NULL;
 }
 
-static struct shm_instance* find_instance(struct memfsf* file, int* index) {
+static file_instance_t* 
+find_instance_by_pid(struct memfsf* file, int* index) {
+
     pid_t current_pid = sched_current_pid();
     // search for current pid
 
-    struct shm_instance* instance = NULL;
-
-
     for(int i = 0; i < file->n_instances; i++) {
-        if(file->instances[i]->pid == current_pid) {
+        if(file->instances[i].pid == current_pid) {
             if(index)
                 *index = i;
-            return instance = file->instances[i];
+            return &file->instances[i];
+        }
+    }
+    // not found
+    return NULL;
+}
+
+
+static file_instance_t* 
+find_instance_by_hid(struct memfsf* file, int* index, handle_id_t hid) {
+    for(int i = 0; i < file->n_instances; i++) {
+        if(file->instances[i].hid == hid) {
+            if(index)
+                *index = i;
+            return &file->instances[i];
         }
     }
     // not found
@@ -85,8 +106,7 @@ static struct shm_instance* find_instance(struct memfsf* file, int* index) {
 
 
 
-
-static int open_instance(fs_t* restrict fs, uint64_t addr) {
+static int open_instance(fs_t* restrict fs, uint64_t addr, handle_id_t hid) {
     shmid_t id = (shmid_t)addr;
 
     memfsf_t* file = find_file(fs, id);
@@ -95,70 +115,126 @@ static int open_instance(fs_t* restrict fs, uint64_t addr) {
     // @todo locking ?
     assert(file);
 
-    struct shm_instance* instance = find_instance(file, NULL);
+    file_instance_t* present_fi = find_instance_by_pid(file, NULL);
+    assert(!present_fi);
 
-    if(instance) {
+    if(present_fi) {
         // the PID already opened an instance.
         // it is one instance per process max
         return -1;
     }
 
+    pid_t pid = sched_current_pid();
 
-    instance = shm_open(id, sched_current_pid());
+    file_instance_t new_fi = {
+        .shm = shm_open(id, pid),
+        .pid = pid,
+        .hid = hid,
+    };
 
-    if(!instance) {
+    assert(new_fi.shm);
+
+    if(!new_fi.shm) {
         // couldn't map or open
         return -1;
     }
 
     file->instances = realloc(
         file->instances, 
-        sizeof(struct shm_instance) * (file->n_instances+1));
+        sizeof(file_instance_t) * (file->n_instances+1));
 
-    file->instances[file->n_instances++] = instance;
+    file->instances[file->n_instances++] = new_fi;
+
+
+    assert(interrupt_enable());
+    process_t* proc = sched_get_process(sched_current_pid());
+
+    assert(proc);
+
+    process_register_shm(proc, new_fi.shm);
+
+    spinlock_release(&proc->lock);
+    _sti();
+
 
     return 0;
 }
 
 
-static void close_instance(fs_t* restrict fs, uint64_t addr) {
+static void close_instance(fs_t* restrict fs, uint64_t addr, handle_id_t hid) {
     shmid_t id = (shmid_t)addr;
 
     memfsf_t* file = find_file(fs, id);
 
     int i;
 
-    struct shm_instance* instance = find_instance(file, &i);
+    file_instance_t* instance = find_instance_by_hid(file, &i, hid);
 
     assert(instance);
 
     // @todo lock
 
 
+    assert(!interrupt_enable());
+    process_t* proc = sched_get_process(instance->pid);
 
-    if(i != file->n_instances - 1) {
-        file->instances[i] = file->instances[file->n_instances - 1];
+    if(proc) {
+        process_register_shm(proc, instance->shm);
+
+        spinlock_release(&proc->lock);
     }
+
+
+    if(i != file->n_instances - 1)
+        file->instances[i] = file->instances[file->n_instances - 1];
     
     file->n_instances--;
-
-
-    shm_close(instance);
-
 }
 
+
+
+static void close_file(fs_t* restrict fs, uint64_t addr) {
+    shmid_t id = (shmid_t)addr;
+
+    struct memfs_priv* priv = (void*)(fs+1);
+
+    memfsf_t* file = find_file(fs, id);
+
+    assert(file);
+    assert(file->n_instances == 0);
+
+    int i = file - priv->files;
+
+    assert(i >= 0);
+    assert(i < (int)priv->n_files);
+
+
+    free(file->instances);
+
+
+    // @todo lock
+
+    
+    if(i != priv->n_files - 1) {
+        priv->files[i] = priv->files[priv->n_files - 1];
+    }
+
+    heap_defragment();
+    
+    priv->files = realloc(priv->files, sizeof(memfsf_t) * --priv->n_files);
+}
 
 
 static int read_file(struct memfsf* file,
         void* restrict buf, uint64_t begin, size_t n) {
 
-    struct shm_instance* instance = find_instance(file, NULL);
+    file_instance_t* instance = find_instance_by_pid(file, NULL);
 
 
     assert(instance);
     
     struct mem_desc md = {
-        .vaddr = instance->vaddr,
+        .vaddr = instance->shm->vaddr,
     };
     assert(begin + n <= sizeof(struct mem_desc));
 
@@ -209,7 +285,7 @@ static dirent_t* read_dir(struct fs* restrict fs, uint64_t dir_addr, size_t* res
 
     dirent_t* ret = malloc(sizeof(dirent_t) * priv->n_files);
 
-    for (size_t i = 0; i < priv->n_files; i++) {
+    for (int i = 0; i < priv->n_files; i++) {
         strcpy(ret[i].name, priv->files[i].name);
         ret[i].ino       = priv->files[i].id;
         ret[i].file_size = sizeof(struct mem_desc);
@@ -313,7 +389,7 @@ fs_t* memfs_mount(void) {
 
 
     fs->open_file          = NULL;
-    fs->close_file         = NULL;
+    fs->close_file         = close_file;
     fs->open_instance      = open_instance;
     fs->close_instance     = close_instance;
     fs->read_file_sectors  = read;

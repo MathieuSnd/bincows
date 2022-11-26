@@ -66,8 +66,7 @@ static struct shm* insert_shm(void) {
 static void remove_shm(struct shm* shm) {
     assert(!interrupt_enable());
 
-    // @todo check if it is right
-    int i = (shm - shms) / sizeof(struct shm);
+    int i = shm - shms;
 
     if(i != (int)n_shms - 1) {
         shms[i] = shms[--n_shms];
@@ -114,8 +113,6 @@ static void* map_shm(struct shm* shm, pid_t pid) {
             // map the shm
             uint64_t flags = PL_XD | PL_US | PL_RW | PRESENT_ENTRY;
 
-            log_warn("mapped at %lx", vaddr);
-
             tr_master_pd[i] = flags | target_pd;
             break;
         }
@@ -129,22 +126,16 @@ static void* map_shm(struct shm* shm, pid_t pid) {
 
 
 // 0 on success
-static int unmap_shm(pid_t pid, void* vaddr) {
+static int unmap_shm(process_t* proc, void* vaddr) {
     assert(!interrupt_enable());
 
     assert((uint64_t)vaddr >= USER_SHARED_BEGIN);
     assert((uint64_t)vaddr <= USER_SHARED_END - PAGE_R1_SIZE);
 
-    // acquire the process
-    process_t* proc = sched_get_process(pid);
-
-    if(!proc) {
-        return -1;
-    }
+    assert(proc);
 
     uint64_t master_pd = proc->mem_map.shared_pd;
 
-    // search available slot
     uint64_t* tr_master_pd = translate_address((void*)master_pd);
 
 
@@ -159,6 +150,7 @@ static int unmap_shm(pid_t pid, void* vaddr) {
     assert(present);
 
     tr_master_pd[i] = 0;
+
 
 
     spinlock_release(&proc->lock);
@@ -365,7 +357,7 @@ struct shm_instance* shm_open(shmid_t id, pid_t pid) {
 }
 
 
-int     shm_close(struct shm_instance* ins) {
+int shm_close(process_t* proc, struct shm_instance* ins) {
     assert(ins);
     shmid_t id = ins->target;
     int found;
@@ -393,8 +385,9 @@ int     shm_close(struct shm_instance* ins) {
 
     int unmap_error = 0;
 
-    if(ins->pid != KERNEL_PID)
-        unmap_error = unmap_shm(ins->pid, ins->vaddr);
+
+    if(proc)
+        unmap_error = unmap_shm(proc, ins->vaddr);
 
     free(ins);
 

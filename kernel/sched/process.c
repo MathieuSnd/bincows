@@ -8,8 +8,10 @@
 #include "../int/apic.h"
 #include "../int/idt.h"
 #include "../memory/pmm.h"
+#include "../lib/panic.h"
 
 #include "sched.h"
+#include "shm.h"
 
 #define FIRST_TID 1
 #define STACK_SIZE (32 * 1024)
@@ -274,6 +276,8 @@ int create_process(
         .sig_current = NOSIG,
         .sig_pending = 0,
         .sig_return_context = NULL,
+        .shms   = NULL,
+        .n_shms = 0,
     };
 
     // empty heap
@@ -365,6 +369,9 @@ int create_kernel_process(process_t* process) {
         .sig_current = NOSIG,
         .sig_pending = 0,
         .sig_return_context = NULL,
+
+        .shms   = NULL,
+        .n_shms = 0,
     };
 
 
@@ -418,6 +425,11 @@ void free_process(process_t* process) {
     if(process->pid != 0) {
         // free process memory
         _cli();
+        for(int i = 0; i < process->n_shms; i++)
+            shm_close(process, process->shms[i]);
+
+        if(process->shms)
+            free(process->shms);
         free_process_memory(process->mem_map);
         _sti();
     }
@@ -980,6 +992,7 @@ int process_trigger_signal(pid_t pid, int signal) {
         // signal ignored
         log_warn("IGNORED SIGNAL %u", pid);
         spinlock_release(&process->lock);
+        set_rflags(rf);
         return 0;
     }
     else {
@@ -990,8 +1003,6 @@ int process_trigger_signal(pid_t pid, int signal) {
     // unblock threads that wait for a signal if necessary
     unblock_sigwait_threads_and_release(process, rf);
 
-    spinlock_release(&process->lock);
-
 
     // unblock the thread
     sleep_cancel (pid, 1);
@@ -1001,3 +1012,48 @@ int process_trigger_signal(pid_t pid, int signal) {
 }
 
 
+
+int process_register_shm(process_t* restrict proc, struct shm_instance* shm) {
+    assert(!interrupt_enable());
+    
+    // check that the shm is not opened yet
+    for(int i = 0; i < proc->n_shms; i++) {
+        if(proc->shms[i] == shm)
+            // the shm is already opened!
+            return -1;
+    }
+
+    proc->shms = realloc(proc->shms, (proc->n_shms+1) * sizeof(struct shm_instance));
+    proc->shms[proc->n_shms++] = shm;
+
+    return 0;
+}
+
+void process_remove_shm(process_t* restrict proc, struct shm_instance* shm) {
+    assert(!interrupt_enable());
+    
+    // check that the shm is not opened yet
+    for(int i = 0; i < proc->n_shms; i++) {
+        if(proc->shms[i] == shm) {
+            if(i != proc->n_shms - 1)
+                proc->shms[i] = proc->shms[proc->n_shms - 1];
+            shm_close(proc, shm);
+        }
+    }
+}
+
+
+// return the virtual base address of the the shm with
+// given id. NULL is returned on failure:
+// if the process does not exist or if the shm is not 
+// registered to the process.
+void* process_get_shm_vbase(process_t* proc, shmid_t id) {
+    assert(!interrupt_enable());
+    
+    for(int i = 0; i < proc->n_shms; i++) {
+        if(proc->shms[i]->target == id)
+            return proc->shms[i]->vaddr;
+    }
+
+    return NULL;
+}
