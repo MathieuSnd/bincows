@@ -135,6 +135,9 @@ typedef struct file_handle {
     // about handlers pointing on it
     uint64_t vfile_id;
 
+    // handle unique id
+    handle_id_t handle_id;
+
     // input flags of the open call
     int flags;
 } file_handle_t;

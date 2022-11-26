@@ -247,6 +247,12 @@ static void register_handle_to_vfile(
 }
 
 
+static handle_id_t handle_next_id(void) {
+    static _Atomic handle_id_t id;
+
+    return id++;
+}
+
 
 /**
  * @brief create a file handle and
@@ -280,11 +286,13 @@ file_handle_t* create_handler(
                     fast_dirent_t* dirent, 
                     const char* path
 ) {
-    
+    handle_id_t hid = handle_next_id();
+
     int shouldnt_open = 0;
     
-    if(fs->open_instance)
-        shouldnt_open = fs->open_instance(fs, dirent->ino);
+    if(fs->open_instance) {
+        shouldnt_open = fs->open_instance(fs, dirent->ino, hid);
+    }
 
     if(shouldnt_open) {
         return NULL;
@@ -304,6 +312,8 @@ file_handle_t* create_handler(
     handle->sector_offset = 0;
     handle->buffer_valid = 0;
     handle->sector_count = 0;
+    handle->handle_id = hid;
+    
 
     handle->sector_buff = (void *)handle + sizeof(file_handle_t);
 
@@ -553,12 +563,14 @@ void vfs_close_file(file_handle_t *handle) {
 
     fs_t *fs = handle->fs;
 
+    handle_id_t hid = handle->handle_id;
+
     _cli();
     struct file_ent* restrict open_file = aquire_vfile(handle->vfile_id);
 
 
     if(fs->close_instance)
-        fs->close_instance(fs, open_file->addr);
+        fs->close_instance(fs, open_file->addr, hid);
 
     open_file->n_insts--;
 
@@ -1108,7 +1120,6 @@ size_t vfs_write_file(const void *ptr, size_t size,
                 if(rd != 1) {
                     // couldn't read enough data.
 
-                    log_warn("isseu");
                     release_file_access(stream->vfile_id);
 
                     return -1;

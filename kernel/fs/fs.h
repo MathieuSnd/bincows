@@ -113,6 +113,7 @@ typedef struct dirent {
 //static_assert(sizeof(dirent_t) == 0x10a, "dirent_t is not the correct size");
 
 
+typedef uint64_t handle_id_t;
 
 
 
@@ -176,23 +177,6 @@ typedef struct fs {
      */
     uint64_t root_addr;
 
-
-    /**
-     * @brief create a file
-     * 
-     * @param file the file to open
-     * @param cur (output) the file descriptor
-     * must be at least fd_size big
-     */
-    //void (*open_file)(file_t* restrict file, void* cur);
-
-    /**
-     * @brief close a cursor
-     * 
-     * @param cur file specific file descriptor
-     * must be at least fd_size big
-     */
-    //void (*close_file)(void *);
 
     /**
      * @brief truncate a file to a given size.
@@ -296,7 +280,7 @@ typedef struct fs {
      * and the FS assumes the file can be opened.
      * 
      */
-    int (*open_instance)(struct fs* restrict fs, uint64_t addr);
+    int (*open_instance)(struct fs* restrict fs, uint64_t addr, handle_id_t hid);
 
     /**
      * notify the filesystem that the file with address addr
@@ -307,7 +291,7 @@ typedef struct fs {
      * this function can be NULL, in this case it won't be called
      * 
      */
-    void (*close_instance)(struct fs* restrict fs, uint64_t addr);
+    void (*close_instance)(struct fs* restrict fs, uint64_t addr, handle_id_t hid);
 
     /**
      * @brief read a directory and return its
