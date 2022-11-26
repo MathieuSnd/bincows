@@ -12,6 +12,7 @@
 #include "../int/idt.h"
 
 #include "../memory/heap.h"
+#include "../memory/vmap.h"
 #include "fat32/fat32.h"
 #include "devfs/devfs.h"
 #include "pipefs/pipefs.h"
@@ -125,6 +126,10 @@ uint16_t path_hash(const char *path)
 static void free_vtree(vdir_t *root)
 {
     assert(root);
+    assert(is_higher_half((uint64_t)root));
+    assert(is_higher_half((uint64_t)root->path));
+
+
 
     while(root->n_children) {
         assert(root->children);
@@ -162,6 +167,7 @@ static int remove_vdir(vdir_t *vdir)
     {
         vdir_t *child = NULL;
 
+
         for (unsigned i = 0; i < vd->n_children; i++)
         {
             const char *p = vd->children[i].path;
@@ -176,11 +182,10 @@ static int remove_vdir(vdir_t *vdir)
                     vd->children + i + 1,
                     (vd->n_children - i - 1) * sizeof(vdir_t)
                 );
-                
 
 
                 vd->n_children--;
-                vd->children = realloc(vd->children, vd->n_children);
+                vd->children = realloc(vd->children, vd->n_children * sizeof(struct vdir));
 
                 return 1;
             }
