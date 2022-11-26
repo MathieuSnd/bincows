@@ -608,10 +608,6 @@ void  sched_save(gp_regs_t* rsp) {
     currently_in_nested_irq += currently_in_irq;
     currently_in_irq = 1;
 
-    //assert(!currently_in_nested_irq);
-
-    //log_info("sched_save rsp = %lx", rsp);
-
     if(!sched_running) {
         kernel_saved_rsp = rsp;
     }
@@ -1128,10 +1124,10 @@ void schedule(void) {
         assert(t->tid > 0);
         assert(t->state == READY);
 
-
         if(t->should_exit && !t->uninterruptible) {
             // lazy thread kill 
             // lock the process
+
 
             thread_terminate(t, t->exit_status);
             
@@ -1168,6 +1164,8 @@ void schedule(void) {
 
         process_handle_signal(p);
     }
+
+
 
     // the process is selected for execution
 
@@ -1364,6 +1362,8 @@ void kernel_process_entry(void) {
 
     uint64_t log_flush_last = 0;
     const uint64_t log_flush_period = 1000*1000*1000; // 1 sec
+
+    // register framebuffer shared memory 
 
     for(;;) {
 

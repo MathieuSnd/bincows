@@ -343,7 +343,6 @@ static void handle_queue(
 static void irq_handler(driver_t* this) {
     // check if an admin command is completed
     struct data* data = this->data;
-    //log_warn("irq");
 
     handle_queue(
             this, 
