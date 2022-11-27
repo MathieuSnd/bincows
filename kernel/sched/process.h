@@ -304,6 +304,7 @@ int set_process_entry_arguments(process_t* process,
  */
 void free_process(process_t* process);
 
+
 /**
  * In order to replace the process,
  * the current process must already
@@ -325,6 +326,9 @@ void process_unmap(void);
 
 
 void process_futex_push_waiter(process_t* proc, void* uaddr, tid_t tid);
+
+// this function releases the process lock during its execution.
+// num < 0: broadcast futex
 void process_futex_wake       (process_t* proc, void* uaddr, int num);
 void process_futex_drop_waiter(process_t* proc, tid_t tid);
 

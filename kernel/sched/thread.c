@@ -39,7 +39,7 @@ int create_thread(
         .should_block = 0,
         .should_exit = 0,
         .uninterruptible = 0,
-        
+        .futex_signaled = 0,
     };
 
     // set the stack frame

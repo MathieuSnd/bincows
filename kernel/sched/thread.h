@@ -117,6 +117,14 @@ struct thread {
     exit_hook_fun_t* exit_hooks;
     size_t n_exit_hooks;
 
+
+    // this field is set when a futex-waiting thread 
+    // is signaled by futex_wake. It is checked and 
+    // cleared in futex_wait to check the cause of
+    // the sleep().
+    int futex_signaled;
+    
+
     // lock for the thread
     spinlock_t lock;
     

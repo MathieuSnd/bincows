@@ -978,11 +978,11 @@ int sched_block(void) {
     // by a signal
     int interrupted_block = 0;
 
+    // lock the process again
+    p = sched_get_process(current_pid);
+
     if(current_tid == 1) {
         // only threads with tid 1 can handle signals
-        
-        process_t* p = sched_get_process(current_pid);
-
 
         // no recursive signals 
         // @todo add recursive signals
@@ -992,12 +992,17 @@ int sched_block(void) {
         }
         else {
         }
-
-        spinlock_release(&p->lock);
     }
 
+    // test for futex signal
+    t = sched_get_thread_by_tid(p, current_tid);
+    if(t->futex_signaled) {
+        t->futex_signaled = 0;
 
+        interrupted_block = 2;
+    }
 
+    spinlock_release(&p->lock);
     set_rflags(rf);
 
     return interrupted_block;
@@ -1127,7 +1132,6 @@ void schedule(void) {
         if(t->should_exit && !t->uninterruptible) {
             // lazy thread kill 
             // lock the process
-
 
             thread_terminate(t, t->exit_status);
             

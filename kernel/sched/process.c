@@ -9,6 +9,7 @@
 #include "../int/idt.h"
 #include "../memory/pmm.h"
 #include "../lib/panic.h"
+#include "../lib/math.h"
 
 #include "sched.h"
 #include "shm.h"
@@ -436,7 +437,6 @@ void free_process(process_t* process) {
 
     free(process);
 }
-
 
 
 int replace_process(process_t* process, void* elffile, size_t elffile_sz) {
@@ -1068,7 +1068,9 @@ void process_futex_push_waiter(process_t* restrict proc, void* uaddr, tid_t tid)
         .uaddr = uaddr,
         .tid = tid,
     };
+
 }
+
 
 static void futex_drop_waiter(process_t* restrict proc, int i) {
     struct futex_waiter* fw = proc->futex_waiters;
@@ -1092,15 +1094,51 @@ void process_futex_drop_waiter(process_t* restrict proc, tid_t tid) {
 
 
 
-void process_futex_wake(process_t* restrict proc, void* uaddr, int num) {
+void process_futex_wake(process_t* proc, void* uaddr, int num) {
     assert(!interrupt_enable());
 
+    if(num < 0)
+        num = proc->n_futex_waiters;
+
+    // make a copy of all waiters
+    int max_pop = MIN(proc->n_futex_waiters, num);
+
+    if(max_pop == 0) {
+        spinlock_release(&proc->lock);
+        return;
+    }
+    
+    struct futex_waiter* waiters = malloc(sizeof(*waiters) * max_pop);
+
+
+    int j = 0;
     for(int i = 0; i < proc->n_futex_waiters && num; i++) {
         if(proc->futex_waiters[i].uaddr == uaddr) {
-            sleep_cancel(proc->pid, proc->futex_waiters[i].tid);
+            int tid = proc->futex_waiters[i].tid;
+
             futex_drop_waiter(proc, i);
-            i--;
             num--;
+            // append the waiter
+            assert(j < max_pop);
+            waiters[j++] = proc->futex_waiters[i];
+
+            // set the futex signal flag while we 
+            // hold the mutex
+            thread_t* thread = sched_get_thread_by_tid(proc, tid);
+            thread->futex_signaled = 1;
         }
     }
+    volatile pid_t pid = proc->pid;
+
+    spinlock_release(&proc->lock);
+
+
+    for(int i = 0; i < j; i++) {
+        int res = sleep_cancel(pid, waiters[i].tid);
+        assert(!res);
+
+    }
+    
+
+    free(waiters);
 }
