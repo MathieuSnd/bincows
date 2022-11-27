@@ -151,6 +151,7 @@ void wakeup_threads(void) {
     }
 
 
+
     spinlock_release(&sleep_lock);
     set_rflags(rf);
 }
@@ -176,13 +177,14 @@ int sleep(unsigned ms) {
             return 0;
         }
 
+        _cli();
+        register_sleeping_thread(
+            sched_current_tid(), 
+            sched_current_pid(), 
+            wakeup_time
+        );
         do {
             _cli();
-            register_sleeping_thread(
-                sched_current_tid(), 
-                sched_current_pid(), 
-                wakeup_time
-            );
 
             int interrupted = sched_block();
 
