@@ -244,7 +244,7 @@ static uint64_t sc_exit(process_t* proc, void* args, size_t args_sz) {
 
     uint64_t status = *(uint64_t*)args;
 
-    assert(interrupt_enable() && "FKK");
+    assert(interrupt_enable());
 
     sched_kill_process(sched_current_pid(), status);
     // every thread (including the current one)
@@ -265,6 +265,27 @@ static uint64_t sc_exit(process_t* proc, void* args, size_t args_sz) {
     //schedule();
 }
 
+static uint64_t sc_thread_exit(process_t* proc, void* args, size_t args_sz) {
+    if(args_sz != 0) {
+        sc_warn("bad args_sz", args, args_sz);
+    }
+
+    _cli();
+    spinlock_acquire(&proc->lock);
+    thread_t* th = sched_get_thread_by_tid(proc, sched_current_tid());
+
+    th->should_exit = 1;
+
+    spinlock_release(&proc->lock);
+    
+    // see above
+    thread_leave_syscall(proc, sched_current_tid());
+    _sti();
+
+    sched_yield();
+
+    panic("unreachable");
+}
 /*
 char* parse_cmdline(const char* cmdline, size_t cmdline_sz) {
     char* cmdline_copy = (char*)malloc(cmdline_sz);
@@ -406,7 +427,6 @@ static uint64_t sc_exec(process_t* proc, void* args, size_t args_sz) {
     // very bad naming....
     size_t cmd_args_sz = exec_args->args_sz;
     size_t env_sz = exec_args->env_sz;
-
 
 
     ////////////////////////////////////////////
@@ -1013,7 +1033,7 @@ static uint64_t sc_getpid(process_t* proc, void* args, size_t args_sz) {
         return -1;
     }
 
-    return proc->pid;
+    return proc->pid | ((uint64_t) sched_current_tid() << 32);
 }
 
 
@@ -1299,7 +1319,6 @@ uint64_t sc_futex_wait(process_t* proc, void* args, size_t args_sz) {
         return -1; // EFAULT
     }
 
-    int ret = 0;
 
     _cli();
     // process lock
@@ -1311,22 +1330,43 @@ uint64_t sc_futex_wait(process_t* proc, void* args, size_t args_sz) {
         process_futex_push_waiter(proc, a->addr, tid);
         spinlock_release(&proc->lock);
         _sti();
+
+
         // @todo check sleep argument overflow
         int res = sleep(a->timeout);
-
-        if(!res) {
-            spinlock_acquire(&proc->lock);
-            process_futex_drop_waiter(proc, tid);
-            spinlock_release(&proc->lock);
-            // timeout reached
-            return -1; // ETIMEDOUT
-        }
         
-        return 0;        
+        int ret = 0;
+
+        _cli();
+        spinlock_acquire(&proc->lock);
+
+    
+        if(res == 1) {
+            // woken up by signal: drop the futex wait and return
+            process_futex_drop_waiter(proc, tid);
+
+            ret = -1; // EINTR
+        }
+        else if(res == 2){
+            // woken up by futex_wake
+            ret = 0;
+        }
+        else {
+            // the sleep call timed out
+            ret = -1; // ETIMEDOUT
+            process_futex_drop_waiter(proc, tid);
+        }
+
+        spinlock_release(&proc->lock);
+        _sti();
+        
+        return ret;
+    }
+    else {
+        return -1;// EAGAIN
     }
     
     spinlock_release(&proc->lock);
-
     return 0;
 }
 
@@ -1338,11 +1378,12 @@ uint64_t sc_futex_wake(process_t* proc, void* args, size_t args_sz) {
     }
     struct sc_futex_wake_args* a = args;
 
+    _cli();
     spinlock_acquire(&proc->lock);
 
-    process_futex_wake(proc, a->addr, a->num);
 
-    spinlock_release(&proc->lock);
+    process_futex_wake(proc, a->addr, a->num);
+    _sti();
 
     return 0;
 }
@@ -1365,31 +1406,33 @@ void syscall_init(void) {
     for(unsigned i = 0; i < SC_END; i++)
         sc_funcs[i] = sc_unimplemented;
 
-    sc_funcs[SC_SLEEP]      = sc_sleep;
-    sc_funcs[SC_CLOCK]      = sc_clock;
-    sc_funcs[SC_EXIT]       = sc_exit;
-    sc_funcs[SC_OPEN]       = sc_open;
-    sc_funcs[SC_CLOSE]      = sc_close;
-    sc_funcs[SC_READ]       = sc_read;
-    sc_funcs[SC_WRITE]      = sc_write;
-    sc_funcs[SC_TRUNCATE]   = sc_truncate;
-    sc_funcs[SC_SEEK]       = sc_seek;
-    sc_funcs[SC_ACCESS]     = sc_access;
-    sc_funcs[SC_DUP]        = sc_dup;
-    sc_funcs[SC_PIPE]       = sc_pipe;
+
+    sc_funcs[SC_SLEEP]       = sc_sleep;
+    sc_funcs[SC_CLOCK]       = sc_clock;
+    sc_funcs[SC_EXIT]        = sc_exit;
+    sc_funcs[SC_OPEN]        = sc_open;
+    sc_funcs[SC_CLOSE]       = sc_close;
+    sc_funcs[SC_READ]        = sc_read;
+    sc_funcs[SC_WRITE]       = sc_write;
+    sc_funcs[SC_TRUNCATE]    = sc_truncate;
+    sc_funcs[SC_SEEK]        = sc_seek;
+    sc_funcs[SC_ACCESS]      = sc_access;
+    sc_funcs[SC_DUP]         = sc_dup;
+    sc_funcs[SC_PIPE]        = sc_pipe;
     sc_funcs[SC_THREAD_CREATE] = sc_thread_create;
-    sc_funcs[SC_SBRK]       = sc_sbrk;
-    sc_funcs[SC_EXEC]       = sc_exec;
-    sc_funcs[SC_CHDIR]      = sc_chdir;
-    sc_funcs[SC_GETCWD]     = sc_getcwd;
-    sc_funcs[SC_GETPID]     = sc_getpid;
-    sc_funcs[SC_GETPPID]    = sc_getppid;
-    sc_funcs[SC_SIGSETUP]   = sc_sigsetup;
-    sc_funcs[SC_SIGRETURN]  = sc_sigreturn;
-    sc_funcs[SC_SIGKILL]    = sc_kill;
-    sc_funcs[SC_SIGPAUSE]   = sc_pause;
-    sc_funcs[SC_FUTEX_WAIT] = sc_futex_wait;
-    sc_funcs[SC_FUTEX_WAKE] = sc_futex_wake;
+    sc_funcs[SC_THREAD_EXIT] = sc_thread_exit;
+    sc_funcs[SC_SBRK]        = sc_sbrk;
+    sc_funcs[SC_EXEC]        = sc_exec;
+    sc_funcs[SC_CHDIR]       = sc_chdir;
+    sc_funcs[SC_GETCWD]      = sc_getcwd;
+    sc_funcs[SC_GETPID]      = sc_getpid;
+    sc_funcs[SC_GETPPID]     = sc_getppid;
+    sc_funcs[SC_SIGSETUP]    = sc_sigsetup;
+    sc_funcs[SC_SIGRETURN]   = sc_sigreturn;
+    sc_funcs[SC_SIGKILL]     = sc_kill;
+    sc_funcs[SC_SIGPAUSE]    = sc_pause;
+    sc_funcs[SC_FUTEX_WAIT]  = sc_futex_wait;
+    sc_funcs[SC_FUTEX_WAKE]  = sc_futex_wake;
 
 
 
@@ -1455,6 +1498,8 @@ char* scname[] = {
     "SIGRETURN",
     "SIGKILL",
     "SIGPAUSE",
+    "FUTEX_WAIT",
+    "FUTEX_WAKE",
 };
 // a thread with tid must exist
 // user_sp: saved syscall user stack pointer
@@ -1557,7 +1602,7 @@ struct sc_return syscall_main(uint8_t   scid,
     }
     else {
 
-        // log_debug("%u.%u: %s", sched_current_pid(), sched_current_tid(), scname[scid]);
+        //log_debug("%u.%u: %u", sched_current_pid(), sched_current_tid(), scid);
 
         sc_fun_t fun = sc_funcs[scid];
         assert(fun);
