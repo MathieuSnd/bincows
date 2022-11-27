@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <assert.h>
 
-#define COND_VAL 0xC0D
+#define COND_VAL 0xC0DC0D
 
 int pthread_cond_init(pthread_cond_t* __restrict cond,
 			      const pthread_condattr_t* __restrict cond_attr

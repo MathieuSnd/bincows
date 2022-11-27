@@ -3,6 +3,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <assert.h>
+#include <unistd.h>
 
 
 
@@ -40,6 +41,8 @@ int pthread_mutex_init(pthread_mutex_t* mutex,
 /* Destroy a mutex.  */
 int pthread_mutex_destroy(pthread_mutex_t* mutex) {
     // nothing to free
+    (void) mutex;
+    return 0;
 }
 
 
@@ -121,6 +124,7 @@ int pthread_mutexattr_init(pthread_mutexattr_t* attr) {
 
 int pthread_mutexattr_destroy(pthread_mutexattr_t* attr) {
     (void) attr;
+    return 0;
 }
 
 
@@ -128,12 +132,15 @@ int pthread_mutexattr_getpshared(const pthread_mutexattr_t*
 					 __restrict attr,
 					 int *__restrict pshared
 ) {
+    (void) attr;
     *pshared = PTHREAD_PROCESS_PRIVATE;
+    return 0;
 }
 
 int pthread_mutexattr_setpshared(pthread_mutexattr_t* attr,
 					 int pshared
 ) {
+    (void) attr;
     switch(pshared) {
         case PTHREAD_PROCESS_PRIVATE:
             return 0;
@@ -149,12 +156,15 @@ int pthread_mutexattr_getprotocol(const pthread_mutexattr_t*
 					  __restrict attr,
 					  int *__restrict protocol
 ) {
+    (void) attr;
     *protocol = PTHREAD_PRIO_NONE;
+    return 0;
 }
 
 int pthread_mutexattr_setprotocol(pthread_mutexattr_t* attr,
 					  int protocol
 ) {
+    (void) attr;
     switch(protocol) {
         case PTHREAD_PRIO_NONE:    return 0;
         case PTHREAD_PRIO_INHERIT: return ENOTSUP;
@@ -169,13 +179,16 @@ int pthread_mutexattr_getprioceiling(const pthread_mutexattr_t*
 					     __restrict attr,
 					     int *__restrict prioceiling
 ) {
+    (void) attr;
     *prioceiling = 0;
+    return 0;
 }
 
 /* Set the mutex prioceiling attribute in *ATTR to PRIOCEILING.  */
 int pthread_mutexattr_setprioceiling(pthread_mutexattr_t* attr,
 					     int prioceiling
 ) {
+    (void) attr;
     switch(prioceiling) {
         case 0:  return 0;
         default: return EINVAL;
@@ -187,6 +200,7 @@ int pthread_mutexattr_setprioceiling(pthread_mutexattr_t* attr,
 int pthread_mutexattr_setrobust(pthread_mutexattr_t* attr,
 					int robustness
 ) {
+    (void) attr;
     switch(robustness) {
         case PTHREAD_MUTEX_STALLED: return 0;
         case PTHREAD_MUTEX_ROBUST:  return ENOTSUP;
@@ -198,5 +212,7 @@ int pthread_mutexattr_setrobust(pthread_mutexattr_t* attr,
 int pthread_mutexattr_getrobust(const pthread_mutexattr_t *attr,
 					int *robustness
 ) {
+    (void) attr;
     *robustness = PTHREAD_MUTEX_STALLED;
+    return 0;
 }

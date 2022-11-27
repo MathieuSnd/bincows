@@ -1,14 +1,16 @@
 #include <pthread.h>
 #include <bc_extsc.h>
+#include <unistd.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <assert.h>
+#include <stdlib.h>
 
 
 struct thread_info {
     tid_t tid;
     void* ret;
-    int done;
+    volatile int done;
     int joined;
 
     pthread_mutex_t mut;
@@ -126,15 +128,16 @@ void pthread_exit(void* retval) {
     struct thread_info* info = acquire_thread_info(tid);
 
     if(!info) {
+        printf("thread detached\n");
         // thread detached
-        return;
     }
-    
-    pthread_cond_broadcast(&info->cond);
-
-    info->ret = retval;
-
-    release_thread_info(info);
+    else {
+        printf("pthread_cond_broadcast\n");
+        pthread_cond_broadcast(&info->cond);
+        info->ret = retval;
+        info->done = 1;
+        release_thread_info(info);
+    }
 
     // actually exit the thread
     _thread_exit();
@@ -183,10 +186,11 @@ int pthread_create(pthread_t* __restrict newthread,
 
     insert_thread_info(ti);
 
-
-    *newthread = (pthread_t) {
-        .tid = tid,
-    };
+    if(newthread) {
+        *newthread = (pthread_t) {
+            .tid = tid,
+        };
+    }
 
     return 0;
 }
@@ -208,6 +212,7 @@ int pthread_join(pthread_t th, void** thread_return) {
 
     while(! ti->done) {
         pthread_cond_wait(&ti->cond, &ti->mut);
+        printf("join: %u", ti->done);
     }
 
     if(thread_return)

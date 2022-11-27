@@ -18,7 +18,7 @@ LDFLAGS := -shared -fno-pie -fno-pic
 
 ARFLAGS:=rc
 
-ASM_FLAGS := -felf64
+ASM_FLAGS := -felf64 -F dwarf -g
 
 
 CFILES :=$(shell find src -name "*.c")

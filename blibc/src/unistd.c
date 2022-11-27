@@ -174,7 +174,7 @@ int dup2 (int fd, int fd2) {
 
 /* Get the process ID of the calling process.  */
 pid_t getpid (void) {
-    return syscall(SC_GETPID, NULL, 0);
+    return syscall(SC_GETPID, NULL, 0) & 0xffffffff;
 }
 
 /* Get the process ID of the calling process's parent.  */
@@ -237,8 +237,7 @@ void sync (void) {
 
 
 unsigned int sleep(unsigned int seconds) {
-    syscall(SC_SLEEP, &seconds, sizeof(seconds));
-    return 0;
+    return usleep(1000llu * 1000 * seconds) / 1000llu / 1000;
 }
 
 

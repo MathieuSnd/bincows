@@ -72,6 +72,10 @@ int futex_wake(void* addr, int num) {
     return syscall(SC_FUTEX_WAKE, &args, sizeof(args));
 }
 
+int _get_tid(void) {
+    return syscall(SC_GETPID, NULL, 0) >> 32;
+}
+
 
 
 

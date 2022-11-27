@@ -13,9 +13,10 @@ syscall:
     ; the system wants us to
     ; trigger the YIELD(47) software interrupt
     test rdx, rdx
-    jne _ret
+    jne yield
+    leave
+    ret
+yield:
     int 47
-
-_ret:
     leave
     ret

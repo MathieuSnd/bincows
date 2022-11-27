@@ -17,6 +17,10 @@ extern void __stdio_init(void);
 // defined in signals.c
 extern void __signals_init(void);
 
+// defined in pthread.c
+extern void __pthread_init(void);
+
+
 
 static void init_argv(int argc, void* args, char** argv) {
 
@@ -65,6 +69,8 @@ _start(int argc, char* args, int envrionc, char* input_environ) {
 
 
     __stdio_init();
+
+    __pthread_init();
 
     //printf("main(%u, %lx)", argc, argv);
 
