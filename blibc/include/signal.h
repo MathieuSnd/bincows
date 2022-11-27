@@ -25,7 +25,7 @@ typedef void (*sighandler_t)(int);
 extern sighandler_t signal(int sig, sighandler_t handler);
 
 // same as kill(get_pid(), sig)
-#define raise(sig) sigsend(get_pid(), sig)
+#define raise(sig) sigsend(getpid(), sig)
 
 
 #define kill(pid, sig) sigsend(pid, sig)

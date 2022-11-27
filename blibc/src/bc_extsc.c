@@ -53,5 +53,25 @@ void __attribute__((noreturn)) _thread_exit(void) {
     __builtin_unreachable();
 }
 
+int futex_wait(void* addr, uint32_t value, uint64_t timeout) {
+    struct sc_futex_wait_args args = {
+        .addr = addr,
+        .value = value,
+        .timeout = timeout
+    };
+
+    return syscall(SC_FUTEX_WAIT, &args, sizeof(args));
+}
+
+int futex_wake(void* addr, int num) {
+    struct sc_futex_wake_args args = {
+        .addr = addr,
+        .num = num,
+    };
+
+    return syscall(SC_FUTEX_WAKE, &args, sizeof(args));
+}
+
+
 
 

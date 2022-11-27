@@ -96,5 +96,8 @@ extern void __attribute__((noreturn)) _thread_exit(void);
 extern int _get_tid(void);
 
 
+extern int futex_wait(void* addr, uint32_t value, uint64_t timeout);
+extern int futex_wake(void* addr, int num);
+
 
 #endif // BC_EXTSC_H
