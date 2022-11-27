@@ -72,7 +72,7 @@ static void insert_thread_info(struct thread_info* ti) {
     int err = pthread_mutex_lock(&thread_table_mut);
     assert(!err);
 
-    thread_table = realloc(thread_table, thread_table_sz * sizeof(ti));
+    thread_table = realloc(thread_table, (thread_table_sz + 1) * sizeof(ti));
 
     thread_table[thread_table_sz++] = ti;
 
@@ -132,7 +132,7 @@ void pthread_exit(void* retval) {
         // thread detached
     }
     else {
-        printf("pthread_cond_broadcast\n");
+        //printf("pthread_cond_broadcast\n");
         pthread_cond_broadcast(&info->cond);
         info->ret = retval;
         info->done = 1;
@@ -170,6 +170,7 @@ int pthread_create(pthread_t* __restrict newthread,
     };
 
     int tid = _thread_create(pthread_wrapper, warg);
+
 
     if(tid == 0) {
         return EAGAIN;
@@ -210,10 +211,9 @@ int pthread_join(pthread_t th, void** thread_return) {
 
     ti->joined = 1;
 
-    while(! ti->done) {
+    while(! ti->done) 
         pthread_cond_wait(&ti->cond, &ti->mut);
-        printf("join: %u", ti->done);
-    }
+
 
     if(thread_return)
         *thread_return = ti->ret;

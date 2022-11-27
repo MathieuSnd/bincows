@@ -36,9 +36,9 @@ static void* alloc_stack(process_t* process) {
     for(unsigned i = 0; i < process->n_threads; i++) {
         // assume every thread is the same stack size
         if(base == process->threads[i].stack.base) {
-            // @todo maybe put some padding between
-            // thread stacks    
-            base -= STACK_SIZE;
+
+            // 1 page stack padding to prevent stack overflows
+            base -= STACK_SIZE + 0x1000;
             
             // reloop
             i = -1;
@@ -1075,8 +1075,8 @@ void process_futex_push_waiter(process_t* restrict proc, void* uaddr, tid_t tid)
 static void futex_drop_waiter(process_t* restrict proc, int i) {
     struct futex_waiter* fw = proc->futex_waiters;
 
-    if(i == proc->n_futex_waiters + 1) {
-        fw[i] = fw[proc->n_futex_waiters + 1];
+    if(i != proc->n_futex_waiters - 1) {
+        fw[i] = fw[proc->n_futex_waiters - 1];
     }
 
     proc->n_futex_waiters--;
@@ -1116,8 +1116,6 @@ void process_futex_wake(process_t* proc, void* uaddr, int num) {
         if(proc->futex_waiters[i].uaddr == uaddr) {
             int tid = proc->futex_waiters[i].tid;
 
-            futex_drop_waiter(proc, i);
-            num--;
             // append the waiter
             assert(j < max_pop);
             waiters[j++] = proc->futex_waiters[i];
@@ -1126,6 +1124,10 @@ void process_futex_wake(process_t* proc, void* uaddr, int num) {
             // hold the mutex
             thread_t* thread = sched_get_thread_by_tid(proc, tid);
             thread->futex_signaled = 1;
+
+            futex_drop_waiter(proc, i);
+            num--;
+            i--;
         }
     }
     volatile pid_t pid = proc->pid;
@@ -1136,8 +1138,9 @@ void process_futex_wake(process_t* proc, void* uaddr, int num) {
     for(int i = 0; i < j; i++) {
         int res = sleep_cancel(pid, waiters[i].tid);
         assert(!res);
-
     }
+
+    //log_debug("futex_wake: woke %u/%u threads", j, max_pop);
     
 
     free(waiters);

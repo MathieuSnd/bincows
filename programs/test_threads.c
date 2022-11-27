@@ -1,36 +1,69 @@
-//#include <pthread.h>
+#include <pthread.h>
 
 
-#include <bc_extsc.h>
 #include <unistd.h>
 #include <signal.h>
+#include <stdlib.h>
+#include <stdio.h>
 
 
-void thread_entry(const char* print) {
+int X = 0;
 
-    for(;;) {
-        printf("%s!\n", print);
+pthread_mutex_t mutex;
+pthread_cond_t cond;
 
-        usleep(0);
+
+
+void* thread_entry(void* arg) {
+    const char* print = arg;
+
+    pthread_mutex_lock(&mutex);
+    pthread_cond_wait(&cond, &mutex);
+    pthread_mutex_unlock(&mutex);
+
+
+
+    for(int i = 0; i < 1000; i++) {
+        X++;
     }
+    printf("%s\n", print);
+
+
+    return print;
 }
 
 
-void handler(int n) {
-    printf("signal %u ----------------------------------------\n", n);
-}
-
+#define N_THREADS 500
 
 int main() {
-    signal(SIGINT, handler);
 
-    _thread_create(thread_entry, "thread 1");
-    usleep(0);
-    _thread_create(thread_entry, "thread 2");
 
-    
-    for(int i = 0; i < 10; i++) {
-        printf("thread 0\n");
-        usleep(0);
+    pthread_t threads[N_THREADS];
+    char* strings[N_THREADS];
+
+    pthread_mutex_init(&mutex, NULL);
+    pthread_cond_init (&cond,  NULL);
+
+ 
+    for(int i = 0; i < N_THREADS; i++) {
+        strings[i] = malloc(128); 
+        sprintf(strings[i], "thread %u!", i);
+        
+        pthread_create(&threads[i], NULL, thread_entry, strings[i]);
     }
+
+    usleep(1000*1000);
+
+    pthread_mutex_lock(&mutex);
+    pthread_cond_broadcast(&cond);
+    pthread_mutex_unlock(&mutex);
+
+
+    for(int i = 0; i < N_THREADS; i++) {
+        pthread_join(threads[i], NULL);
+    }
+
+
+    printf("X = %u\n", X);
+
 }

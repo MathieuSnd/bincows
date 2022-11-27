@@ -594,7 +594,6 @@ tid_t sched_create_thread(pid_t pid, void* entry, void* argument) {
 
     tid_t tid = process_create_thread(proc, entry, argument);
 
-    log_info("sched_create_thread %d", tid);
 
     spinlock_release(&proc->lock);
     _sti();
