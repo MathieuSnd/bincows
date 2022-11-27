@@ -1271,6 +1271,7 @@ uint64_t sc_pause(process_t* proc, void* args, size_t args_sz) {
     return 0;
 }
 
+
 uint64_t sc_thread_create(process_t* proc, void* args, size_t args_sz) {
     if(args_sz != sizeof(struct sc_thread_create_args)) {
         sc_warn("bad args_sz", args, args_sz);
@@ -1282,6 +1283,68 @@ uint64_t sc_thread_create(process_t* proc, void* args, size_t args_sz) {
     void* argument = a->argument;
 
     return sched_create_thread(proc->pid, entry, argument);
+}
+
+
+uint64_t sc_futex_wait(process_t* proc, void* args, size_t args_sz) {
+    if(args_sz != sizeof(struct sc_futex_wait_args)) {
+        sc_warn("bad args_sz", args, args_sz);
+        return -1;
+    }
+    struct sc_futex_wait_args* a = args;
+
+    // check that it is mapped
+    if(check_args(proc, a->addr, sizeof(a->value))) {
+        // unmapped address
+        return -1; // EFAULT
+    }
+
+    int ret = 0;
+
+    _cli();
+    // process lock
+    spinlock_acquire(&proc->lock);
+
+    tid_t tid = sched_current_tid();
+
+    if(*a->addr == a->value) {
+        process_futex_push_waiter(proc, a->addr, tid);
+        spinlock_release(&proc->lock);
+        _sti();
+        // @todo check sleep argument overflow
+        int res = sleep(a->timeout);
+
+        if(!res) {
+            spinlock_acquire(&proc->lock);
+            process_futex_drop_waiter(proc, tid);
+            spinlock_release(&proc->lock);
+            // timeout reached
+            return -1; // ETIMEDOUT
+        }
+        
+        return 0;        
+    }
+    
+    spinlock_release(&proc->lock);
+
+    return 0;
+}
+
+
+uint64_t sc_futex_wake(process_t* proc, void* args, size_t args_sz) {
+    if(args_sz != sizeof(struct sc_futex_wake_args)) {
+        sc_warn("bad args_sz", args, args_sz);
+        return -1;
+    }
+    struct sc_futex_wake_args* a = args;
+
+    spinlock_acquire(&proc->lock);
+
+    process_futex_wake(proc, a->addr, a->num);
+
+    spinlock_release(&proc->lock);
+
+    return 0;
 }
 
 
@@ -1302,29 +1365,31 @@ void syscall_init(void) {
     for(unsigned i = 0; i < SC_END; i++)
         sc_funcs[i] = sc_unimplemented;
 
-    sc_funcs[SC_SLEEP]     = sc_sleep;
-    sc_funcs[SC_CLOCK]     = sc_clock;
-    sc_funcs[SC_EXIT]      = sc_exit;
-    sc_funcs[SC_OPEN]      = sc_open;
-    sc_funcs[SC_CLOSE]     = sc_close;
-    sc_funcs[SC_READ]      = sc_read;
-    sc_funcs[SC_WRITE]     = sc_write;
-    sc_funcs[SC_TRUNCATE]  = sc_truncate;
-    sc_funcs[SC_SEEK]      = sc_seek;
-    sc_funcs[SC_ACCESS]    = sc_access;
-    sc_funcs[SC_DUP]       = sc_dup;
-    sc_funcs[SC_PIPE]      = sc_pipe;
+    sc_funcs[SC_SLEEP]      = sc_sleep;
+    sc_funcs[SC_CLOCK]      = sc_clock;
+    sc_funcs[SC_EXIT]       = sc_exit;
+    sc_funcs[SC_OPEN]       = sc_open;
+    sc_funcs[SC_CLOSE]      = sc_close;
+    sc_funcs[SC_READ]       = sc_read;
+    sc_funcs[SC_WRITE]      = sc_write;
+    sc_funcs[SC_TRUNCATE]   = sc_truncate;
+    sc_funcs[SC_SEEK]       = sc_seek;
+    sc_funcs[SC_ACCESS]     = sc_access;
+    sc_funcs[SC_DUP]        = sc_dup;
+    sc_funcs[SC_PIPE]       = sc_pipe;
     sc_funcs[SC_THREAD_CREATE] = sc_thread_create;
-    sc_funcs[SC_SBRK]      = sc_sbrk;
-    sc_funcs[SC_EXEC]      = sc_exec;
-    sc_funcs[SC_CHDIR]     = sc_chdir;
-    sc_funcs[SC_GETCWD]    = sc_getcwd;
-    sc_funcs[SC_GETPID]    = sc_getpid;
-    sc_funcs[SC_GETPPID]   = sc_getppid;
-    sc_funcs[SC_SIGSETUP]  = sc_sigsetup;
-    sc_funcs[SC_SIGRETURN] = sc_sigreturn;
-    sc_funcs[SC_SIGKILL]   = sc_kill;
-    sc_funcs[SC_SIGPAUSE]  = sc_pause;
+    sc_funcs[SC_SBRK]       = sc_sbrk;
+    sc_funcs[SC_EXEC]       = sc_exec;
+    sc_funcs[SC_CHDIR]      = sc_chdir;
+    sc_funcs[SC_GETCWD]     = sc_getcwd;
+    sc_funcs[SC_GETPID]     = sc_getpid;
+    sc_funcs[SC_GETPPID]    = sc_getppid;
+    sc_funcs[SC_SIGSETUP]   = sc_sigsetup;
+    sc_funcs[SC_SIGRETURN]  = sc_sigreturn;
+    sc_funcs[SC_SIGKILL]    = sc_kill;
+    sc_funcs[SC_SIGPAUSE]   = sc_pause;
+    sc_funcs[SC_FUTEX_WAIT] = sc_futex_wait;
+    sc_funcs[SC_FUTEX_WAKE] = sc_futex_wake;
 
 
 

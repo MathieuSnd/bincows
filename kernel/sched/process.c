@@ -1057,3 +1057,50 @@ void* process_get_shm_vbase(process_t* proc, shmid_t id) {
 
     return NULL;
 }
+
+
+void process_futex_push_waiter(process_t* restrict proc, void* uaddr, tid_t tid) {
+    assert(!interrupt_enable());
+    proc->futex_waiters = realloc(proc->futex_waiters, 
+                        (proc->n_futex_waiters + 1) * sizeof(struct futex_waiter));
+
+    proc->futex_waiters[proc->n_futex_waiters++] = (struct futex_waiter) {
+        .uaddr = uaddr,
+        .tid = tid,
+    };
+}
+
+static void futex_drop_waiter(process_t* restrict proc, int i) {
+    struct futex_waiter* fw = proc->futex_waiters;
+
+    if(i == proc->n_futex_waiters + 1) {
+        fw[i] = fw[proc->n_futex_waiters + 1];
+    }
+
+    proc->n_futex_waiters--;
+}
+
+
+void process_futex_drop_waiter(process_t* restrict proc, tid_t tid) {
+    assert(!interrupt_enable());
+
+    for(int i = 0; i < proc->n_futex_waiters; i++) {
+        if(proc->futex_waiters[i].tid == tid)
+            futex_drop_waiter(proc, i);
+    }
+}
+
+
+
+void process_futex_wake(process_t* restrict proc, void* uaddr, int num) {
+    assert(!interrupt_enable());
+
+    for(int i = 0; i < proc->n_futex_waiters && num; i++) {
+        if(proc->futex_waiters[i].uaddr == uaddr) {
+            sleep_cancel(proc->pid, proc->futex_waiters[i].tid);
+            futex_drop_waiter(proc, i);
+            i--;
+            num--;
+        }
+    }
+}

@@ -36,7 +36,9 @@ typedef unsigned fd_t;
 #define SC_SIGRETURN     24
 #define SC_SIGKILL       25
 #define SC_SIGPAUSE      26
-#define SC_END           27
+#define SC_FUTEX_WAIT    27
+#define SC_FUTEX_WAKE    28
+#define SC_END           29
 
 
 
@@ -169,5 +171,17 @@ struct sc_sigkill_args {
 struct sc_thread_create_args {
     void* entry;
     void* argument;
+};
+
+
+struct sc_futex_wait_args {
+    uint32_t* addr;
+    uint32_t value;
+    uint64_t timeout;
+};
+
+struct sc_futex_wake_args {
+    uint32_t* addr;
+    size_t num;
 };
 

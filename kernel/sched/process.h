@@ -69,6 +69,11 @@ struct process_mem_map {
     uint64_t shared_pd;
 };
 
+struct futex_waiter {
+    void* uaddr;
+    tid_t tid;
+};
+
 
 typedef struct process {
     pid_t pid;
@@ -173,6 +178,11 @@ typedef struct process {
     int n_shms;
 
 
+    // unsorted array of futex waiters
+    struct futex_waiter* futex_waiters;
+
+    // number of futex waiters
+    int n_futex_waiters;
 } process_t;
 
 
@@ -312,6 +322,12 @@ void process_map(process_t* p);
 // (private and shared)
 // a process should be mapped already
 void process_unmap(void);
+
+
+void process_futex_push_waiter(process_t* proc, void* uaddr, tid_t tid);
+void process_futex_wake       (process_t* proc, void* uaddr, int num);
+void process_futex_drop_waiter(process_t* proc, tid_t tid);
+
 
 
 
