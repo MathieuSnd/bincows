@@ -7,6 +7,7 @@
 #include "../../lib/panic.h"
 #include "../../memory/heap.h"
 #include "../../lib/registers.h"
+#include "../../int/idt.h"
 #include "memfs.h"
 
 #include "../../sched/shm.h"
