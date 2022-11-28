@@ -251,6 +251,42 @@ int truncate_file(struct fs* restrict fs,
 }
 
 
+static void dev_null(void) {
+
+    int null_read(void* arg, void* buf, size_t begin, size_t count) {
+        (void) arg;
+        (void) buf;
+        (void) begin;
+        (void) count;
+        return 0;
+    };
+    int null_write(void* arg, const void* buf, size_t begin, size_t count) {
+        (void) arg;
+        (void) buf;
+        (void) begin;
+        (void) count;
+        return count;
+    };
+
+    int res = devfs_map_device(
+        (devfs_file_interface_t) {
+            .arg = NULL,
+            .file_size = -1,
+            .read = null_read,
+            .write = null_write,
+            .rights = {
+                .exec = 0,
+                .read = 1,
+                .write = 1,
+                .seekable = 1,
+                .truncatable = 0
+            },
+        }, "null");
+
+    assert(res);
+}
+
+
 
 fs_t* devfs_mount(void) {
     fs_t* fs = malloc(sizeof(fs_t) + sizeof(struct devfs_priv));
@@ -291,6 +327,11 @@ fs_t* devfs_mount(void) {
 
     fs->name = strdup("devfs");
     fs->part = NULL;
+
+    devfs = fs;
+
+    // /dev/null is our first file
+    dev_null();
 
     return devfs = fs;
 }
