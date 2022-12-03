@@ -178,7 +178,7 @@ int create_pipe(file_handle_pair_t* ends) {
     dirent.rights.value = 2; // write only
     dirent.ino |= 1llu << 63;
 
-    sprintf(path, "/pipe/out/%u", id);
+    sprintf(path, "/pipe/in/%u", id);
 
     ends->in = vfs_open_file_from(pipefs, &dirent,  path, VFS_WRITE);
 
