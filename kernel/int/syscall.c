@@ -301,7 +301,7 @@ char* parse_cmdline(const char* cmdline, size_t cmdline_sz) {
 
 // close_fd() is not thread safe.
 static int atomic_close_fd(process_t* proc, int i) {
-    assert(i > 0);
+    assert(i >= 0);
     assert(i < MAX_FDS);
 
     assert(interrupt_enable());
@@ -408,12 +408,6 @@ static uint64_t sc_exec(process_t* proc, void* args, size_t args_sz) {
 
     assert(rd == file_sz);
 
-/*    
-    // checksum
-    int s = memsum(elf_data, file_sz);
-
-    printf("checksum: %d\n", s);
-*/
 
     // as we might to map another process
     // we won't be able to access args and env
@@ -491,6 +485,7 @@ static uint64_t sc_exec(process_t* proc, void* args, size_t args_sz) {
 
             free(args_copy);
             free(env_copy);
+            _sti();
             
             return -1;
         }
@@ -528,6 +523,8 @@ static uint64_t sc_exec(process_t* proc, void* args, size_t args_sz) {
         // even if the process creation failed, we 
         // still need to remap the process
         process_map(proc);
+        _sti();
+
         return -1;
     }
 
