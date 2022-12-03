@@ -283,7 +283,7 @@ static void dev_null(void) {
             },
         }, "null");
 
-    assert(res);
+    assert(!res);
 }
 
 

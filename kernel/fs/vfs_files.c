@@ -284,7 +284,8 @@ static
 file_handle_t* create_handler(
                     fs_t* fs, 
                     fast_dirent_t* dirent, 
-                    const char* path
+                    const char* path,
+                    int flags
 ) {
     handle_id_t hid = handle_next_id();
 
@@ -313,6 +314,7 @@ file_handle_t* create_handler(
     handle->buffer_valid = 0;
     handle->sector_count = 0;
     handle->handle_id = hid;
+    handle->flags = flags;
     
 
     handle->sector_buff = (void *)handle + sizeof(file_handle_t);
@@ -364,20 +366,29 @@ void set_stream_offset(file_handle_t* stream,
 
 file_handle_t* vfs_open_file_from(fs_t* fs, fast_dirent_t* dirent, const char* path, int flags) {
 
+    assert(flags < 64);
+
     // file does not exist or isn't a file
     if (dirent->type != DT_REG) {
         return NULL;
     }
 
     // file is not writable
-    if (flags & VFS_WRITE && !dirent->rights.write)
+    if ((flags & VFS_WRITE) && !dirent->rights.write)
         return NULL;
     
-    if (flags & VFS_READ && !dirent->rights.read)
+    if ((flags & VFS_READ) && !dirent->rights.read)
         return NULL;
-    
 
-    file_handle_t* h = create_handler(fs, dirent, path);
+
+    if(dirent->rights.seekable)
+        flags |= VFS_SEEKABLE;
+    
+    if(dirent->rights.truncatable)
+        flags |= VFS_TRUNCATABLE;
+
+
+    file_handle_t* h = create_handler(fs, dirent, path, flags);
 
     if(!h) {
         return NULL;
@@ -386,13 +397,6 @@ file_handle_t* vfs_open_file_from(fs_t* fs, fast_dirent_t* dirent, const char* p
     if(flags & VFS_APPEND)
         set_stream_offset(h, dirent->file_size);
 
-    if(dirent->rights.seekable)
-        flags |= VFS_SEEKABLE;
-    
-    if(dirent->rights.truncatable)
-        flags |= VFS_TRUNCATABLE;
-
-    h->flags = flags;
 
 
     return h;
@@ -420,11 +424,38 @@ file_handle_t* vfs_open_file(const char *path, int flags) {
 }
 
 
-file_handle_t* vfs_handle_dup(file_handle_t* from) {
+file_handle_t* vfs_handle_dup(file_handle_t* restrict from) {
     // see vfs_open_file
 
+    assert(interrupt_enable());
+    _cli();
     fs_t* fs = from->fs;
+    uint64_t vfile_id = from->vfile_id;
 
+    uint64_t addr;
+    handle_id_t hid = handle_next_id();
+    
+    {
+        struct file_ent* e = aquire_vfile(vfile_id);
+        addr = e->addr;
+        release_vfile();
+    }
+
+
+
+    int allowed;
+    
+    if(fs->open_instance)
+        allowed = fs->open_instance(fs, addr, hid);
+    else
+        allowed = 1;
+
+    if(!allowed) {
+        // the FS refuses the handle to be
+        // created
+        _sti();
+        return NULL;
+    }
 
 
     file_handle_t* new = malloc(
@@ -439,13 +470,17 @@ file_handle_t* vfs_handle_dup(file_handle_t* from) {
     new->sector_count  = from->sector_count;
     new->sector_offset = from->sector_offset;
     new->sector_buff   = new + 1;
+    new->handle_id     = hid;
+    new->flags         = from->flags;
 
     // @todo lock FS operation
     fs->n_open_files++;
+    
 
 
-    uint64_t vfile_id = from->vfile_id;
     register_handle_to_vfile(vfile_id, new);
+
+    _sti();
 
     return new;
 }
@@ -784,10 +819,14 @@ size_t vfs_read_file(void *ptr, size_t size,
     assert(interrupt_enable());
 
 
-    aquire_file_access(stream->vfile_id);
-
     assert(stream);
     assert((uint64_t)ptr >= 0x1000);
+
+    if(!(stream->flags & VFS_READ))
+        return -1;
+
+
+    aquire_file_access(stream->vfile_id);
     
 
     void *const buf = stream->sector_buff;
@@ -976,11 +1015,17 @@ size_t vfs_read_file(void *ptr, size_t size,
 
 size_t vfs_write_file(const void *ptr, size_t size, 
                       file_handle_t* restrict stream) {
+    
 
     // assert that interrupts are enabled
     assert(interrupt_enable());
     assert(stream);
+    assert(stream->flags < 64);
 
+    if(!(stream->flags & VFS_WRITE)) {
+        log_warn("tried to write on handle with flags %u", stream->flags);
+        return -1;
+    }
 
     if(size == 0) {
         return 0;
@@ -1050,7 +1095,7 @@ size_t vfs_write_file(const void *ptr, size_t size,
             write_blocks
         );
 
-        if(w < 0)
+        if(w < 0) 
             error = 1;
     }
     /*     
