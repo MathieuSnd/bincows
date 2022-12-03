@@ -48,7 +48,7 @@ typedef struct {
 } pthread_mutex_t;
 
 
-typedef unsigned long pthread_cond_t;
+typedef unsigned int pthread_cond_t;
 
 
 // unused structs for unused functions

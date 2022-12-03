@@ -11,7 +11,7 @@ struct thread_info {
     tid_t tid;
     void* ret;
     volatile int done;
-    int joined;
+    volatile int joined;
 
     pthread_mutex_t mut;
     pthread_cond_t cond;
@@ -132,11 +132,10 @@ void pthread_exit(void* retval) {
         // thread detached
     }
     else {
-        //printf("pthread_cond_broadcast\n");
-        pthread_cond_broadcast(&info->cond);
         info->ret = retval;
         info->done = 1;
         release_thread_info(info);
+        pthread_cond_broadcast(&info->cond);
     }
 
     // actually exit the thread
@@ -211,8 +210,9 @@ int pthread_join(pthread_t th, void** thread_return) {
 
     ti->joined = 1;
 
-    while(! ti->done) 
+    while(! ti->done) {
         pthread_cond_wait(&ti->cond, &ti->mut);
+    }
 
 
     if(thread_return)
