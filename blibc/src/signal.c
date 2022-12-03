@@ -9,7 +9,7 @@ static void sig_terminate(int sig) {
 }
 
 static void sig_ignore(int sig) {
-    printf("fatal signal error: unreachable (sig %d)\n", sig);
+    printf("fatal signal error: unreachable (sig %d, pid %i)\n", sig, getpid());
     _exit(1);
 }
 
@@ -31,8 +31,8 @@ typedef uint32_t sigmask_t;
 
 // for signals that terminate by default,
 // the terminason is done by calling the sig_terminate function
-//  need C23 to use 0b0000'0000'0000'0000'0110'0001'0000'1000...
-#define DEFL_IGNMASK 0b00000000000000000110000100001000
+//  need C23 to use 0011'0000'1000'0110'0000'0000'0000'0000...
+#define DEFL_IGNMASK 0b00110000100001100000000000000000
 
 
 static sigmask_t ign_mask = DEFL_IGNMASK;
