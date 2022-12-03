@@ -7,15 +7,25 @@ void ps2kb_init(void);
 // keys
 #define PS2KB_ESCAPE 1
 
+enum ps2_event_type {
+    KEYPRESSED  = 1,
+    KEYRELEASED = 2,
+    KEYREPEAT   = 3,
 
-struct kbevent {
-    enum {
-        KEYRELEASED = 0, 
-        KEYPRESSED = 1
-    } type;
-    uint32_t keycode;
-    uint32_t scancode;
+    MOUSE_MOVE  = 5,
 };
+
+
+struct ps2_event {
+    enum ps2_event_type type;
+
+    int keycode;
+    int scancode;
+
+    // 0-terminated sequence
+    char unix_sequence[8];
+};
+
 
 
 void ps2_trigger_CPU_reset(void);
