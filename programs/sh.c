@@ -269,7 +269,6 @@ void print_prompt(void) {
 
 void type_character(char ch) {
 
-
     static int cur = 0;
     static char line[1024];
 
@@ -287,19 +286,9 @@ void type_character(char ch) {
         return;
     }
     else if(seq_n) {
-        if(seq_n == 1) {
-            if(ch == '[') {
-                // ANSI keycode sequence
-                seq_n++;
-                seq[1] = '[';
-            }
-            else {
-                // @todo
-                seq_n = 0;
-                return;
-            }
-        }
-        else if(seq_n == 2) {
+        seq[seq_n++] = ch;
+
+        if(seq_n == 2) {
             if(seq[1] == '[') {
                 seq[3] = 0;
                 seq_n = 0;
@@ -327,40 +316,11 @@ void type_character(char ch) {
                         }
                         break;
                 }
-
             }
         }
         return;
     }
 
-
-
-    if(ctrl_key) {
-        ctrl_key = 0;
-        ch = toupper(ch);
-
-        switch (ch)
-        {
-        case 'C':
-        // same as new line but don't excecute
-            printf("\n");
-            print_prompt();
-
-            //line[cur] = 0;
-            line[0] = 0;
-            cur = 0;
-
-            break;
-        case 'D':
-            printf("\x0c");
-            exit(1);
-            break;
-        default:
-            break;
-        }
-
-        return;
-    }
 
     switch(ch) {
         default: 
@@ -388,8 +348,20 @@ void type_character(char ch) {
             cur++;
             break;
         }
-        case '\xff':
-            ctrl_key = 1;
+        case 0x3: // ^C
+        // same as new line but don't excecute
+            printf("\n");
+            print_prompt();
+
+            //line[cur] = 0;
+            line[0] = 0;
+            cur = 0;
+
+            break;
+        case 0x4: // ^D
+        // close the terminal
+            printf("\x0c");
+            exit(1);
             break;
         case '\b':
             if(cur > 0) {
@@ -538,61 +510,34 @@ static int execute(char* cmd) {
 
 
 
-            if(r == '\x1b') {
-                ainsi_seq_i++;
-            }
-            else if(ainsi_seq_i) {
-                assert(ainsi_seq_i < 8);
-                ainsi_seq[ainsi_seq_i++] = r;
-                if(r == '~') {
-                    // sequence end
-                    if(ainsi_seq[1] == '[') {
-                        // ctrl / alt key pressed
-                        int modifier = 1;
-                        if(ainsi_seq_i == 6)
-                            modifier = ainsi_seq[4] - '0';
+            if(r == 0x3) { //^C
+                // kill the child process
+                r = kill(pid, SIGINT);
 
-                        if(modifier == 1) {
-                            int keycode = toupper(ainsi_seq[2]);
-                            // CTRL character
-                            switch(keycode) {
-                                case 'D': // CTRL-D
-                                // eof: close pipe
-                                    printf("^D\n");
-                                    close(pipe_ends[1]);
+                // r == -1 if no process has 
+                // the requested pid. It means
+                // that the process is already 
+                // terminated
 
-                                    break;
-                                case 'C': // CTRL-C
-                                    // kill the child process
-
-                                    r = kill(pid, SIGINT);
-
-                                    // r == -1 if no process has 
-                                    // the requested pid. It means
-                                    // that the process is already 
-                                    // terminated
-
-                                    if(r == -1) {
-                                        type_character(0xff);
-                                        type_character('c');
-                                        
-                                        free(final);
-                                        free(argv);
-                                        return pid;
-                                    }
-
-                                    // else, a SIGINT signal has been
-                                    // sent to the process.
-
-                                    printf("^C\n");
-                                    break;
-                            }
-                        }
-                    }
-
-                    ainsi_seq_i = 0;
+                if(r == -1) {
+                    type_character(0x3);
+                    
+                    free(final);
+                    free(argv);
+                    return pid;
                 }
-            } else {
+
+                // else, a SIGINT signal has been
+                // sent to the process.
+
+                printf("^C\n");
+            }
+            else if(r == 0x4) { // ^D
+                // eof: close pipe
+                printf("^D\n");
+                close(pipe_ends[1]);
+            } 
+            else {
                 int w = write(pipe_ends[1], &r, 1);
 
                 if(w <= 0) {

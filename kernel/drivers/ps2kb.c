@@ -7,9 +7,15 @@
 #include "../lib/panic.h"
 #include "../lib/string.h"
 #include "../lib/time.h"
-
-
 #include "../fs/devfs/devfs.h"
+
+static
+int tolower(int c) {
+    if(c >= 'A' && c <= 'Z')
+        return c + 32;
+    return c;
+}
+
 
 
 static char lshift_state, rshift_state, altgr_state; 
@@ -104,12 +110,12 @@ static int block_pop_chars(char* c, size_t n) {
             
             _sti();
             int cause = sleep(20);
-            _cli();
 
             if(cause) {
                 // a signal interupted the sleep
                 return i;
             }
+            _cli();
         }
 
     
@@ -243,7 +249,6 @@ static void process_byte(uint8_t b) {
         modifier_key = 1;
     }
 
-
     if(seq) {
         switch(ev.scancode) {
                 break;
@@ -275,10 +280,16 @@ static void process_byte(uint8_t b) {
         else
             ev.keycode = ps2_azerty_table_lowercase[ev.scancode];
 
-        if(ctrl_state)
-            sprintf(ev.unix_sequence, "\x1b[%c~", ev.keycode);
-        else
-            ev.unix_sequence[0] = ev.keycode;
+
+        if(ctrl_state) {
+            switch(tolower(ev.keycode)) {
+                case 'c': ev.unix_sequence[0] = 0x03; // ETX character ^C
+                break;
+                case 'd': ev.unix_sequence[0] = 0x04; // EOT character ^D
+                break;
+            }
+        }
+        else ev.unix_sequence[0] =ev.keycode;
     }
 
 
