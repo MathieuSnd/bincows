@@ -7,6 +7,7 @@
 #include <bc_extsc.h>
 #include <signal.h>
 #include <ctype.h>
+#include <assert.h>
 
 
 #define VERSION "0.1"
@@ -30,7 +31,8 @@ int print_input_end() {
 
 
 static int execute(char* cmd);
-
+/*
+ moved to /dev/init
 void init_stream(void) {
     int __stdin  = open("/dev/ps2kb", 0,0);
     int __stdout = open("/dev/term", 0,0);
@@ -43,6 +45,7 @@ void init_stream(void) {
     if(__stderr != STDERR_FILENO)
         *(int*)3 = 0;
 }
+*/
 
 
 void print_cow(void) {
@@ -498,9 +501,11 @@ static int execute(char* cmd) {
 
     sigchld_flag = 0;
 
+
     // execute
     int pid = forkexec((const char* const*)argv, fdmask);
 
+    assert(pid);
 
     dup2(term_in, 0);    // close 0 (pipe read), put terminal input in 0
     close(term_in);      // close temp term_in fd
@@ -592,6 +597,7 @@ static int execute(char* cmd) {
         }
 
     }
+
     
     close(pipe_ends[1]);
     free(final);
@@ -643,8 +649,7 @@ void exec_script(const char* path) {
 }
 
 int main(int argc, char** argv) {
-
-    init_stream();
+    //init_stream();
     
     signal(SIGCHLD, sigchld_handler);
 

@@ -9,6 +9,7 @@ include Makefile.config
 CFILES :=$(shell echo *.c)
 EFILES := $(CFILES:.c=.elf)
 BIN_DIR := ../build/bin/
+LDLIBS := ../blibc/blibc.a
 
 debug: CFLAGS += -g
 debug: LDFLAGS += -g
@@ -27,12 +28,17 @@ all: $(EFILES) txe
 	cp write.elf $(BIN_DIR)/write
 	cp test_pipe.elf $(BIN_DIR)/test_pipe
 	cp less.elf $(BIN_DIR)/less
+	cp de.elf $(BIN_DIR)/de
+	cp init.elf $(BIN_DIR)/init
 	cp txe/txe.elf $(BIN_DIR)/txe
 
 
+de.elf: LDLIBS := ../../sdl_port/build/.libs/libSDL.a $(LDLIBS)
+de.elf: CFLAGS += -I../../sdl_port/include
+
 %.elf: %.c
 	$(CC) $(CFLAGS) -c $< -o $@.o
-	$(LD) -static $@.o ../blibc/blibc.a -o $@ 
+	$(LD) -static $@.o $(LDLIBS) -o $@ 
 
 clean:
 	rm -rf *.s *.elf

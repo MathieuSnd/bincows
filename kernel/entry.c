@@ -143,9 +143,9 @@ disk_part_t* find_main_part(const struct boot_interface* bi) {
 
 
 
-void launch_shell(void) {
-    // argv and envp for the initial shell
-    char argv[] = "/bin/sh\0";
+void launch_init(void) {
+    // argv and envp for the init program
+    char argv[] = "/bin/init\0";
     char envp[] = "\0";
 
 
@@ -301,7 +301,6 @@ void kernel_main(struct boot_interface* bi) {
     int r = vfs_mount(part, "/");
     assert(r != 0);
 
-    
     // init log file
     log_init_file("/var/log/sys.log");
 
@@ -313,12 +312,14 @@ void kernel_main(struct boot_interface* bi) {
     // /dev/term
     terminal_register_dev_file("term", terminal);
 
+
     // /dev/ps2kb
     ps2kb_register_dev_file("ps2kb");
 
     // /mem/video
     video_create_file("video");
 
+    
 
     log_debug("init sched");
     sched_init();
@@ -338,7 +339,7 @@ void kernel_main(struct boot_interface* bi) {
     log_debug("launch shell");
     // everything should be correctly initialized
     // now we can start the shell
-    launch_shell();
+    launch_init();
 
     log_debug("start scheduling");
 
