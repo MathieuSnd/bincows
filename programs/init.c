@@ -91,7 +91,7 @@ int main(int argc, char** argv) {
     const char* const sh_argv[] = {SH_CMD, NULL};
 
     // keep fds 0, 1, 2, 3
-    //forkexec(sh_argv, ~0x0f);
+    forkexec(sh_argv, ~0x0f);
 
     FILE* evfile = fopen(SYS_EVENT_FILE, "r");
 
@@ -112,7 +112,9 @@ int main(int argc, char** argv) {
 
         int ascii_key = (ev.type == KEYPRESSED) && ev.unix_sequence[0] != 0;
 
+
         if(ascii_key) {
+            //printf("/bin/init - '%s'\n", ev.unix_sequence);
             // only keep the unix sequence
             res = write(6, ev.unix_sequence, strlen(ev.unix_sequence));
             if(res <= 0) {

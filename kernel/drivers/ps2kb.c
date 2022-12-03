@@ -218,23 +218,29 @@ static void process_byte(uint8_t b) {
 
     int pressed = ev.type == KEYPRESSED;
 
+    // non 0 if the key is a modifier (ctrl, alt)
+    // and should not have a unix sequence
+    int modifier_key = 0;
+
     // @todo remove ?
     if(ev.scancode == 0x2A) {
         lshift_state = pressed;
-        return;
+        modifier_key = 1;
     }
     else if(ev.scancode == 0x36) {
         rshift_state = pressed;
-        return;
+        modifier_key = 1;
     }
 
 
     else if(ev.scancode == 56) {
         altgr_state =  pressed;
+        modifier_key = 1;
     }
 
     else if(ev.scancode == 0x1d) {
         ctrl_state = pressed;
+        modifier_key = 1;
     }
 
 
@@ -261,7 +267,7 @@ static void process_byte(uint8_t b) {
 
         seq = 0;
     }
-    else {
+    else if(!modifier_key) {
         if(altgr_state)
             ev.keycode = ps2_azerty_table_altgr    [ev.scancode];
         else if(is_caps())
@@ -269,7 +275,10 @@ static void process_byte(uint8_t b) {
         else
             ev.keycode = ps2_azerty_table_lowercase[ev.scancode];
 
-        ev.unix_sequence[0] = ev.keycode;
+        if(ctrl_state)
+            sprintf(ev.unix_sequence, "\x1b[%c~", ev.keycode);
+        else
+            ev.unix_sequence[0] = ev.keycode;
     }
 
 

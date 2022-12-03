@@ -520,6 +520,8 @@ static int execute(char* cmd) {
     else {
         // sub process is running
 
+        char ainsi_seq[8];
+        int  ainsi_seq_i = 0;
 
         while(1) {
             if(sigchld_flag) {
@@ -535,50 +537,60 @@ static int execute(char* cmd) {
             }
 
 
-            if(r == 0xff) {
-                // CTRL character
 
-                // read CTRL key 
-                r = fgetc(stdin);
+            if(r == '\x1b') {
+                ainsi_seq_i++;
+            }
+            else if(ainsi_seq_i) {
+                assert(ainsi_seq_i < 8);
+                ainsi_seq[ainsi_seq_i++] = r;
+                if(r == '~') {
+                    // sequence end
+                    if(ainsi_seq[1] == '[') {
+                        // ctrl / alt key pressed
+                        int modifier = 1;
+                        if(ainsi_seq_i == 6)
+                            modifier = ainsi_seq[4] - '0';
 
-                r = toupper(r);
+                        if(modifier == 1) {
+                            int keycode = toupper(ainsi_seq[2]);
+                            // CTRL character
+                            switch(keycode) {
+                                case 'D': // CTRL-D
+                                // eof: close pipe
+                                    printf("^D\n");
+                                    close(pipe_ends[1]);
 
+                                    break;
+                                case 'C': // CTRL-C
+                                    // kill the child process
 
-                switch(r) {
-                    case 'D': // CTRL-D
-                    // eof: close pipe
-                        printf("^D\n");
-                        close(pipe_ends[1]);
-                        //if(sigchld_flag)
-                        //    pause();
+                                    r = kill(pid, SIGINT);
 
-                        //free(argv);
-                        //return pid;
-                        break;
-                    case 'C': // CTRL-C
-                        // kill the child process
+                                    // r == -1 if no process has 
+                                    // the requested pid. It means
+                                    // that the process is already 
+                                    // terminated
 
-                        r = kill(pid, SIGINT);
+                                    if(r == -1) {
+                                        type_character(0xff);
+                                        type_character('c');
+                                        
+                                        free(final);
+                                        free(argv);
+                                        return pid;
+                                    }
 
-                        // r == -1 if no process has 
-                        // the requested pid. It means
-                        // that the process is already 
-                        // terminated
+                                    // else, a SIGINT signal has been
+                                    // sent to the process.
 
-                        if(r == -1) {
-                            type_character(0xff);
-                            type_character('c');
-                            
-                            free(final);
-                            free(argv);
-                            return pid;
+                                    printf("^C\n");
+                                    break;
+                            }
                         }
+                    }
 
-                        // else, a SIGINT signal has been
-                        // sent to the process.
-
-                        printf("^C\n");
-                        break;
+                    ainsi_seq_i = 0;
                 }
             } else {
                 int w = write(pipe_ends[1], &r, 1);
