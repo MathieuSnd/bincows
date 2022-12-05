@@ -399,8 +399,8 @@ static void esc_cup(struct data* restrict d) {
 
 
 
-    d->cur_col  = (vals[0] - 1) < 0 ? 0 : (vals[0] - 1);
-    d->cur_line = (vals[1] - 1) < 0 ? 0 : (vals[1] - 1);
+    d->cur_col  = (vals[1] - 1) < 0 ? 0 : (vals[1] - 1);
+    d->cur_line = (vals[0] - 1) < 0 ? 0 : (vals[0] - 1);
 
     d->cur_line += d->first_line;
 
@@ -652,7 +652,7 @@ static void update_framebuffer(driver_t* this) {
     // 64 bytes = 8 qwords
     const unsigned cache_line = 8;
 
-    uint64_t begin = clock_ns();
+    //uint64_t begin = clock_ns();
 
     uint64_t* devfb = dev->pix;
     uint64_t* buff = d->px_buffers[d->cur_px_buffer];
@@ -701,8 +701,8 @@ static void update_framebuffer(driver_t* this) {
     }
 
 
-    assert(clock_ns() >= begin);
-    fb_copy_ns = clock_ns() - begin;
+    //assert(clock_ns() >= begin);
+    //fb_copy_ns = clock_ns() - begin;
 
     //log_warn("framebuffer update time = %lu ns (%u ms)", fb_copy_ns, fb_copy_ns / (uint64_t)1e6);
 }
