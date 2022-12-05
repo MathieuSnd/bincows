@@ -650,19 +650,19 @@ static uint64_t sc_open(process_t* proc, void* args, size_t args_sz) {
 
         file_handle_t* h = vfs_open_file(path, a->flags);
 
-
-        if(a->flags & O_TRUNC) {
-            vfs_truncate_file(h, 0);
-            h->file_offset = 0;
-        }
-
-
         if(!h) {
             sc_warn("failed to open file", args, args_sz);
 
             free(path);
             return -1;
         }
+
+
+        if(a->flags & O_TRUNC) {
+            vfs_truncate_file(h, 0);
+            h->file_offset = 0;
+        }
+
 
         proc->fds[fd].file = h;
         proc->fds[fd].type = FD_FILE;
@@ -975,9 +975,7 @@ static uint64_t sc_chdir(process_t* proc, void* args, size_t args_sz) {
     fs_t* fs = vfs_open(path, &d);
 
 
-
     int res;
-
 
     if(fs != FS_NO && d.type == DT_DIR) {
         free(proc->cwd);
