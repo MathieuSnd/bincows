@@ -197,6 +197,7 @@ static void close_instance(fs_t* restrict fs, uint64_t addr, handle_id_t hid) {
 static void close_file(fs_t* restrict fs, uint64_t addr) {
     shmid_t id = (shmid_t)addr;
 
+
     struct memfs_priv* priv = (void*)(fs+1);
 
     memfsf_t* file = find_file(fs, id);
@@ -208,7 +209,10 @@ static void close_file(fs_t* restrict fs, uint64_t addr) {
 
     assert(i >= 0);
     assert(i < (int)priv->n_files);
+    assert(file->n_instances == 0);
 
+    if(file->kernel)
+        return;
 
     free(file->instances);
 
