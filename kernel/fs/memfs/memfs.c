@@ -13,6 +13,9 @@
 #include "../../sched/shm.h"
 #include "../../sched/sched.h"
 
+
+#define NO_SHM ((shmid_t)-1)
+
 typedef
 struct file_instance {
     struct shm_instance* shm;
@@ -44,7 +47,7 @@ struct memfs_priv {
 static fs_t* memfs = NULL;
 
 
-void memfs_register_file(char* name, shmid_t id) {
+void memfs_register_file(const char* name, shmid_t id) {
     assert(memfs);
 
     struct memfs_priv* pr = (void*)(memfs+1);
@@ -53,7 +56,7 @@ void memfs_register_file(char* name, shmid_t id) {
     pr->files = realloc(pr->files, sizeof(memfsf_t) * (pr->n_files+1));
     pr->files[pr->n_files++] = (memfsf_t) {
         .id = id,
-        .name = name,
+        .name = strdup(name),
         .n_instances = 0,
         .instances = NULL,
         .kernel = 1
@@ -127,8 +130,20 @@ static int open_instance(fs_t* restrict fs, uint64_t addr, handle_id_t hid) {
 
     pid_t pid = sched_current_pid();
 
+
+    struct shm_instance* shm;
+
+    if(id == NO_SHM) {
+        // the shm is not created yet. lets do that mow
+        shm = shm_create(0, pid);
+        id = shm->target;
+        file->id = id;
+    }
+    else
+        shm = shm_open(id, pid);
+
     file_instance_t new_fi = {
-        .shm = shm_open(id, pid),
+        .shm = shm,
         .pid = pid,
         .hid = hid,
     };
@@ -215,6 +230,7 @@ static void close_file(fs_t* restrict fs, uint64_t addr) {
         return;
 
     free(file->instances);
+    free(file->name);
 
 
     // @todo lock
@@ -333,8 +349,14 @@ static int add_dirent(struct fs* restrict fs, uint64_t dir_addr, const char* nam
     (void)dirent_addr;
     (void)type;
 
-    // @todo
+    assert(fs == memfs);
 
+    if(type != DT_REG)
+        return -1;
+
+    *dirent_addr = 0;
+    memfs_register_file(name, NO_SHM);
+    
     return -1;
 }
 

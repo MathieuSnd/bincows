@@ -27,6 +27,6 @@ struct mem_desc {
 
 fs_t* memfs_mount(void);
 
-void memfs_register_file(char* name, shmid_t id);
+void memfs_register_file(const char* name, shmid_t id);
 
 #endif// MEMFS_H

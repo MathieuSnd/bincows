@@ -744,9 +744,6 @@ static void aquire_file_access(uint64_t vfile_id) {
             struct file_ent* vfile = aquire_vfile(vfile_id);
             accessed = vfile->accessed;
 
-            //if(accessed)
-            //    log_info("concurrent file access %s", vfile->path);
-
             vfile->accessed = 1;
             release_vfile();
             
@@ -804,8 +801,6 @@ int vfs_truncate_file(file_handle_t *handle, uint64_t size)
 
     int res = fs->truncate_file(fs, &file, size);
 
-    log_debug("truncate_file: %d", res);
-
     // release vfile
     {
         _cli();
@@ -854,11 +849,6 @@ size_t vfs_read_file(void *ptr, size_t size,
     fs_t *fs = stream->fs;
 
 
-//    if(fs->type == FS_TYPE_FAT && sched_current_pid() == 2)
-//        log_warn("read %u from file", size);
-//        stacktrace_print();
-
-
 
     uint64_t file_size;
     {
@@ -885,13 +875,13 @@ size_t vfs_read_file(void *ptr, size_t size,
     uint64_t max_read = file_size - stream->file_offset;
 
     unsigned bsize = MIN(size, max_read);
+    const unsigned retsize = bsize;
 
     if(bsize <= 0) {
         // nothing to read
         release_file_access(stream->vfile_id);
         return 0;
     }
-
 
     // first read unaligned 
     if(stream->buffer_valid && cachable) {
@@ -921,7 +911,9 @@ size_t vfs_read_file(void *ptr, size_t size,
         
         if(!bsize) {
             release_file_access(stream->vfile_id);
-            return unaligned_size;
+        
+            assert(retsize == unaligned_size);
+            return retsize;
         }
 
         ptr += unaligned_size;
@@ -1028,7 +1020,7 @@ size_t vfs_read_file(void *ptr, size_t size,
     
     assert(bsize <= file_size);
     
-    return bsize;
+    return retsize;
 }
 
 
@@ -1043,7 +1035,6 @@ size_t vfs_write_file(const void *ptr, size_t size,
     assert(stream->flags < 2*VFS_TRUNCATABLE);
 
     if(!(stream->flags & VFS_WRITE)) {
-        log_warn("tried to write on handle with flags %u", stream->flags);
         return -1;
     }
 
@@ -1304,7 +1295,6 @@ uint64_t vfs_seek_file(file_handle_t *restrict stream, uint64_t offset, int when
     assert(interrupt_enable());
 
     if((stream->flags & VFS_SEEKABLE) == 0) {
-        log_warn("non seekable file");
         return -1;
     }
         
