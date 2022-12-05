@@ -282,11 +282,10 @@ static void process_byte(uint8_t b) {
 
 
         if(ctrl_state) {
-            switch(tolower(ev.keycode)) {
-                case 'c': ev.unix_sequence[0] = 0x03; // ETX character ^C
-                break;
-                case 'd': ev.unix_sequence[0] = 0x04; // EOT character ^D
-                break;
+            char c = tolower(ev.keycode);
+            if(c > 'a' && c < 'z') {
+                c = c - 'a' + 1;
+                ev.unix_sequence[0] = c;
             }
         }
         else ev.unix_sequence[0] =ev.keycode;
