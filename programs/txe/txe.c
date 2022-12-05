@@ -2,12 +2,13 @@
 #include <string.h>
 #include <unistd.h>
 #include <assert.h>
-#include <terminfo.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <signal.h>
 #include <ctype.h>
 
 
+#include "terminal.h"
 #include "txe.h"
 
 
@@ -30,40 +31,76 @@ static const char* cursor_reset_seq = "\033[0;0H";
 struct screen_size screen_size;
 
 
-static FILE* parse_args(int argc, char** argv) {
-    if (argc != 2) {
-        fprintf(stderr, "Usage: %s <file>\n", argv[0]);
-        exit(1);
-    } 
-
-    if(!strcmp(argv[1], "-")) {
-        opened_filename = strdup("stdin");
-        return stdin;
-    } else {
-        FILE* f = fopen(argv[1], "r");
-        if(!f) {
-            fprintf(stderr, "Could not open file %s\n", argv[1]);
-            exit(1);
-        }
-
-        opened_filename = strdup(argv[1]);
-        
-        return f;
-    }
-
+static void show_help(char* arg0) {
+    fprintf(stdout, 
+        "Usage: %s [options] <file>\n"
+        "Options: \n"
+        "    -c, --create    create the file if it doesn't already exist\n"
+        "    -h, --help      show this message\n"
+        "\n"
+        "For Bug reporting, please leave an issue on github.com/MathieuSnd/bincows.\n"
+        "\n"
+        , arg0);
 }
 
 
-#define LEFT_PADDING 6
+static FILE* parse_args(int argc, char** argv) {
+
+    int create = 0;
+
+    for(int i = 1; i < argc; i++) {
+        char* arg = argv[i];
+
+        if(arg[0] != '-') {
+            // must be a filename
+            if(opened_filename) {
+                fprintf(stderr, "%s: multiple input files", argv[0]);
+                exit(1);
+            }
+            else 
+                opened_filename = strdup(arg);
+        }
+        else {
+            if(!strcmp(arg, "-c") || !strcmp(arg, "--create"))
+                create = 1;
+            else if (!strcmp(arg, "-h") || !strcmp(arg, "--help")) {
+                show_help(argv[0]);
+                exit(0);
+            }
+        }
+    }
+
+    if(argc == 1) {
+        show_help(argv[0]);
+        exit(0);
+    }
 
 
-void analyze_lines(file_buffer_t* buf) {
+    // try to open the file
+    FILE* f = fopen(opened_filename, "r");
+    if(!f) {
+        if(create) {
+            f = fopen(opened_filename, "w+");
+            if(f)
+                return f;
+        }
+        fprintf(stderr, "Could not open file %s\n", opened_filename);
+        exit(1);
+    }
+
+    return f;
+}
+
+
+
+
+void file_analyze_lines(file_buffer_t* buf) {
 
     // find all newlines in the buffer
     buf->newlines = realloc(buf->newlines, sizeof(uint32_t) * (buf->buffer_size+2));
 
     if(!buf->newlines) {
-        fprintf(stderr, "Could not allocate memory for the newlines array\n");
+        fprintf(stderr, "Could not allocate memory for the newlines array %u\n", buf->buffer_size);
         exit(1);
     }
 
@@ -105,12 +142,26 @@ void analyze_lines(file_buffer_t* buf) {
 file_buffer_t* load_file(FILE* f) {
 
     file_buffer_t* buf = malloc(sizeof(file_buffer_t));
- 
+
     
+    int res;
     // try to load the entiere 
-    fseek(f, 0, SEEK_END);
+    res = fseek(f, 0, SEEK_END);
+
+    if(res) {
+        printf("couldn't seek file %s\n", opened_filename);
+        exit(1);
+    }
+
     buf->buffer_size = ftell(f) + 1;
     fseek(f, 0, SEEK_SET);
+
+
+    if(buf->buffer_size <= 0) {
+        fprintf(stderr, "IO Error reading %s\n", opened_filename);
+        exit(1);
+    }
+
 
 
     buf->buffer = malloc(buf->buffer_size);
@@ -122,18 +173,26 @@ file_buffer_t* load_file(FILE* f) {
 
     size_t read_bytes = fread(buf->buffer, 1, buf->buffer_size - 1, f);
 
+    if(read_bytes < 0) {
+        printf("Could not read from %s\n", opened_filename);
+        exit(1);
+    }
+
 
     buf->buffer_size = read_bytes;
 
 
     // shrink buffer
-    buf->buffer   = realloc(buf->buffer, buf->buffer_size);
+    // don't!
+    //buf->buffer   = realloc(buf->buffer, buf->buffer_size);
 
     buf->newlines = NULL;
-    analyze_lines(buf);
+    file_analyze_lines(buf);
 
     // start on line 1 
     buf->buffer_line_begin = 1;
+
+    buf->dirty = 0;
 
     return buf;
 }
@@ -152,7 +211,11 @@ screen_layout_t* init_screen_layout(void) {
 
     // layout buffer
     layout->buf_sz  = layout->lines * layout->cols * 2 + 2 * strlen(cursor_reset_seq) + 1;
+
+    assert(layout->buf_sz);
+
     layout->buf     = malloc(layout->buf_sz);
+    assert(layout->buf);
 
 
     return layout;
@@ -200,7 +263,7 @@ void print_header(char* buf, file_buffer_t* fb, screen_layout_t* sl) {
 }
 
 
-char* footer_message = "footer message";
+char footer_message[512] = "footer message";
 
 void print_footer(char* buf, file_buffer_t* fb, screen_layout_t* sl) {
 
@@ -249,28 +312,86 @@ void update_cursor(file_buffer_t* fb, screen_layout_t* sl,
 
 
     int len = snprintf(buf, sizeof(buf), 
-            "\033[%u;%uH%c" // put new cursor
             "\033[%u;%uH%c" // remove last cursor
+            "\033[%u;%uH%c" // put new cursor
             "\033[0;0H",    // back to 0:0
 
-            new->col + LEFT_PADDING + 1, new->row + sl->top_padding + 1,
-            CURSOR_CHAR,
+            lasty + 1, lastx + 1,
+            hidden,
 
-            lastx + 1, lasty + 1,
-            hidden
+            new->row + sl->top_padding + 1, new->col + LEFT_PADDING + 1,
+            CURSOR_CHAR
     );
 
     fwrite(buf, 1, len, stdout);
 }
 
 
+int line_len(file_buffer_t* fb, int row, char** line_begin) {
+    int line_size = fb->newlines[row + 1] - fb->newlines[row];
+
+    char* begin = fb->buffer + fb->newlines[row];
+
+    if(line_size && *begin == '\n') {
+        begin++;
+        line_size--;
+    }
+
+    if(line_begin)
+        *line_begin = begin;
+
+    return line_size;
+}
+
+
+void txe_save(file_buffer_t* fb) {
+
+    FILE* file = fopen(opened_filename, "w+");
+
+    if(!file) {
+        printf("couldn't save file %s\n", opened_filename);
+        exit(1);
+    }
+
+    int res = fwrite(fb->buffer, 1, fb->buffer_size, file);
+    fclose(file);
+
+    fb->dirty = 0;
+
+    if(res != fb->buffer_size)
+        sprintf(footer_message, "could save %s", opened_filename);
+    else
+        sprintf(footer_message, "saved %s", opened_filename);
+
+}
+
+void txe_quit(file_buffer_t* fb, screen_layout_t* sl) {
+
+    if(!fb->dirty)
+        exit(0);
+
+
+    sprintf(footer_message, "save file before quitting? (y/n)");
+
+    draw_screen(fb, sl);
+
+    int r = getchar();
+    if(r < 0)
+        exit(1);
+    if     (tolower(r) == 'y') {
+        txe_save(fb);
+        exit(0);
+    }
+    else if(tolower(r) == 'n')
+        exit(0);
+
+}
+
+
+
 
 // draw the whole screen
-void draw_screen(
-        file_buffer_t* fb, 
-        screen_layout_t* sl, 
-        cursor_t* cur
-) {
+void draw_screen(file_buffer_t* fb, screen_layout_t* sl) {
 
     // compute end line to draw
     size_t endline = sl->lines - sl->top_padding - sl->bottom_padding;
@@ -305,14 +426,9 @@ void draw_screen(
             memset(curline_begin, ' ', screen_size.width);
         }
         else {
-            int line_size = fb->newlines[l + 1] - fb->newlines[l];
+            char* line_begin;
+            int line_size = line_len(fb, l, &line_begin);
 
-            char* line_begin = fb->buffer + fb->newlines[l];
-
-            if(line_size && *line_begin == '\n') {
-                line_begin++;
-                line_size--;
-            }
 
             assert(line_size >= 0);
 
@@ -351,8 +467,8 @@ void draw_screen(
     // buffer end
     curline_begin = screen_begin + sl->lines * sl->cols - 1;
 
-    int cursor_line_begin = (cur->row + sl->top_padding) * sl->cols;
-    int cursor_pos        = cursor_line_begin + cur->col + LEFT_PADDING;
+    //int cursor_line_begin = (cur->row + sl->top_padding) * sl->cols;
+    //int cursor_pos        = cursor_line_begin + cur->col + LEFT_PADDING;
 
     //screen_begin[cursor_pos] = 'X';
 
@@ -367,35 +483,29 @@ void draw_screen(
     fwrite(sl->buf, 1, strlen(sl->buf), stdout);
     //printf("_");
     // print cursor
-    //printf("\x1b[%u;%uHX", cur->col + LEFT_PADDING + 1, cur->row + sl->top_padding + 1);
+    //printf("\x1b[%u;%uHX", cur->row + sl->top_padding + 1, cur->col + LEFT_PADDING + 1);
     fflush(stdout);
 
 }
 
 
-static void load_screen_size(void) {
-    terminfo_t ti;
 
-    if(terminfo_read(&ti) == -1) {
-        fprintf(stderr, "Could not read terminfo\n");
-        exit(1);
-    }
-
-    screen_size.width = ti.cols;
-    screen_size.height = ti.lines;
-}
-
-
-
-
-void ask_exit(void) {
-    exit(1);
-}
-
-
+static file_buffer_t  * _fb = NULL;
+static screen_layout_t* _sl = NULL;
 
 void sigterm(int n) {
-    ask_exit();
+
+    static int recursive = 0;
+
+    if(recursive) {
+        return;
+    }
+    recursive = 1;
+
+    if(_fb && _sl)
+        txe_quit(_fb, _sl);
+
+    recursive = 0;
 }
 
 
@@ -415,15 +525,19 @@ int main(int argc, char** argv) {
     FILE* file = parse_args(argc, argv);
     assert(file);
 
-    load_screen_size();
-
+    screen_size = load_screen_size();
+    assert(screen_size.width > 0);
+    assert(screen_size.height > 0);
 
 
     file_buffer_t* fb = load_file(file);
 
 
     screen_layout_t* sl = init_screen_layout();
-
+    
+    // save for signals
+    _fb = fb;
+    _sl = sl;
 
     cursor_t cur = {
         .file_offset = 0,
@@ -436,18 +550,20 @@ int main(int argc, char** argv) {
     atexit(cleanup);
 
 
-    draw_screen(fb, sl, &cur);
+    draw_screen(fb, sl);
 
     while(1) {
         int c = getc(stdin);
 
         old_cur = cur;
+
         int modified = read_input(c, fb, &cur, sl);
 
 
         switch(modified) {
             case 1: 
-                draw_screen(fb, sl, &cur);
+                draw_screen(fb, sl);
+                
                 update_cursor(fb, sl, &cur, &old_cur);
                 break;
             default:

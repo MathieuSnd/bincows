@@ -1,10 +1,12 @@
 .PHONY: all clean
 
 ELF:=txe.elf
+LIB:=../../blibc/blibc.a
 
 INCLUDE_DIR=../../blibc/include
 
 include ../Makefile.config
+CFLAGS += -D_BINCOWS_
 
 
 INCLUDE_DIR=../$(INCLUDE_DIR)
@@ -16,8 +18,15 @@ OBJS:= $(CFILES:.c=.o)
 all: $(ELF)
 	echo $(OBJS)
 
+host:
+	cc $(CFILES) -O2 -g -o linux.elf -lpthread
+
+host-dbg: host
+	gdb --args linux.elf input.c
+
+
 $(ELF): $(OBJS)
-	$(LD) -static $(OBJS) ../../blibc/blibc.a -o $(ELF)
+	$(LD)  $(OBJS) $(LIB) -o $(ELF)
 
 %.o: %.c ../blibc/blibc.a
 	$(CC) $(CFLAGS) -c $< -o $@.o

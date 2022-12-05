@@ -19,7 +19,12 @@ struct file_buffer {
     uint32_t* newlines;
 
     size_t newlines_count;
+
+    int dirty;
 } file_buffer_t;
+
+
+int line_len(file_buffer_t* fb, int row, char** line_begin);
 
 
 typedef struct {
@@ -28,16 +33,10 @@ typedef struct {
     int col;
 } cursor_t;
 
+void file_analyze_lines(file_buffer_t* buf);
 
-
-struct screen_size {
-    size_t width;
-    size_t height;
-};
-
-
-extern struct screen_size screen_size;
-
+#define LEFT_PADDING 6
+#define SPACES_PER_TAB 4
 
 typedef
 struct screen_layout {
@@ -52,9 +51,15 @@ struct screen_layout {
 
 
 // from txe.c
-void analyze_lines(file_buffer_t* buf);
+void file_analyze_lines(file_buffer_t* buf);
 
 
 // from input.c
 // returns 1 iif the screen should be redrawn
 int read_input(int c, file_buffer_t* fb, cursor_t* cur, screen_layout_t* sl);
+
+void draw_screen(file_buffer_t* fb, screen_layout_t* sl);
+
+
+void txe_save(file_buffer_t* fb);
+void txe_quit(file_buffer_t* fb, screen_layout_t* sl);
