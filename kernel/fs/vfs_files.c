@@ -366,7 +366,7 @@ void set_stream_offset(file_handle_t* stream,
 
 file_handle_t* vfs_open_file_from(fs_t* fs, fast_dirent_t* dirent, const char* path, int flags) {
 
-    assert(flags < 64);
+    assert(flags < 2*VFS_TRUNCATABLE);
 
     // file does not exist or isn't a file
     if (dirent->type != DT_REG) {
@@ -412,12 +412,32 @@ file_handle_t* vfs_open_file(const char *path, int flags) {
     // are enabled
     fs_t *restrict fs = vfs_open(path, &dirent);
 
-    
-    
-    // dirent not found or associated to a 
-    // virtual directory
-    if (!fs || fs == FS_NO) 
-        return NULL;
+
+    // dirent not found
+    if(fs == FS_NO) {
+         if(!(flags & VFS_CREATE)) {
+            return NULL;
+         }
+        else {
+            // try to create it
+            int res = vfs_create(path, DT_REG);
+
+            if(res) // failed
+                return NULL;
+            
+            else {
+                fs = vfs_open(path, &dirent);
+
+                // it shouldn't fail (suppose no one removed
+                //  the file since its creation)
+                // @todo maybe solve this issue with a FS lock
+                // or using vfs_create to atomically open the
+                // newly created file
+                assert(fs);
+                assert(fs != FS_NO);
+            }
+        }
+    }
 
 
     return vfs_open_file_from(fs, &dirent, path, flags);
@@ -427,7 +447,7 @@ file_handle_t* vfs_open_file(const char *path, int flags) {
 file_handle_t* vfs_handle_dup(file_handle_t* restrict from) {
     // see vfs_open_file
 
-    assert(interrupt_enable());
+    uint64_t rf = get_rflags();
     _cli();
     fs_t* fs = from->fs;
     uint64_t vfile_id = from->vfile_id;
@@ -480,7 +500,7 @@ file_handle_t* vfs_handle_dup(file_handle_t* restrict from) {
 
     register_handle_to_vfile(vfile_id, new);
 
-    _sti();
+    set_rflags(rf);
 
     return new;
 }
@@ -1020,7 +1040,7 @@ size_t vfs_write_file(const void *ptr, size_t size,
     // assert that interrupts are enabled
     assert(interrupt_enable());
     assert(stream);
-    assert(stream->flags < 64);
+    assert(stream->flags < 2*VFS_TRUNCATABLE);
 
     if(!(stream->flags & VFS_WRITE)) {
         log_warn("tried to write on handle with flags %u", stream->flags);

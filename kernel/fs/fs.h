@@ -348,7 +348,7 @@ typedef struct fs {
      * @return int 0 on success
      */
     int (*add_dirent)(struct fs* restrict fs, uint64_t dir_addr, const char* name, 
-                    uint64_t dirent_addr, uint64_t file_size, unsigned type);
+                    uint64_t* dirent_addr, unsigned type);
 
 /*
     int remove_dirent(uint64_t addr, uint64_t src_parent_addr);

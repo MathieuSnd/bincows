@@ -191,12 +191,11 @@ int create_pipe(file_handle_pair_t* ends) {
 
 
 static int add_dirent(struct fs* restrict fs, uint64_t dir_addr, const char* name, 
-                uint64_t dirent_addr, uint64_t file_size, unsigned type) {
+                uint64_t* dirent_addr, unsigned type) {
     (void)fs;
     (void)dir_addr;
     (void)name;
     (void)dirent_addr;
-    (void)file_size;
     (void)type;
 
     return -1;
