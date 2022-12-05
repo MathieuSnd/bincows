@@ -107,11 +107,16 @@ FILE *fopen (const char *restrict filename,
     }
     else
         return NULL;
+
+    int i = 1;
+    
+    if(modes[i] == 'b')
+        i++;
     
 
-    if(modes[1] == '+')
+    if(modes[i] == '+')
         flags |= O_RDWR;
-    else if(modes[1] != 0)
+    else if(modes[i] != 0)
         return NULL;
     
 
@@ -251,7 +256,7 @@ size_t fread (void *restrict ptr, size_t size,
 		     size_t n, FILE *restrict stream
 ) {
     if((stream->flags & O_RDONLY) == 0) {
-        printf("ERROR: FREAD ON WRITE ONLY fd %u\n", stream->fd);
+        stream->error = 1;
         return 0;
     }
 
@@ -260,6 +265,7 @@ size_t fread (void *restrict ptr, size_t size,
     int64_t rd = read(stream->fd, buf, size * n);
 
     if(rd < 0) {
+        stream->error = 1;
         return 0;
     }
 
@@ -284,6 +290,7 @@ size_t fwrite (const void *restrict ptr, size_t size,
               size_t _n, FILE *restrict stream
 ) {
     if((stream->flags & O_WRONLY) == 0) {
+        stream->error = 1;
         return 0;
     }
 
@@ -292,6 +299,7 @@ size_t fwrite (const void *restrict ptr, size_t size,
 
 
     if(n < 0) {
+        stream->error = 1;
         return 0;
     }
 
@@ -308,7 +316,9 @@ int fseek (FILE* stream, long offset, int whence) {
 
     stream->pos = seeked;
 
-    return seeked;
+    
+
+    return (seeked == -1) ? -1: 0;
 }
 
 
@@ -331,6 +341,10 @@ int fileno (FILE *stream) {
 
 int feof (FILE *stream) {
     return stream->eof;
+}
+
+int ferror(FILE* stream) {
+    return stream->error;
 }
 
 
@@ -465,9 +479,13 @@ int vfprintf(FILE* stream, const char* restrict format, va_list arg) {
         return -1;
     }
 
-    write(stream->fd, buf, n);
+    int res = write(stream->fd, buf, n);
 
-    stream->pos += n;
+    if(res <= 0) {
+        stream->error = 1;
+    }
+    else
+        stream->pos += n;
 
 
     return n;

@@ -268,6 +268,7 @@ ssize_t getline(char **restrict lineptr, size_t *restrict n,
 
 
 #define getc fgetc
+#define getchar() getc(stdin) 
 
 
 
