@@ -1116,22 +1116,34 @@ int vfs_create(const char* path, int type) {
     fast_dirent_t parentdir;
     fs_t* fs = vfs_open(pathbuf, &parentdir);
 
-    free(pathbuf);
+    const char* filename  =last_sep+1;
+
+    assert(strlen(filename) > 0);
+
 
     // if the parent directory
     // is not a directory, or does not
     // exist
-    if(fs == FS_NO || parentdir.type != DT_DIR)
+    if(fs == FS_NO || parentdir.type != DT_DIR) {
+        free(pathbuf);
         return 1;
+    }
+
     
     // handle the virtual case
 
     // actually add the entry
+    uint64_t new_addr;
 
+    int res = fs->add_dirent(fs, parentdir.ino, filename, &new_addr, type);
+
+    free(pathbuf);
+    if(res) {
+        // failure
+        assert(0);
+        return 1;
+    }
     
-    assert(0);
-    //fs->add_dirent()
-    (void) type;
 
     return 0;
 }
@@ -1316,7 +1328,7 @@ int vfs_update_metadata_disk(
     fs_t* fs = vfs_open(parent_path, &parent_dirent);
 
     assert(fs != FS_NO);
-
+    // @todo why FS_NO == 0??
     if(!fs) {
         // parent is a virtual directory
         free(pathbuf);

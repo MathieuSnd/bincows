@@ -271,10 +271,13 @@ void vfs_lazy_flush(void);
 #define VFS_WRITE 2
 #define VFS_RDWR 3
 
-#define VFS_SEEKABLE 4
-#define VFS_TRUNCATABLE 8
+// try to create the file if it doesn't exist
+#define VFS_CREATE 4
+
 
 #define VFS_APPEND 32
+#define VFS_SEEKABLE 64
+#define VFS_TRUNCATABLE 128
 
 /** 
  * @brief open a file
