@@ -20,7 +20,7 @@ debug: all
 
 release: all 
 
-all: $(EFILES) txe
+all: $(EFILES) txe bde
 	rm -f $(BIN_DIR)/*
 	cp test_threads.elf $(BIN_DIR)/test_threads
 	cp sh.elf $(BIN_DIR)/sh
@@ -31,13 +31,9 @@ all: $(EFILES) txe
 	cp write.elf $(BIN_DIR)/write
 	cp test_pipe.elf $(BIN_DIR)/test_pipe
 	cp less.elf $(BIN_DIR)/less
-	cp de.elf $(BIN_DIR)/de
 	cp init.elf $(BIN_DIR)/init
 	cp txe/txe.elf $(BIN_DIR)/txe
-
-
-de.elf: LDLIBS := ../../sdl_port/build/.libs/libSDL.a $(LDLIBS)
-de.elf: CFLAGS += -I../../sdl_port/include
+	cp bde/bde.elf $(BIN_DIR)/bde
 
 %.elf: %.c
 	$(CC) $(CFLAGS) -c $< -o $@.o
@@ -45,11 +41,15 @@ de.elf: CFLAGS += -I../../sdl_port/include
 
 clean:
 	rm -rf *.s *.elf
-	$(MAKE) -C txe clean
+	$(MAKE) -C bde clean
+	$(MAKE) clean -C txe
 
 
 txe: force_look
 	$(MAKE) -C txe
+
+bde: force_look
+	$(MAKE) -C bde
 
 
 force_look: 
@@ -57,7 +57,7 @@ force_look:
 
 
 
-../blibc/blibc.a:
+#../blibc/blibc.a:
 
-#../blibc/blibc.a: ../blibc/blibc.a
-#	$(MAKE) -C ../blibc/
+../blibc/blibc.a: ../blibc/blibc.a
+	$(MAKE) -C ../blibc/
