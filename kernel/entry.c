@@ -27,6 +27,7 @@
 #include "lib/sprintf.h"
 #include "lib/string.h"
 #include "lib/logging.h"
+#include "lib/simd.h"
 #include "lib/registers.h"
 #include "lib/dump.h"
 #include "lib/stacktrace.h"
@@ -166,6 +167,7 @@ void launch_init(void) {
 
     size_t rd = vfs_read_file(elf_file, file_size, f);
     //sleep(10);
+
     assert(rd == file_size);
 
     vfs_close_file(f);
@@ -229,6 +231,7 @@ void kernel_main(struct boot_interface* bi) {
     // start system initialization
 
     setup_isrs();
+    enable_sse();
 
     init_memory(bi);
 
@@ -342,8 +345,7 @@ void kernel_main(struct boot_interface* bi) {
     launch_init();
 
     log_debug("start scheduling");
-
-
+    
     // start the scheduler
     sched_start();
     

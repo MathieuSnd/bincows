@@ -1204,6 +1204,10 @@ uint64_t sc_sigreturn(process_t* proc, void* args, size_t args_sz) {
     }
 
     gp_regs_t* context = proc->threads[0].rsp;
+
+    // restore extended state
+    sched_restore(&proc->threads[0]);
+
     spinlock_release(&proc->lock);
 
 

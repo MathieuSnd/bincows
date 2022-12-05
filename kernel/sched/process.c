@@ -928,6 +928,7 @@ int process_end_of_signal(process_t* process) {
 
     // don't return from the system call,
     // directly jump to the code
+//   sched_restore(process->threads[0].rsp)
 //    _restore_context(process->threads[0].rsp);
 //
 //    __builtin_unreachable();
@@ -990,7 +991,6 @@ int process_trigger_signal(pid_t pid, int signal) {
 
     if(process->ign_mask & (1 << signal)) {
         // signal ignored
-        log_warn("IGNORED SIGNAL %u", pid);
         spinlock_release(&process->lock);
         set_rflags(rf);
         return 0;

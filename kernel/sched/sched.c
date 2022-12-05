@@ -602,6 +602,38 @@ tid_t sched_create_thread(pid_t pid, void* entry, void* argument) {
 }
 
 
+static
+void xsave_thread(thread_t* th) {
+    assert(!interrupt_enable());
+
+    void* xcontext_begin = (void*)((uint64_t)((void*)th->xcontext + 0xfllu) & ~0xfllu);
+    assert_aligned(xcontext_begin, 16);
+
+    fxsave(xcontext_begin);
+}
+
+static
+void xrestore_thread(thread_t* th) {
+    assert(!interrupt_enable());
+
+    assert(th->xcontext != 0);
+
+
+    void* xcontext_begin = (void*)((uint64_t)((void*)th->xcontext + 0xfllu) & ~0xfllu);
+    assert_aligned(xcontext_begin, 16);
+
+    fxrstore(xcontext_begin);
+}
+
+
+void sched_restore(thread_t* th) {
+    if(th->pid == KERNEL_PID)
+        return;
+
+    assert(th->xcontext);
+    xrestore_thread(th);
+}
+
 
 void  sched_save(gp_regs_t* rsp) {
     currently_in_nested_irq += currently_in_irq;
@@ -618,7 +650,7 @@ void  sched_save(gp_regs_t* rsp) {
         assert(p);
         thread_t* t = sched_get_thread_by_tid(p, current_tid);
 
-        assert(t);
+        assert(t); 
 
 
         if(t->should_block) {
@@ -632,6 +664,10 @@ void  sched_save(gp_regs_t* rsp) {
 
 
         t->rsp = rsp;
+
+        // for now, always save the thread xstate
+        if(t->pid != KERNEL_PID)
+            xsave_thread(t);
 
         // save page table
         // @todo remove
@@ -1222,6 +1258,10 @@ void schedule(void) {
 
     gp_regs_t* context = t->rsp;
 
+    // restore extended 
+    sched_restore(t);
+
+
     if(context->cs == USER_CS)
         assert(!t->uninterruptible);
     
@@ -1355,6 +1395,7 @@ void kernel_process_entry(void) {
     assert(current_pid == KERNEL_PID);
     assert(!currently_in_irq);
     assert(interrupt_enable());
+
 
     kernel_process_running = 0;
 

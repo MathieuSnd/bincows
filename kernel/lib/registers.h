@@ -75,6 +75,13 @@ static inline uint32_t ind(uint16_t port) {
 }
 
 
+static inline void fxsave(uint8_t* region) {
+    asm volatile("fxsave %0 "::"m"(*region));
+}
+
+static inline void fxrstore(uint8_t* region) {
+    asm volatile("fxrstor %0 ":"=m"(*region));
+}
 
 
 void __attribute__((noreturn)) _change_stack(

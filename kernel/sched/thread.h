@@ -61,6 +61,12 @@ enum thread_state {
 } tstate_t;
 
 
+
+typedef struct {
+    uint8_t reserved[512];
+} __attribute__((aligned(16))) xstate_t;
+
+
 typedef void (*exit_hook_fun_t)(struct thread* thread, int status);
 
 typedef
@@ -73,6 +79,10 @@ struct thread {
 
     stack_t stack;
     gp_regs_t* rsp;
+
+    // on x86, this uses to save the extended
+    // cotext: x87, SSE, AVX registers and MXCSR
+    xstate_t* xcontext;
 
 
     tstate_t state;

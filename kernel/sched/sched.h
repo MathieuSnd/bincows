@@ -17,6 +17,9 @@
 // the caller should disable interrupts
 void sched_save(gp_regs_t* context);
 
+void sched_restore(thread_t* th);
+
+
 
 // inits the scheduler.
 // shed_cleanup should be called afterwards
