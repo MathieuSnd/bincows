@@ -276,12 +276,12 @@ void kernel_main(struct boot_interface* bi) {
     apic_setup_clock();
 
     
-    // scan PCIe bus
-    pcie_init();
-    
 //  now that errors/panic can be printed, 
 //  finalize acpi initialization 
     acpi_init();
+    
+    // scan PCIe bus
+    pcie_init();
 
 
     // @todo reclaim bootloader / ACPI memory
