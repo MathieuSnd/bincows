@@ -31,7 +31,7 @@ void* extout_main(void* a) {
 
 
 void open_stdout_stderr(void) {
-    int fd = open("/dev/term", O_WRONLY, 0);
+    int fd = open("/dev/term", O_RDWR, 0);
 
     assert(fd == 0);
 
@@ -114,7 +114,6 @@ int main(int argc, char** argv) {
 
 
         if(ascii_key) {
-            //printf("/bin/init - '%s'\n", ev.unix_sequence);
             // only keep the unix sequence
             res = write(6, ev.unix_sequence, strlen(ev.unix_sequence));
             if(res <= 0) {
