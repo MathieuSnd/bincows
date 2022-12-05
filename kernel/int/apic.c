@@ -98,7 +98,7 @@ uint64_t clock_ns(void)  {
     
     // uninitialized
     if(lapic_period == 0)
-        return lapic_period;
+        panic("clock_ns: uninitialized");
 
     
     uint64_t rf = get_rflags();
