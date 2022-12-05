@@ -11,6 +11,9 @@ EFILES := $(CFILES:.c=.elf)
 BIN_DIR := ../build/bin/
 LDLIBS := ../blibc/blibc.a
 
+
+CFLAGS += -D_BINCOWS_
+
 debug: CFLAGS += -g
 debug: LDFLAGS += -g
 debug: all
