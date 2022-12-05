@@ -68,7 +68,7 @@ static int check_args_in_program(
         const struct elf_segment* seg = &proc->program->segs[i];
 
         if(arg_begin >= (uint64_t)seg->base 
-        && arg_end   <  (uint64_t)seg->base + seg->length) {
+        && arg_end   <= (uint64_t)seg->base + seg->length) {
             // found
             return 0;
         }
@@ -100,7 +100,7 @@ static int check_args(const process_t* proc, const void* args, size_t args_sz) {
     for(unsigned i = 0; i < proc->n_threads; i++) {
         stack_t* tstack =&proc->threads[i].stack;
         if(arg_begin >= (uint64_t)tstack->base 
-        && arg_end < (uint64_t)tstack->base + tstack->size)
+        && arg_end   <= (uint64_t)tstack->base + tstack->size)
             // found
             return 0;
     }
@@ -108,7 +108,7 @@ static int check_args(const process_t* proc, const void* args, size_t args_sz) {
 
     // in the heap
     if(arg_begin >= (uint64_t)proc->heap_begin 
-    && arg_end   <  (uint64_t)proc->brk)
+    && arg_end   <= (uint64_t)proc->brk)
         return 0;
         // found
 
