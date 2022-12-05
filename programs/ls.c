@@ -81,7 +81,8 @@ int main(int argc, char** argv) {
 
     }
 
-    printf("\n");
+    if(!long_format)
+        printf("\n");
 
     closedir(dir);
 
