@@ -434,7 +434,7 @@ void linkFAT(
 
 
 static 
-uint32_t fat_attr2fs_type(uint32_t attr) {
+uint32_t __attribute__((const)) fat_attr2fs_type(uint32_t attr) {
     uint32_t ret = 0;
 
     if(attr & FAT32_DIRECTORY)
@@ -444,6 +444,21 @@ uint32_t fat_attr2fs_type(uint32_t attr) {
 
     return ret;
 }
+
+static 
+uint32_t __attribute__((const)) fs_type2fat_attr(int type)  {
+    uint32_t ret = 0;
+
+    if(type == DT_DIR)
+        ret |= FAT32_DIRECTORY;
+    else if(type == DT_REG)
+        ;
+    else
+        panic("unreachable");
+
+    return ret;
+}
+
 
 
 
@@ -488,18 +503,6 @@ cluster_t read_or_allocateFAT(
     }
     return next;
 }
-
-
-static 
-uint32_t __attribute__((const)) fs_type2fat_attr(uint32_t attr)  {
-    uint32_t ret = 0;
-
-    if(attr & DT_DIR)
-        ret |= FAT32_DIRECTORY;
-
-    return ret;
-}
-
 
 
 static void handle_long_filename_entry(
@@ -600,7 +603,6 @@ static int parse_dir_entry(
     cur_entry->ino  = dir->cluster_low | 
                 ((uint32_t)dir->cluster_high << 16);
 
-    // log_warn("%s: ino = %lu", cur_entry->name, cur_entry->ino);
     
     cur_entry->file_size  = dir->file_size;
 
@@ -660,11 +662,11 @@ dirent_t* fat32_read_dir(
 
         read(part, cluster_begin(cluster, pr), buf, pr->cluster_size);
 
-
         for(unsigned i = 0; i < entries_per_cluster; i++) {
             fat_dir_t* dir = (fat_dir_t*)buf + i;
     
             int v = parse_dir_entry(dir, &long_entry, entries, &j);
+
 
             if(v == 1) {
                 end = 1;
@@ -747,10 +749,10 @@ int fat32_add_dirent(
             fs_t* restrict fs, 
             uint64_t dir_cluster, 
             const char* file_name, 
-            uint64_t file_cluster, 
-            uint64_t file_size, 
+            uint64_t* file_cluster, 
             unsigned type
 ) {
+
 
     // we go through the dir sequentially
     // and we only keep track of the current 
@@ -762,7 +764,12 @@ int fat32_add_dirent(
     disk_part_t* restrict part = fs->part;
     fat32_privates_t* restrict pr = (void*)(fs+1);
 
-    
+
+    // empty file: no cluster allocated until accessed
+    *file_cluster = 0;
+
+
+
     unsigned bufsize = block_size(part) * pr->cluster_size;
     uint8_t* buf = malloc(bufsize);
 
@@ -779,6 +786,10 @@ int fat32_add_dirent(
 
     // find the end of the dir
 
+    if(dir_cluster == 1174) {
+        sleep(10);
+    }
+
     while(1) {
         uint64_t lba = cluster_begin(current_dir_cluster, pr);
 
@@ -787,6 +798,8 @@ int fat32_add_dirent(
         int v = 0;
 
         dirent_t entry;
+
+        
         for(entry_cluster_offset = 0; 
             entry_cluster_offset < entries_per_cluster; 
             entry_cluster_offset++
@@ -794,18 +807,18 @@ int fat32_add_dirent(
             fat_dir_t* dir = (fat_dir_t*)buf + entry_cluster_offset;
             int j = 0;
             v = parse_dir_entry(dir, &long_entry, &entry, &j);
-            
+
             if(v == 1)
                 break;
+        }
+
+        if(v == 1) // we found the end
+            break;
 
         current_dir_cluster = readFAT(part, pr, current_dir_cluster);
 
         if(!current_dir_cluster)
             assert(0);
-        }
-
-        if(v == 1) // we found the end
-            break;
     }
 
     // we found the end!
@@ -813,8 +826,9 @@ int fat32_add_dirent(
     // first compute the short filename entry
     fat_dir_t sfn = {
         .attr = fs_type2fat_attr(type),
-        .cluster_high = file_cluster >> 16,
-        .cluster_low  = file_cluster & 0xffff,
+                          // no cluster allocated yet
+        .cluster_high = 0,//new_cluster >> 16,
+        .cluster_low  = 0,//new_cluster & 0xffff,
         .date0 = 0,
         .date1 = 0,
         .date2 = 0,
@@ -822,7 +836,7 @@ int fat32_add_dirent(
         .date4 = 0,
         .date5 = 0,
         .reserved = 0,
-        .file_size = file_size,
+        .file_size = 0, // empty file
         .name  ={'I','S','S','O','U',' ',' ',' ',' ',' ',' '},
     };
 
@@ -834,21 +848,22 @@ int fat32_add_dirent(
     // we can easily suppose that
     // we will always need long file name entries.
     
-    unsigned n_entries = strlen(file_name) / 13;
+    
+    unsigned n_entries = CEIL_DIV(strlen(file_name), 13);
 
 
     // create the name buffer
-    uint16_t* namebuf = malloc(13 * sizeof(uint16_t));
+    uint16_t* namebuf = malloc(n_entries * 13 * sizeof(uint16_t));
 
     // padding 
-    memset(namebuf, 0xff, 13*sizeof(uint16_t));
+    memset(namebuf, 0xff, n_entries * 13 * sizeof(uint16_t));
     // chars
-    ascii2utf16le(namebuf, file_name, 13 * sizeof(uint16_t));
+    ascii2utf16le(namebuf, file_name, n_entries * 13 * sizeof(uint16_t));
 
     uint16_t* name_ptr =  namebuf;
     
     // I guess entries have to be inserted backward
-    for(int i = n_entries-1; i >= 0; i++) {
+    for(int i = n_entries-1; i >= 0; i--) {
 
         uint8_t order = i+1;
 
@@ -866,10 +881,10 @@ int fat32_add_dirent(
                 name_ptr[3], name_ptr[4],
             },
             .chars1 = {
-                name_ptr[0], name_ptr[1], name_ptr[2], 
-                name_ptr[3], name_ptr[4], name_ptr[5],
+                name_ptr[5], name_ptr[6], name_ptr[7], 
+                name_ptr[8], name_ptr[9], name_ptr[10],
             },
-            .chars2 = {name_ptr[0], name_ptr[1]},
+            .chars2 = {name_ptr[11], name_ptr[12]},
         };
 
         name_ptr += 13;
@@ -885,6 +900,8 @@ int fat32_add_dirent(
                 part,
                 pr
         );
+
+        assert(entry_cluster_offset != (unsigned int)-1);
     }
 
     // finaly emplace the sfn entry
@@ -898,12 +915,14 @@ int fat32_add_dirent(
             part,
             pr
     );
+    assert(entry_cluster_offset != (unsigned int)-1);
 
     // unless emplace_dirent just filled
     // the current cluster, in which case
     // it would return entry_cluster_offset = 0,
     // we need to write the current cluster back
     if(entry_cluster_offset) {
+
         write(
             part, 
             cluster_begin(current_dir_cluster, pr), 
@@ -912,6 +931,7 @@ int fat32_add_dirent(
         );
     }
 
+    
 
     free(namebuf);
 
@@ -1163,6 +1183,18 @@ cluster_t fetch_cluster(
 }
 
 
+static void alloc_file_cluster(
+                disk_part_t*      restrict part, 
+                fat32_privates_t* restrict pr,
+                file_t*           restrict fd
+) {
+    assert(fd->file_size == 0);
+    fd->addr = allocFAT(part, pr);
+    linkFAT(part, pr, fd->addr, 0xfffffff);
+}
+
+
+
 
 static 
 int extend_file(fs_t* fs, 
@@ -1172,6 +1204,14 @@ int extend_file(fs_t* fs,
     assert(file_size > file->file_size);
 
     unsigned extend = file_size - file->file_size;
+
+    fat32_privates_t* pr = (void*)(fs+1);
+
+    if(!file->addr) {
+        // empty file: let's allocate
+        // its first sector
+        alloc_file_cluster(fs->part, pr, file);
+    }
 
     if(extend > 1 >> 31)
         return 1; // too big
@@ -1285,8 +1325,6 @@ int fat32_truncate_file(fs_t* fs,
 
 
     if(file_size > file->file_size)  {
-    log_warn("zefzrg");
-
         return extend_file(fs, file, file_size);
     }
     
@@ -1308,6 +1346,8 @@ int fat32_read_file_sectors(
 ) {
     
     assert(fs->type == FS_TYPE_FAT);
+
+    assert(fd->addr);
 
 
     fat32_privates_t* restrict pr = (fat32_privates_t*)(fs+1);
@@ -1379,6 +1419,7 @@ int fat32_read_file_sectors(
 }
 
 
+
 int fat32_write_file_sectors(
         fs_t* restrict fs, 
         file_t* restrict fd, 
@@ -1401,8 +1442,7 @@ int fat32_write_file_sectors(
     if(!fd->addr) {
         // the file is empty, no assicated cluster
         // allocate the file's first cluster
-        fd->addr = allocFAT(fs->part, pr);
-        linkFAT(fs->part, pr, fd->addr, 0xfffffff);
+        alloc_file_cluster(fs->part, pr, fd);
     }
     
     cluster_t cluster = fetch_cluster(fs, pr, fd, first_cluster, &clusterend);
