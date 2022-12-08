@@ -14,9 +14,16 @@ typedef struct {
 } pthread_t;
 
 typedef struct {
-    int unused;
+    int joinable;
 } pthread_attr_t;
 
+
+#define PTHREAD_CREATE_JOINABLE 0
+#define PTHREAD_CREATE_DETACHED 1
+#define PTHREAD_INHERIT_SCHED 0
+#define PTHREAD_EXPLICIT_SCHED 1
+#define PTHREAD_SCOPE_SYSTEM 0
+#define PTHREAD_SCOPE_PROCESS 1
 
 #define PTHREAD_MUTEX_DEFAULT 0
 #define PTHREAD_MUTEX_NORMAL 0
@@ -33,6 +40,10 @@ typedef struct {
 
 #define PTHREAD_MUTEX_STALLED 0
 #define PTHREAD_MUTEX_ROBUST 1
+
+
+// Bincows constant thread stack size
+#define PTHREAD_STACK_MIN (32 * 1024)
 
 typedef struct {
     int taken;
@@ -51,10 +62,6 @@ typedef struct {
 typedef unsigned int pthread_cond_t;
 
 
-// unused structs for unused functions
-struct sched_param {
-
-};
 
 typedef struct {int type;} pthread_mutexattr_t;
 typedef struct {} pthread_key_t;
@@ -111,6 +118,10 @@ extern int pthread_attr_getguardsize(const pthread_attr_t* attr,
 /* Set the size of the guard area created for stack overflow protection.  */
 extern int pthread_attr_setguardsize(pthread_attr_t* attr,
 				      size_t guardsize);
+
+
+
+#include <sched.h>
 
 
 /* Return in *PARAM the scheduling parameters of *ATTR.  */
@@ -194,7 +205,9 @@ extern int pthread_cancel(pthread_t th);
    cancelled.  */
 extern void pthread_testcancel(void);
 
-
+/////////////////////////////////////////////////////
+////////////////////// MUTEXES /////////////////////
+/////////////////////////////////////////////////////
 /* Mutex handling.  */
 
 /* Initialize a mutex.  */

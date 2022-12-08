@@ -12,6 +12,7 @@ struct thread_info {
     void* ret;
     volatile int done;
     volatile int joined;
+    int joinable;
 
     pthread_mutex_t mut;
     pthread_cond_t cond;
@@ -30,8 +31,8 @@ void __pthread_init(void) {
 
 static
 void free_thread_info(struct thread_info* ti) {
-    (void) ti;
-    // nothing to free yet
+    pthread_mutex_destroy(&ti->mut);
+    pthread_cond_destroy(&ti->cond);
 }
 
 
@@ -105,7 +106,7 @@ static void remove_thread_info(tid_t tid) {
             break;
         }
 
-        pthread_mutex_unlock(&ti->mut);
+        release_thread_info(ti);
     }
 
     pthread_mutex_unlock(&thread_table_mut);
@@ -128,14 +129,19 @@ void pthread_exit(void* retval) {
     struct thread_info* info = acquire_thread_info(tid);
 
     if(!info) {
-        printf("thread detached\n");
         // thread detached
     }
     else {
-        info->ret = retval;
-        info->done = 1;
-        release_thread_info(info);
-        pthread_cond_broadcast(&info->cond);
+        if(!info->joinable)  {
+            release_thread_info(info);
+            remove_thread_info(tid);
+        }
+        else {
+            info->ret = retval;
+            info->done = 1;
+            release_thread_info(info);
+            pthread_cond_broadcast(&info->cond);
+        }
     }
 
     // actually exit the thread
@@ -154,12 +160,16 @@ static void pthread_wrapper(void* arg) {
 }
 
 
-int pthread_create(pthread_t* __restrict newthread,
-			   const pthread_attr_t* __restrict attr,
+int pthread_create(pthread_t* restrict newthread,
+			   const pthread_attr_t* restrict attr,
 			   void *(*start_routine)(void *),
-			   void *__restrict arg)
+			   void *restrict arg)
 {   
-    (void) attr;
+    int joinable = 1;
+    
+    if(attr)
+        joinable = attr->joinable;
+    
 
     struct wrapper_arg* warg = malloc(sizeof(struct wrapper_arg));
 
@@ -179,6 +189,8 @@ int pthread_create(pthread_t* __restrict newthread,
     *ti = (struct thread_info) {
         .tid = tid,
         .done = 0,
+        .joined = joinable ? 0 : 1,
+        .joinable = joinable ? 1 : 0
     };
 
     pthread_mutex_init(&ti->mut, NULL);
@@ -204,7 +216,7 @@ int pthread_join(pthread_t th, void** thread_return) {
     }
 
     if(ti->joined) {
-        pthread_mutex_unlock(&ti->mut);
+        release_thread_info(ti);
         return EINVAL;
     }
 
@@ -218,11 +230,165 @@ int pthread_join(pthread_t th, void** thread_return) {
     if(thread_return)
         *thread_return = ti->ret;
 
-    pthread_mutex_unlock(&ti->mut);
+    tid_t tid = ti->tid;
+
+    release_thread_info(ti);
+
+    remove_thread_info(tid);
     return 0;
 }
 
 
+int pthread_detach(pthread_t th) {
+    struct thread_info* ti = acquire_thread_info(th.tid);
+
+    if(!ti) {
+        return ESRCH;
+    }
+
+    ti->joinable = 0;
+
+    volatile int joined = ti->joined;
+    release_thread_info(ti);
+
+    return joined ? EINVAL : 0;
+}
+
+
+
 pthread_t pthread_self(void) {
     return (pthread_t) {.tid = _get_tid()};
+}
+
+
+int pthread_attr_getdetachstate(const pthread_attr_t* attr, int *detachstate)
+{
+    *detachstate = attr->joinable ? 
+                        PTHREAD_CREATE_JOINABLE 
+                      : PTHREAD_CREATE_DETACHED;
+    return 0;
+}
+
+
+int pthread_attr_setdetachstate(pthread_attr_t* attr, int detachstate) 
+{
+    switch(detachstate) {
+        case PTHREAD_CREATE_JOINABLE:
+            attr->joinable = 1;
+            break;
+        case PTHREAD_CREATE_DETACHED:
+            attr->joinable = 0;
+            break;
+        default: return EINVAL;
+    }
+    return 0;
+}
+
+int pthread_attr_getguardsize(const pthread_attr_t* attr, size_t* guardsize)
+{
+    (void) attr;
+    *guardsize = 0x1000;
+    return 0;
+}
+
+int pthread_attr_setguardsize(pthread_attr_t* attr, size_t guardsize) {
+    (void) attr;
+    return guardsize == 0x1000 ? 0 : -1;
+}
+
+
+
+/* Return in *PARAM the scheduling parameters of *ATTR.  */
+int pthread_attr_getschedparam(const pthread_attr_t* restrict attr,
+				       struct sched_param *restrict param
+) {
+    (void) attr;
+    param->sched_priority = 0;
+    return 0;
+} 
+
+/* Set scheduling parameters(priority, etc) in *ATTR according to PARAM.  */
+int pthread_attr_setschedparam(pthread_attr_t* restrict attr,
+				       const struct sched_param *restrict param)
+{
+    (void) attr;
+    if(param->sched_priority == 0)
+        return 0;
+    return -1;
+}                       
+
+
+int pthread_attr_getschedpolicy(const pthread_attr_t* restrict
+					attr, int *restrict policy)
+{
+    (void) attr;
+    *policy = SCHED_RR;
+    return 0;
+}
+
+
+/* Set scheduling policy in *ATTR according to POLICY.  */
+int pthread_attr_setschedpolicy(pthread_attr_t* attr, int policy)
+{
+    (void) attr;
+    if(policy == SCHED_RR)
+        return 0;
+    return  -1;
+}
+
+
+/* Return in *INHERIT the scheduling inheritance mode of *ATTR.  */
+int pthread_attr_getinheritsched(const pthread_attr_t* restrict
+					 attr, int *restrict inherit)
+{
+    (void) attr;
+    *inherit = PTHREAD_INHERIT_SCHED;
+    return 0;
+}
+
+/* Set scheduling inheritance mode in *ATTR according to INHERIT.  */
+int pthread_attr_setinheritsched(pthread_attr_t* attr,
+					 int inherit) 
+{
+    (void) attr;
+    (void) inherit;
+    return 0;
+}
+
+
+/* Return in *SCOPE the scheduling contention scope of *ATTR.  */
+int pthread_attr_getscope(const pthread_attr_t* restrict attr,
+				  int *restrict scope)
+{
+    (void) attr;
+    *scope = PTHREAD_SCOPE_SYSTEM;
+    return 0;
+}
+
+
+int pthread_attr_setscope(pthread_attr_t* attr, int scope)
+{
+    (void) attr;
+    if(scope == PTHREAD_SCOPE_SYSTEM)
+        return 0;
+    return -1;
+}
+
+
+int pthread_attr_getstacksize(const pthread_attr_t* restrict
+				      attr, size_t* restrict stacksize)
+{
+    (void) attr;
+    *stacksize = PTHREAD_STACK_MIN;
+    return 0;
+}
+
+
+int pthread_attr_setstacksize(pthread_attr_t* attr,
+				      size_t stacksize)
+{
+    (void) attr;
+    if(stacksize == PTHREAD_STACK_MIN)
+        return 0;
+    return -1;
 }
