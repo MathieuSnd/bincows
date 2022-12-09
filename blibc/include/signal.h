@@ -31,6 +31,40 @@ extern sighandler_t signal(int sig, sighandler_t handler);
 #define kill(pid, sig) sigsend(pid, sig)
 
 
+
+
+void psignal(int sig, const char *s);
+//void psiginfo(const siginfo_t *pinfo, const char *s);
+
+
+typedef uint32_t sigset_t;
+
+
+/* Clear all signals from SET.  */
+int sigemptyset (sigset_t *set);
+
+/* Set all signals in SET.  */
+int sigfillset (sigset_t *set);
+
+/* Add SIGNO to SET.  */
+int sigaddset (sigset_t *set, int signo);
+
+/* Remove SIGNO from SET.  */
+int sigdelset (sigset_t *set, int signo);
+
+/* Return 1 if SIGNO is in SET, 0 if not.  */
+int sigismember (const sigset_t *set, int signo);
+
+
+int sigprocmask(int how, const sigset_t *restrict set,
+                           sigset_t *restrict oldset);
+
+#define SIG_BLOCK 0
+#define SIG_UNBLOCK 1
+#define SIG_SETMASK 2
+
+
+
 #endif	/* SIGNAL_H */
 
 

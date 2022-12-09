@@ -9,9 +9,9 @@
 
 typedef int tid_t;
 
-typedef struct {
-    tid_t tid;
-} pthread_t;
+
+typedef tid_t pthread_t;
+
 
 typedef struct {
     int joinable;
@@ -119,6 +119,10 @@ extern int pthread_attr_getguardsize(const pthread_attr_t* attr,
 extern int pthread_attr_setguardsize(pthread_attr_t* attr,
 				      size_t guardsize);
 
+
+#include <signal.h>
+
+extern int pthread_sigmask(int how, const sigset_t *set, sigset_t *oldset);
 
 
 #include <sched.h>
@@ -238,8 +242,13 @@ extern int pthread_mutex_setprioceiling(pthread_mutex_t* __restrict mutex,
 					 int prioceiling,
 					 int *__restrict old_ceiling);
 
-	int pthread_mutexattr_getrobust(const pthread_mutexattr_t *attr,
-									int *robustness);
+int pthread_mutexattr_getrobust(const pthread_mutexattr_t *attr,
+							int *robustness);
+
+
+
+int pthread_mutexattr_gettype(const pthread_mutexattr_t *attr, int *type);
+int pthread_mutexattr_settype(pthread_mutexattr_t *attr, int type);
 
 
 /* Functions for handling mutex attributes.  */

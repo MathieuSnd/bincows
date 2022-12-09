@@ -116,3 +116,86 @@ void __signals_init(void) {
     );
     sig_update();
 }
+
+
+int sigprocmask(int how, const sigset_t *restrict set,
+                           sigset_t *restrict oldset) 
+{
+    if(oldset)
+        *oldset = 0;
+    if(set == NULL)
+        return 0;
+    switch(how) {
+        case SIG_BLOCK:
+            // @todo block mask
+            break;
+        case SIG_UNBLOCK:
+            // @todo block mask
+            break;
+        case SIG_SETMASK:
+            // @todo block mask
+            break;
+        default:
+            return -1;
+    }
+
+    return 0;
+}
+
+
+
+
+void psignal(int sig, const char *s) {
+    const char* signame;
+
+    switch(sig) {
+        case SIGBUS   : signame = "SIGBUS";   break;
+        case SIGHUP   : signame = "SIGHUP";   break;case SIGINT   : signame = "SIGINT";break;
+        case SIGQUIT  : signame = "SIGQUIT";  break;case SIGILL   : signame = "SIGILL";break;
+        case SIGTRAP  : signame = "SIGTRAP";  break;case SIGABRT  : signame = "SIGABRT";break;
+        case SIGFPE   : signame = "SIGFPE";   break;case SIGKILL  : signame = "SIGKILL";break;
+        case SIGUSR1  : signame = "SIGUSR1";  break;case SIGSEGV  : signame = "SIGSEGV";break;
+        case SIGPIPE  : signame = "SIGPIPE";  break;case SIGALRM  : signame = "SIGALRM";break;
+        case SIGTERM  : signame = "SIGTERM";  break;case SIGSTKFLT: signame = "SIGSTKFLT";break;
+        case SIGCHLD  : signame = "SIGCHLD";  break;case SIGCONT  : signame = "SIGCONT";break;
+        case SIGSTOP  : signame = "SIGSTOP";  break;case SIGTSTP  : signame = "SIGTSTP";break;
+        case SIGTTIN  : signame = "SIGTTIN";  break;case SIGUSR2  : signame = "SIGUSR2";break;
+        case SIGTTOU  : signame = "SIGTTOU";  break;case SIGURG   : signame = "SIGURG";break;
+        case SIGXCPU  : signame = "SIGXCPU";  break;case SIGXFSZ  : signame = "SIGXFSZ";break;
+        case SIGVTALRM: signame = "SIGVTALRM";break;case SIGPROF  : signame = "SIGPROF";break;
+        case SIGWINCH : signame = "SIGWINCH"; break;case SIGIO    : signame = "SIGIO";break;
+        case SIGPWR   : signame = "SIGPWR";   break;case SIGSYS   : signame = "SIGSYS";break;
+        default: signame = "invalid signal number";
+    }
+
+    if(s)
+        fprintf(stderr, "%s: %s\n", s, signame);
+    else
+        fprintf(stderr, "%s\n", signame);
+}
+
+
+int sigemptyset (sigset_t *set) {
+    return *set = 0;
+}
+
+int sigfillset (sigset_t *set) {
+    *set = 0xffffffff;
+    return 0;
+}
+
+int sigaddset (sigset_t *set, int signo) {
+    *set |= 1 << signo;
+    return 0;
+}
+
+/* Remove SIGNO from SET.  */
+int sigdelset (sigset_t *set, int signo) {
+    *set &= ~(1 << signo);
+    return 0;
+}
+
+/* Return 1 if SIGNO is in SET, 0 if not.  */
+int sigismember (const sigset_t *set, int signo) {
+    return (*set & (1 << signo)) ? 1 : 0;
+}

@@ -122,6 +122,32 @@ int pthread_mutexattr_init(pthread_mutexattr_t* attr) {
     return 0;
 }
 
+
+int pthread_mutexattr_settype(pthread_mutexattr_t *attr, int type)
+{
+    (void) attr;
+    switch(type) {
+        case PTHREAD_MUTEX_DEFAULT:
+//      case PTHREAD_MUTEX_NORMAL:
+        case PTHREAD_MUTEX_RECURSIVE:
+            break;
+        default:                    return EINVAL;
+    }
+
+    attr->type = type;
+    return 0;
+}
+
+
+int pthread_mutexattr_gettype(const pthread_mutexattr_t *attr, int *type)
+{
+    *type = attr->type;
+    return 0;
+}
+
+
+
+
 int pthread_mutexattr_destroy(pthread_mutexattr_t* attr) {
     (void) attr;
     return 0;

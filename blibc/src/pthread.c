@@ -199,9 +199,7 @@ int pthread_create(pthread_t* restrict newthread,
     insert_thread_info(ti);
 
     if(newthread) {
-        *newthread = (pthread_t) {
-            .tid = tid,
-        };
+        *newthread = tid;
     }
 
     return 0;
@@ -209,7 +207,7 @@ int pthread_create(pthread_t* restrict newthread,
 
 
 int pthread_join(pthread_t th, void** thread_return) {
-    struct thread_info* ti = acquire_thread_info(th.tid);
+    struct thread_info* ti = acquire_thread_info(th);
 
     if(!ti) {
         return -1;
@@ -240,7 +238,7 @@ int pthread_join(pthread_t th, void** thread_return) {
 
 
 int pthread_detach(pthread_t th) {
-    struct thread_info* ti = acquire_thread_info(th.tid);
+    struct thread_info* ti = acquire_thread_info(th);
 
     if(!ti) {
         return ESRCH;
@@ -257,8 +255,17 @@ int pthread_detach(pthread_t th) {
 
 
 pthread_t pthread_self(void) {
-    return (pthread_t) {.tid = _get_tid()};
+    return _get_tid();
 }
+
+int pthread_attr_init(pthread_attr_t* attr) 
+{
+    *attr = (pthread_attr_t) {
+        .joinable = 1,
+    };
+    return 0;
+}
+
 
 
 int pthread_attr_getdetachstate(const pthread_attr_t* attr, int *detachstate)
@@ -389,6 +396,45 @@ int pthread_attr_setstacksize(pthread_attr_t* attr,
 {
     (void) attr;
     if(stacksize == PTHREAD_STACK_MIN)
+        return 0;
+    return -1;
+}
+
+int pthread_sigmask(int how, const sigset_t *set, sigset_t *oldset) {
+    (void) how;
+    (void) set;
+    if(oldset)
+        *oldset = 0xffffffff;
+    return 0;
+}
+
+
+
+/* Set the scheduling parameters for TARGET_THREAD according to POLICY
+   and *PARAM.  */
+int pthread_setschedparam(pthread_t target_thread, int policty,
+				  const struct sched_param *param)
+{
+    (void) target_thread;
+    (void) policty;
+    if(param->sched_priority == 0)
+        return 0;
+    return 1;
+}
+/* Return in *POLICY and *PARAM the scheduling parameters for TARGET_THREAD. */
+int pthread_getschedparam(pthread_t target_thread,
+				  int *__restrict policty,
+				  struct sched_param *__restrict param)
+{
+    (void) target_thread;
+    (void) policty;
+    param->sched_priority = 0;
+    return 0;
+}
+
+int pthread_setschedprio(pthread_t target_thread, int prio) {
+    (void) target_thread;
+    if(prio != 0)
         return 0;
     return -1;
 }
