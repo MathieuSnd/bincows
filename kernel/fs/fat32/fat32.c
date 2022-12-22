@@ -528,6 +528,7 @@ static void handle_long_filename_entry(
         e->chars1[5],
         e->chars2[0],
         e->chars2[1],
+        0
     };
     char longname[13];
     
@@ -535,6 +536,9 @@ static void handle_long_filename_entry(
     // long filename entry
 
     memcpy(name_buf + 13 * order, longname, 13);
+
+    // make sure the string is null terminated
+    name_buf[13 * order + 13] = 0;
 }
 
 // return value:
@@ -667,7 +671,6 @@ dirent_t* fat32_read_dir(
     
             int v = parse_dir_entry(dir, &long_entry, entries, &j);
 
-
             if(v == 1) {
                 end = 1;
                 break;
@@ -752,7 +755,6 @@ int fat32_add_dirent(
             uint64_t* file_cluster, 
             unsigned type
 ) {
-
 
     // we go through the dir sequentially
     // and we only keep track of the current 
