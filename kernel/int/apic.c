@@ -11,6 +11,7 @@
 #include "../memory/vmap.h"
 #include "../drivers/hpet.h"
 #include "../lib/string.h"
+#include "../lib/panic.h"
 #include "../memory/heap.h"
 #include "../sched/sched.h"
 
@@ -79,7 +80,7 @@ static uint64_t lapic_max    = 0;
 void lapic_timer_handler(void* arg) {
     (void)arg;
 
-    timer_offset += 1000lu * 1000lu * 1000lu * LAPIC_IRQ_FREQ;
+    timer_offset += 1000lu * 1000lu * 1000lu / LAPIC_IRQ_FREQ;
 
 
     wakeup_threads();
@@ -119,11 +120,11 @@ uint64_t clock_ns(void)  {
         // this only work if the maximum time with
         // interrupts disabled is inferior to one
         // timer tick
-        clk += 1000lu * 1000lu * 1000lu * LAPIC_IRQ_FREQ;
+        clk += 1000lu * 1000lu * 1000lu / LAPIC_IRQ_FREQ;
 
         if(clk < old_clk)
             // well...
-            return old_clk;
+            clk = old_clk;
     }
 
 
@@ -180,7 +181,7 @@ void apic_setup_clock(void) {
 
     lapic_period = (1000lu * 1000lu * 1000lu / LAPIC_IRQ_FREQ * timer_mult) / t;
 
-
+    assert(lapic_period > 0);
 
 
     // enable apic and set spurious int to 0xff
