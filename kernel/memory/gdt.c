@@ -103,7 +103,6 @@ struct GDTDescriptor gdt_descriptor = {
     printf("&" #TARGET "=0x%8lx\tsizeof(" #TARGET ")=%ld (0x%lx)\n", \
     &TARGET, sizeof(TARGET),sizeof(TARGET))
 
-    volatile int y = 5421;
 
 
 
