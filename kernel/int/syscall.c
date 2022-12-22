@@ -156,7 +156,6 @@ static uint64_t sc_sleep(process_t* proc, void* args, size_t args_sz) {
 
     uint64_t ms = *(uint64_t*)args;
 
-
     int sig = 0;
 
 // not essential, needed for both sched_yield and sleep
@@ -1362,10 +1361,13 @@ uint64_t sc_futex_wait(process_t* proc, void* args, size_t args_sz) {
         return ret;
     }
     else {
+        spinlock_release(&proc->lock);
+        _sti();
         return -1;// EAGAIN
     }
     
     spinlock_release(&proc->lock);
+    _sti();
     return 0;
 }
 
@@ -1601,7 +1603,7 @@ struct sc_return syscall_main(uint8_t   scid,
     }
     else {
 
-        //log_debug("%u.%u: %u", sched_current_pid(), sched_current_tid(), scid);
+        //log_debug("%u.%u: %s", sched_current_pid(), sched_current_tid(), scname[scid]);
 
         sc_fun_t fun = sc_funcs[scid];
         assert(fun);
