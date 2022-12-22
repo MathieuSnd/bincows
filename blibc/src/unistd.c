@@ -17,6 +17,7 @@ static void* brk_addr = NULL;
 
 
 int usleep (uint64_t __useconds) {
+    __useconds /= 1000;
     return syscall(SC_SLEEP, &__useconds, sizeof(__useconds));
 }
 
