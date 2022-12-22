@@ -40,14 +40,13 @@ int create_thread(
         .should_exit = 0,
         .uninterruptible = 0,
         .futex_signaled = 0,
-        .xcontext = malloc(sizeof(xstate_t) + 15),
+        .xstate = xstate_create(),
     };
 
 
     // load a valid xcontext (the current one for now)
     // @todo keep a generic valid one for every thread
-    void* xcontext_begin = (void*)((uint64_t)((void*)thread->xcontext + 0xfllu) & ~0xfllu);
-    fxsave(xcontext_begin);
+    xsave(XSAVE_ALL, thread->xstate);
 
 
     // set the stack frame
@@ -99,7 +98,7 @@ void thread_terminate(thread_t* thread, int status) {
 
 
     if(thread->pid != KERNEL_PID)
-        free(thread->xcontext);
+        xstate_free(thread->xstate);
 
     // @todo free the thread stack
 

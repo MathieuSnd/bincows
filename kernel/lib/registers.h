@@ -84,6 +84,41 @@ static inline void fxrstore(uint8_t* region) {
 }
 
 
+static inline uint64_t xgetbv(uint32_t index)
+{
+	uint32_t eax, edx;
+
+	asm volatile("xgetbv" : "=a" (eax), "=d" (edx) : "c" (index));
+	return eax + ((uint64_t)edx << 32);
+}
+
+static inline void xsetbv(uint32_t index, uint64_t value)
+{
+	uint32_t eax = value;
+	uint32_t edx = value >> 32;
+
+	asm volatile("xsetbv" :: "a" (eax), "d" (edx), "c" (index));
+}
+
+
+static inline void xsaves(uint8_t* ptr, uint64_t mask)
+{
+	uint32_t eax = mask;
+	uint32_t edx = mask >> 32;
+
+	asm volatile("xsave %0" : "=m"(*ptr) : "a" (eax), "d" (edx));
+}
+
+static inline void xrstors(uint8_t* ptr, uint64_t mask)
+{
+	uint32_t eax = mask;
+	uint32_t edx = mask >> 32;
+
+	asm volatile("xrstor %0" :: "m"(*ptr), "a" (eax), "d" (edx));
+}
+
+
+
 void __attribute__((noreturn)) _change_stack(
     void* stack_ptr, 
     void (*no_return)(void)

@@ -5,6 +5,7 @@
 
 #include "../lib/assert.h"
 #include "../sync/spinlock.h"
+#include "../lib/simd.h"
 
 #include "process.h"
 
@@ -62,11 +63,6 @@ enum thread_state {
 
 
 
-typedef struct {
-    uint8_t reserved[512];
-} __attribute__((aligned(16))) xstate_t;
-
-
 typedef void (*exit_hook_fun_t)(struct thread* thread, int status);
 
 typedef
@@ -80,10 +76,13 @@ struct thread {
     stack_t stack;
     gp_regs_t* rsp;
 
-    // on x86, this uses to save the extended
-    // cotext: x87, SSE, AVX registers and MXCSR
-    xstate_t* xcontext;
 
+    // extended state:
+    // x87 FP registers and flags
+    // SSE (must be supported)
+    // AVX (if supported)
+    // AVX512 (if supported)
+    struct xstate_buffer* xstate;
 
     tstate_t state;
 

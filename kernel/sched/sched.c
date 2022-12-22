@@ -606,31 +606,22 @@ static
 void xsave_thread(thread_t* th) {
     assert(!interrupt_enable());
 
-    void* xcontext_begin = (void*)((uint64_t)((void*)th->xcontext + 0xfllu) & ~0xfllu);
-    assert_aligned(xcontext_begin, 16);
 
-    fxsave(xcontext_begin);
+    xsave(XSAVE_ALL, th->xstate);
 }
 
 static
 void xrestore_thread(thread_t* th) {
     assert(!interrupt_enable());
 
-    assert(th->xcontext != 0);
-
-
-    void* xcontext_begin = (void*)((uint64_t)((void*)th->xcontext + 0xfllu) & ~0xfllu);
-    assert_aligned(xcontext_begin, 16);
-
-    fxrstore(xcontext_begin);
+    xrstor(XSAVE_ALL, th->xstate);
 }
 
 
 void sched_restore(thread_t* th) {
     if(th->pid == KERNEL_PID)
         return;
-
-    assert(th->xcontext);
+    
     xrestore_thread(th);
 }
 
