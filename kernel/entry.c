@@ -36,7 +36,7 @@
 
 #include "sched/sched.h"
 #include "sync/spinlock.h"
- 
+
 
 // accessible by other compilation units
 // like panic.c
@@ -208,9 +208,42 @@ void launch_init(void) {
 }
 
 
+
+#include <cpuid.h>
+#define EFLAGS_ID (1 << 21)
+
+static int x86_support_cpuid(void) {
+    uint64_t rf0 = get_rflags();
+    set_rflags(rf0 ^ EFLAGS_ID);
+    uint64_t rf1 = get_rflags();
+
+    if((rf0 ^ rf1) & EFLAGS_ID)
+        return 1; // supported
+    return 0;   // unsupported
+}
+
+
+#include <x86intrin.h>
+
+static void check_system_requirements(void) {
+    if(! x86_support_cpuid())
+        panic("system CPU does not support CPUID");
+
+    if(! x86_support_xsave())
+        panic("system CPU does not support XSAVE instruction"); 
+
+    int avx = x86_support_avx();
+    int avx512 = x86_support_avx512();
+    
+    log_info("avx support: %s", avx ? "true" : "false");
+    log_info("avx512 support: %s", avx512 ? "true" : "false");
+}
+
+
 extern void run_tests(void);
 
 void kernel_main(struct boot_interface* bi) {
+
 
  // print all logging messages
     set_logging_level(LOG_LEVEL_DEBUG);
@@ -224,14 +257,15 @@ void kernel_main(struct boot_interface* bi) {
     else
         log_warn("no early console found");
 
-    assert(bi->rsdp_paddr);
     assert(bi->mmap_get_next);
+    assert(bi->rsdp_paddr);
 
 
     // start system initialization
 
     setup_isrs();
-    enable_sse();
+
+    check_system_requirements();
 
     init_memory(bi);
 
@@ -279,12 +313,12 @@ void kernel_main(struct boot_interface* bi) {
     apic_setup_clock();
 
     
+    // scan PCIe bus
+    pcie_init();
+    
 //  now that errors/panic can be printed, 
 //  finalize acpi initialization 
     acpi_init();
-    
-    // scan PCIe bus
-    pcie_init();
 
 
     // @todo reclaim bootloader / ACPI memory
@@ -323,6 +357,10 @@ void kernel_main(struct boot_interface* bi) {
     video_create_file("video");
 
     
+    xstate_enable();
+    sse_enable();
+    avx_enable();
+    avx512_enable();
 
     log_debug("init sched");
     sched_init();
@@ -332,9 +370,7 @@ void kernel_main(struct boot_interface* bi) {
     syscall_init();
 
 
-    //////////////
-    /// TESTS ////
-    //////////////
+
 #ifdef KERNEL_RUN_TESTS
     run_tests();
 #endif
@@ -345,6 +381,7 @@ void kernel_main(struct boot_interface* bi) {
     launch_init();
 
     log_debug("start scheduling");
+
     
     // start the scheduler
     sched_start();
