@@ -183,6 +183,10 @@ static uint64_t sc_sbrk(process_t* proc, void* args, size_t args_sz) {
     int64_t delta = *(int64_t*)args;
     // align delta on 
 
+    // SBRK is atomic
+    _cli();
+    spinlock_acquire(&proc->lock);
+
     void* old_brk = proc->brk;
     void* unaligned_new_brk = proc->unaligned_brk + delta;
 
@@ -202,6 +206,8 @@ static uint64_t sc_sbrk(process_t* proc, void* args, size_t args_sz) {
      || unaligned_new_brk < proc->heap_begin // avoid underflow
      || (int64_t)available_pages()*0x1000 <= needed_pages     // avoid memory overflow
     ) {
+        spinlock_release(&proc->lock);
+        _sti();
         return -1;
     }
 
@@ -228,6 +234,9 @@ static uint64_t sc_sbrk(process_t* proc, void* args, size_t args_sz) {
 
     proc->unaligned_brk = unaligned_new_brk;
     proc->brk = new_brk;
+
+    spinlock_release(&proc->lock);
+    _sti();
 
 
     return (uint64_t)old_brk;
