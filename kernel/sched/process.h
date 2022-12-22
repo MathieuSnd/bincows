@@ -87,13 +87,6 @@ typedef struct process {
 
     uint64_t page_dir_paddr;
 
-    // might be different from
-    // page_dir_paddr if the 
-    // kernel was doing stuf
-    // with another process
-    // when it got interrupted
-    uint64_t saved_page_dir_paddr;
-
     size_t n_threads;
     struct thread* threads;
 

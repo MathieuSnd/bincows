@@ -63,9 +63,6 @@ clock_ns();
         process_t* pr = sched_get_process(sched_current_pid());
 
         process_map(pr);
-        // set_user_page_map(pr->saved_page_dir_paddr);
-
-        //_sti();
     }
 
     printf("heap:  %lx -> %lx (size: %6lx B, %5u KB, %u allocations)\n", 

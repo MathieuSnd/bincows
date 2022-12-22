@@ -263,7 +263,6 @@ int create_process(
         .n_threads = 0, // no thread yet. The thread is added right after
         .threads = threads,
         .mem_map = map,
-        // .saved_page_dir_paddr = private_pd,
         .pid = pid,
         .ppid = ppid,
         .cwd  = cwd,
@@ -357,7 +356,6 @@ int create_kernel_process(process_t* process) {
         .n_threads = 1,
         .threads = threads,
         .page_dir_paddr = 0,
-        .saved_page_dir_paddr = 0,
         .pid  = 0,
         .ppid = 0,
         .cwd  = strdup("/"), // root directory

@@ -1511,10 +1511,10 @@ char* scname[] = {
     "FUTEX_WAIT",
     "FUTEX_WAKE",
 };
+
 // a thread with tid must exist
-// user_sp: saved syscall user stack pointer
 static 
-void thread_enter_syscall(process_t* process, tid_t tid, uint64_t* user_sp) {
+void thread_enter_syscall(process_t* process, tid_t tid) {
     assert(!interrupt_enable());
     
     thread_t* t = sched_get_thread_by_tid(process, tid);
@@ -1575,8 +1575,7 @@ struct sc_return {
 // called from syscall_entry
 struct sc_return syscall_main(uint8_t   scid, 
                               void*     args, 
-                              size_t    args_sz, 
-                              uint64_t* user_sp
+                              size_t    args_sz
 ) {
     // syscall_main is called from a safe interrupt disabled context
     assert(!interrupt_enable());
@@ -1587,7 +1586,7 @@ struct sc_return syscall_main(uint8_t   scid,
     assert(process->pid > 0 && process->pid <= MAX_PID);
 
 
-    thread_enter_syscall(process, sched_current_tid(), user_sp);
+    thread_enter_syscall(process, sched_current_tid());
 
     // Though we might take the lock again,
     // we don't need  to hold it here

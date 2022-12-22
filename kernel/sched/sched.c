@@ -660,9 +660,6 @@ void  sched_save(gp_regs_t* rsp) {
         if(t->pid != KERNEL_PID)
             xsave_thread(t);
 
-        // save page table
-        // @todo remove
-        p->saved_page_dir_paddr = 0;//get_user_page_map();
 
         // release process lock
         spinlock_release(&p->lock);
