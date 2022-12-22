@@ -10,6 +10,5 @@ time_t time(time_t *t) {
     if(t)
         *t = r;
 
-    printf("time() = %d\n", r);
     return r;
 }
