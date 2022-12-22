@@ -700,10 +700,11 @@ void setup_irqs(
     
     assert(using_msix);
 
+
     unsigned admin_irq = install_irq(irq_handler, this);
 
+
     set_msix(dev, 0, 0, admin_irq, 0, 0, 0);
-    _sti();
 }
 
 
@@ -751,7 +752,8 @@ int nvme_install(driver_t* this) {
     // setup interrupts
 
     setup_admin_queues(this, bar0);
-    setup_irqs(this, dev, bar0);    
+
+    setup_irqs(this, dev, bar0);
 
     // start the controller
     enable(bar0);
