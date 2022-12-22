@@ -786,11 +786,6 @@ int fat32_add_dirent(
     // it contains the entry offset
     unsigned entry_cluster_offset;
 
-    // find the end of the dir
-
-    if(dir_cluster == 1174) {
-        sleep(10);
-    }
 
     while(1) {
         uint64_t lba = cluster_begin(current_dir_cluster, pr);
