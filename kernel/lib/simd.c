@@ -177,10 +177,6 @@ struct xstate_buffer* xstate_create(void) {
     buf->begin = (void*)aligned;
 
 
-    //log_info("bordelent %lx %lx", A, A << 200);
-    
-
-
     // now fill it with reference xstate
     // @todo use another reference
     // for now juste use the current xstate which 

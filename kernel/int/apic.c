@@ -114,7 +114,6 @@ uint64_t clock_ns(void)  {
 
     set_rflags(rf);
 
-    //log_info("%lu > %lu", clk, old_clk);
     if(clk < old_clk) {
         // the timer has ticked.
         // this only work if the maximum time with
