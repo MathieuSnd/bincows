@@ -6,10 +6,9 @@ LIB:=../../blibc/blibc.a
 INCLUDE_DIR=../../blibc/include
 
 include ../Makefile.config
-CFLAGS += -D_BINCOWS_
+CFLAGS += -D__BINCOWS__
 
 
-INCLUDE_DIR=../$(INCLUDE_DIR)
 
 CFILES := $(shell find ./ -type f -name '*.c')
 OBJS:= $(CFILES:.c=.o)

@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <assert.h>
 
-#if defined(_BINCOWS_)
+#if defined(__BINCOWS__)
 #include <terminfo.h>
 
 

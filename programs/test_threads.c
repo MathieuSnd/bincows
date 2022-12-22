@@ -7,7 +7,7 @@
 #include <stdio.h>
 
 
-int X = 0;
+volatile int X = 0;
 
 pthread_mutex_t mutex;
 pthread_cond_t cond;
@@ -26,7 +26,7 @@ void* thread_entry(void* arg) {
     for(int i = 0; i < 1000; i++) {
         X++;
     }
-    printf("%s\n", print);
+//    printf("%s\n", print);
 
 
     return print;

@@ -9,7 +9,7 @@
 
 #define EXTOUT_RD 4
 
-#define SH_CMD "/bin/sh"
+#define SH_CMD "/bin/bde"
 
 
 // extout thread
