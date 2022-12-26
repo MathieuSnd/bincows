@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
+#include <pthread.h>
 
 
 #define MIN_EXPAND_SIZE 4096
@@ -55,6 +56,10 @@ _Static_assert(sizeof(seg_header) % 8 == 0, "seg_header must be 8-byte alligned"
  *      new_node.size = node n.size - SIZE - sizeof(node)
  * 
  */
+
+
+// coarse grained lock
+static pthread_mutex_t mutex;
 
 // we need to get the heap base address
 // with a sbrk call to set this variable
@@ -148,6 +153,7 @@ void __attribute__((noinline)) free(void *ptr) {
 
     seg_header* header = ptr - sizeof(seg_header);
 
+    pthread_mutex_lock(&mutex);
     heap_assert_seg(header);
 
     assert(header->free == 0);
@@ -162,6 +168,7 @@ void __attribute__((noinline)) free(void *ptr) {
         defragment();
 
     n_allocations--;
+    pthread_mutex_unlock(&mutex);
 }
 
 
@@ -310,6 +317,7 @@ static seg_header* split_segment(seg_header* pred, seg_header* tosplit, size_t s
 
 
 void* __attribute__((noinline)) malloc(size_t size) {
+    pthread_mutex_lock(&mutex);
     
     if(heap_begin == NULL) {
         // initialize the heap
@@ -383,6 +391,7 @@ void* __attribute__((noinline)) malloc(size_t size) {
 
         log_heap(" --> %lx", (void*)seg+sizeof(seg_header));
         
+        pthread_mutex_unlock(&mutex);
         return (void *)seg + sizeof(seg_header);
     }
 
@@ -391,9 +400,11 @@ void* __attribute__((noinline)) malloc(size_t size) {
 
     if(expand_heap(MAX(size+sizeof(seg_header), MIN_EXPAND_SIZE)) == -1) {
         // out of memory
+        pthread_mutex_unlock(&mutex);
         return NULL;
     }
 
+    pthread_mutex_unlock(&mutex);
 // retrty now that we are sure that the memory is avaiable
     return malloc(size);
 }
@@ -428,9 +439,7 @@ void* realloc(void* ptr, size_t size) {
     memcpy(new_ptr, ptr, cpsize);
     
     free(ptr);
-    // malloc increments the number of allocations
-    // but we just reallocated
-    //  n_allocations--;
+    
 
     return new_ptr;
 }
