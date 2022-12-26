@@ -222,7 +222,6 @@ static int process_leds(uint8_t b) {
 
 
 static void process_byte(uint8_t b) {
-
     // if non 0, a sequence is running
     static int seq = 0;
 
@@ -395,7 +394,6 @@ static void mouse_read(void) {
 
 
     if((b0 & 8) == 0) {
-        
         log_info("ps/2 mouse packet error %u", b0);
         return;
     }
@@ -463,9 +461,11 @@ void ps2_init(void) {
 
     command_byte(0x20); // read config byte command
     uint8_t config = get_byte();
-    config |= 0x03;
-    config &= ~0x30; 
+    
+    config |= 0x43;
+    config &= ~0xb0; 
 
+    log_info("ps2 initial config = %lx, putting 0x47", config);
     command_byte(0x60);
     while((inb(0x64) & 2) != 0)
         asm volatile("pause");
