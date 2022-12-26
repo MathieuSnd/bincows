@@ -22,11 +22,16 @@
 #ifndef	_DIRENT_H
 #define	_DIRENT_H	1
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-#include <unistd.h>
 
-#include <stddef.h>
-#include <types.h>
+
+#include "unistd.h"
+
+#include "stddef.h"
+#include "sys/types.h"
 
 
 struct dirent {
@@ -90,7 +95,7 @@ extern DIR *opendir (const char *__name);
 
    This function is a possible cancellation point and therefore not
    marked with __THROW.  */
-extern int closedir (DIR *__dirp);
+int closedir (DIR *__dirp);
 
 /* Read a directory entry from DIRP.  Return a pointer to a `struct
    dirent' describing the entry, or NULL for EOF or error.  The
@@ -106,18 +111,18 @@ extern struct dirent *readdir (DIR *__dirp);
 
 
 /* Rewind DIRP to the beginning of the directory.  */
-extern void rewinddir (DIR *__dirp);
+void rewinddir (DIR *__dirp);
 
 
 /* Seek to position POS on DIRP.  */
-extern void seekdir (DIR *__dirp, long int __pos);
+void seekdir (DIR *__dirp, long int __pos);
 
 /* Return the current position of DIRP.  */
 extern long int telldir (DIR *__dirp);
 
 
 /* Return the file descriptor used by DIRP.  */
-extern int dirfd (DIR *__dirp);
+int dirfd (DIR *__dirp);
 
 
 
@@ -140,7 +145,7 @@ extern int dirfd (DIR *__dirp);
 
 POSIX 2008
 
-extern int scandir (const char *__restrict __dir,
+int scandir (const char *__restrict __dir,
 		    struct dirent ***__restrict __namelist,
 		    int (*__selector) (const struct dirent *),
 		    int (*__cmp) (const struct dirent **,
@@ -160,5 +165,10 @@ extern __ssize_t getdirentries (int __fd, char *__restrict __buf,
 				__off_t *__restrict __basep);
 
 */
+
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* dirent.h  */

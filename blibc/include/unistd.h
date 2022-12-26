@@ -3,22 +3,19 @@
 
 #include <stdint.h>
 #include <stddef.h>
-#include <types.h>
+#include "sys/types.h"
 
 /* Standard file descriptors.  */
 #define	STDIN_FILENO	0	/* Standard input.  */
 #define	STDOUT_FILENO	1	/* Standard output.  */
 #define	STDERR_FILENO	2	/* Standard error output.  */
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 
 #include <stddef.h>
-
-typedef int pid_t;
-
-#include <ssize_t.h>
-
-
 
 // not implemented yet.....
 #if 0
@@ -42,27 +39,27 @@ extern __useconds_t ualarm (__useconds_t __value, __useconds_t __interval)
 
 
 /* Change the owner and group of FILE.  */
-extern int chown (const char *__file, __uid_t __owner, __gid_t __group)
+int chown (const char *__file, __uid_t __owner, __gid_t __group)
      __THROW __nonnull ((1)) __wur;
 
 //#if defined __USE_XOPEN_EXTENDED || defined __USE_XOPEN2K8
 /* Change the owner and group of the file that FD is open on.  */
-extern int fchown (int __fd, __uid_t __owner, __gid_t __group) __THROW __wur;
+int fchown (int __fd, __uid_t __owner, __gid_t __group) __THROW __wur;
 
 
 /* Change owner and group of FILE, if it is a symbolic
    link the ownership of the symbolic link is changed.  */
-extern int lchown (const char *__file, __uid_t __owner, __gid_t __group)
+int lchown (const char *__file, __uid_t __owner, __gid_t __group)
      __THROW __nonnull ((1)) __wur;
 
 
 
-extern int fchdir (int __fd) __THROW __wur;
+int fchdir (int __fd) __THROW __wur;
 
 
 /* Execute the file FD refers to, overlaying the running program image.
    ARGV and ENVP are passed to the new program, as for `execve'.  */
-extern int fexecve (int __fd, char *const __argv[], char *const __envp[])
+int fexecve (int __fd, char *const __argv[], char *const __envp[])
      __THROW __nonnull ((2));
 
 
@@ -92,7 +89,7 @@ extern __pid_t getpgid (__pid_t __pid) __THROW;
 /* Set the process group ID of the process matching PID to PGID.
    If PID is zero, the current process's process group ID is set.
    If PGID is zero, the process ID of the process is used.  */
-extern int setpgid (__pid_t __pid, __pid_t __pgid) __THROW;
+int setpgid (__pid_t __pid, __pid_t __pgid) __THROW;
 
 /* Both System V and BSD have `setpgrp' functions, but with different
    calling conventions.  The BSD function is the same as POSIX.1 `setpgid'
@@ -105,7 +102,7 @@ extern int setpgid (__pid_t __pid, __pid_t __pgid) __THROW;
 
 /* Set the process group ID of the calling process to its own PID.
    This is exactly the same as `setpgid (0, 0)'.  */
-extern int setpgrp (void) __THROW;
+int setpgrp (void) __THROW;
 
 
 
@@ -132,46 +129,46 @@ extern __gid_t getegid (void) __THROW;
 /* If SIZE is zero, return the number of supplementary groups
    the calling process is in.  Otherwise, fill in the group IDs
    of its supplementary groups in LIST and return the number written.  */
-extern int getgroups (int __size, __gid_t __list[]) __THROW __wur
+int getgroups (int __size, __gid_t __list[]) __THROW __wur
     __attr_access ((__write_only__, 2, 1));
 
 /* Set the user ID of the calling process to UID.
    If the calling process is the super-user, set the real
    and effective user IDs, and the saved set-user-ID to UID;
    if not, the effective user ID is set to UID.  */
-extern int setuid (__uid_t __uid) __THROW __wur;
+int setuid (__uid_t __uid) __THROW __wur;
 
 /* Set the group ID of the calling process to GID.
    If the calling process is the super-user, set the real
    and effective group IDs, and the saved set-group-ID to GID;
    if not, the effective group ID is set to GID.  */
-extern int setgid (__gid_t __gid) __THROW __wur;
+int setgid (__gid_t __gid) __THROW __wur;
 
 /* Set the real group ID of the calling process to RGID,
    and the effective group ID of the calling process to EGID.  */
-extern int setregid (__gid_t __rgid, __gid_t __egid) __THROW __wur;
+int setregid (__gid_t __rgid, __gid_t __egid) __THROW __wur;
 
 /* Set the effective group ID of the calling process to GID.  */
-extern int setegid (__gid_t __gid) __THROW __wur;
+int setegid (__gid_t __gid) __THROW __wur;
 
 /* Fetch the real user ID, effective user ID, and saved-set user ID,
    of the calling process.  */
-extern int getresuid (__uid_t *__ruid, __uid_t *__euid, __uid_t *__suid)
+int getresuid (__uid_t *__ruid, __uid_t *__euid, __uid_t *__suid)
      __THROW;
 
 /* Fetch the real group ID, effective group ID, and saved-set group ID,
    of the calling process.  */
-extern int getresgid (__gid_t *__rgid, __gid_t *__egid, __gid_t *__sgid)
+int getresgid (__gid_t *__rgid, __gid_t *__egid, __gid_t *__sgid)
      __THROW;
 
 /* Set the real user ID, effective user ID, and saved-set user ID,
    of the calling process to RUID, EUID, and SUID, respectively.  */
-extern int setresuid (__uid_t __ruid, __uid_t __euid, __uid_t __suid)
+int setresuid (__uid_t __ruid, __uid_t __euid, __uid_t __suid)
      __THROW __wur;
 
 /* Set the real group ID, effective group ID, and saved-set group ID,
    of the calling process to RGID, EGID, and SGID, respectively.  */
-extern int setresgid (__gid_t __rgid, __gid_t __egid, __gid_t __sgid)
+int setresgid (__gid_t __rgid, __gid_t __egid, __gid_t __sgid)
      __THROW __wur;
 
 
@@ -193,30 +190,30 @@ extern char *ttyname (int __fd) __THROW;
 
 /* Store at most BUFLEN characters of the pathname of the terminal FD is
    open on in BUF.  Return 0 on success, otherwise an error number.  */
-extern int ttyname_r (int __fd, char *__buf, size_t __buflen)
+int ttyname_r (int __fd, char *__buf, size_t __buflen)
      __THROW __nonnull ((2)) __wur __attr_access ((__write_only__, 2, 3));
 
 /* Return 1 if FD is a valid descriptor associated
    with a terminal, zero if not.  */
-extern int isatty (int __fd) __THROW;
+int isatty (int __fd) __THROW;
 
 /* Return the index into the active-logins file (utmp) for
    the controlling terminal.  */
-extern int ttyslot (void) __THROW;
+int ttyslot (void) __THROW;
 
 
 /* Make a link to FROM named TO.  */
-extern int link (const char *__from, const char *__to)
+int link (const char *__from, const char *__to)
      __THROW __nonnull ((1, 2)) __wur;
 
 /* Like link but relative paths in TO and FROM are interpreted relative
    to FROMFD and TOFD respectively.  */
-extern int linkat (int __fromfd, const char *__from, int __tofd,
+int linkat (int __fromfd, const char *__from, int __tofd,
 		   const char *__to, int __flags)
      __THROW __nonnull ((2, 4)) __wur;
 
 /* Make a symbolic link to FROM named TO.  */
-extern int symlink (const char *__from, const char *__to)
+int symlink (const char *__from, const char *__to)
      __THROW __nonnull ((1, 2)) __wur;
 
 /* Read the contents of the symbolic link PATH into no more than
@@ -227,7 +224,7 @@ extern ssize_t readlink (const char *__restrict __path,
      __THROW __nonnull ((1, 2)) __wur __attr_access ((__write_only__, 2, 3));
 
 /* Like symlink but a relative path in TO is interpreted relative to TOFD.  */
-extern int symlinkat (const char *__from, int __tofd,
+int symlinkat (const char *__from, int __tofd,
 		      const char *__to) __THROW __nonnull ((1, 3)) __wur;
 
 /* Like readlink but a relative PATH is interpreted relative to FD.  */
@@ -236,21 +233,21 @@ extern ssize_t readlinkat (int __fd, const char *__restrict __path,
      __THROW __nonnull ((2, 3)) __wur __attr_access ((__write_only__, 3, 4));
 
 /* Remove the link NAME.  */
-extern int unlink (const char *__name) __THROW __nonnull ((1));
+int unlink (const char *__name) __THROW __nonnull ((1));
 
 /* Remove the link NAME relative to FD.  */
-extern int unlinkat (int __fd, const char *__name, int __flag)
+int unlinkat (int __fd, const char *__name, int __flag)
      __THROW __nonnull ((2));
 
 /* Remove the directory PATH.  */
-extern int rmdir (const char *__path) __THROW __nonnull ((1));
+int rmdir (const char *__path) __THROW __nonnull ((1));
 
 
 /* Return the foreground process group ID of FD.  */
 extern __pid_t tcgetpgrp (int __fd) __THROW;
 
 /* Set the foreground process group ID of FD set PGRP_ID.  */
-extern int tcsetpgrp (int __fd, __pid_t __pgrp_id) __THROW;
+int tcsetpgrp (int __fd, __pid_t __pgrp_id) __THROW;
 
 
 /* Return the login name of the user.
@@ -264,44 +261,44 @@ extern char *getlogin (void);
 
    This function is a possible cancellation point and therefore not
    marked with __THROW.  */
-extern int getlogin_r (char *__name, size_t __name_len) __nonnull ((1))
+int getlogin_r (char *__name, size_t __name_len) __nonnull ((1))
     __attr_access ((__write_only__, 1, 2));
 
 /* Set the login name returned by `getlogin'.  */
-extern int setlogin (const char *__name) __THROW __nonnull ((1));
+int setlogin (const char *__name) __THROW __nonnull ((1));
 
 
 /* Put the name of the current host in no more than LEN bytes of NAME.
    The result is null-terminated if LEN is large enough for the full
    name and the terminator.  */
-extern int gethostname (char *__name, size_t __len) __THROW __nonnull ((1))
+int gethostname (char *__name, size_t __len) __THROW __nonnull ((1))
     __attr_access ((__write_only__, 1, 2));
 
 /* Set the name of the current host to NAME, which is LEN bytes long.
    This call is restricted to the super-user.  */
-extern int sethostname (const char *__name, size_t __len)
+int sethostname (const char *__name, size_t __len)
      __THROW __nonnull ((1)) __wur __attr_access ((__read_only__, 1, 2));
 
 /* Set the current machine's Internet number to ID.
    This call is restricted to the super-user.  */
-extern int sethostid (long int __id) __THROW __wur;
+int sethostid (long int __id) __THROW __wur;
 
 
 /* Get and set the NIS (aka YP) domain name, if any.
    Called just like `gethostname' and `sethostname'.
    The NIS domain name is usually the empty string when not using NIS.  */
-extern int getdomainname (char *__name, size_t __len)
+int getdomainname (char *__name, size_t __len)
      __THROW __nonnull ((1)) __wur __attr_access ((__write_only__, 1, 2));
-extern int setdomainname (const char *__name, size_t __len)
+int setdomainname (const char *__name, size_t __len)
      __THROW __nonnull ((1)) __wur __attr_access ((__read_only__, 1, 2));
 
 /* Revoke access permissions to all processes currently communicating
    with the control terminal, and then send a SIGHUP signal to the process
    group of the control terminal.  */
-extern int vhangup (void) __THROW;
+int vhangup (void) __THROW;
 
 /* Revoke the access of all descriptors currently open on FILE.  */
-extern int revoke (const char *__file) __THROW __nonnull ((1)) __wur;
+int revoke (const char *__file) __THROW __nonnull ((1)) __wur;
 
 
 /* Enable statistical profiling, writing samples of the PC into at most
@@ -309,7 +306,7 @@ extern int revoke (const char *__file) __THROW __nonnull ((1)) __wur;
    is enabled, the system examines the user PC and increments
    SAMPLE_BUFFER[((PC - OFFSET) / 2) * SCALE / 65536].  If SCALE is zero,
    disable profiling.  Returns zero on success, -1 on error.  */
-extern int profil (unsigned short int *__sample_buffer, size_t __size,
+int profil (unsigned short int *__sample_buffer, size_t __size,
 		   size_t __offset, unsigned int __scale)
      __THROW __nonnull ((1));
 
@@ -317,24 +314,24 @@ extern int profil (unsigned short int *__sample_buffer, size_t __size,
 /* Turn accounting on if NAME is an existing file.  The system will then write
    a record for each process as it terminates, to this file.  If NAME is NULL,
    turn accounting off.  This call is restricted to the super-user.  */
-extern int acct (const char *__name) __THROW;
+int acct (const char *__name) __THROW;
 
 
 /* Successive calls return the shells listed in `/etc/shells'.  */
 extern char *getusershell (void) __THROW;
-extern void endusershell (void) __THROW; /* Discard cached info.  */
-extern void setusershell (void) __THROW; /* Rewind and re-read the file.  */
+void endusershell (void) __THROW; /* Discard cached info.  */
+void setusershell (void) __THROW; /* Rewind and re-read the file.  */
 
 
 /* Put the program in the background, and dissociate from the controlling
    terminal.  If NOCHDIR is zero, do `chdir ("/")'.  If NOCLOSE is zero,
    redirects stdin, stdout, and stderr to /dev/null.  */
-extern int daemon (int __nochdir, int __noclose) __THROW __wur;
+int daemon (int __nochdir, int __noclose) __THROW __wur;
 
 
 /* Make PATH be the root directory (the starting point for absolute paths).
    This call is restricted to the super-user.  */
-extern int chroot (const char *__path) __THROW __nonnull ((1)) __wur;
+int chroot (const char *__path) __THROW __nonnull ((1)) __wur;
 
 /* Prompt with PROMPT and read a string from the terminal without echoing.
    Uses /dev/tty if possible; otherwise stderr and stdin.  */
@@ -349,7 +346,7 @@ extern long int gethostid (void);
 
 /* Return the maximum number of file descriptors
    the current process could possibly have.  */
-extern int getdtablesize (void) __THROW;
+int getdtablesize (void) __THROW;
 
 
 /* NOTE: These declarations also appear in <fcntl.h>; be sure to keep both
@@ -368,12 +365,12 @@ extern int getdtablesize (void) __THROW;
 # define F_TLOCK 2	/* Test and lock a region for exclusive use.  */
 # define F_TEST  3	/* Test a region for other processes locks.  */
 
-extern int lockf (int __fd, int __cmd, __off_t __len) __wur;
+int lockf (int __fd, int __cmd, __off_t __len) __wur;
 
 
 /* Synchronize at least the data part of a file with the underlying
    media.  */
-extern int fdatasync (int __fildes);
+int fdatasync (int __fildes);
 
 /* One-way hash PHRASE, returning a string suitable for storage in the
    user database.  SALT selects the one-way function to use, and
@@ -387,7 +384,7 @@ extern char *crypt (const char *__key, const char *__salt)
    FROM and copy the result to TO.  The value of TO must not be in the
    range [FROM - N + 1, FROM - 1].  If N is odd the first byte in FROM
    is without partner.  */
-extern void swab (const void *__restrict __from, void *__restrict __to,
+void swab (const void *__restrict __from, void *__restrict __to,
 		  ssize_t __n) __THROW __nonnull ((1, 2))
     __attr_access ((__read_only__, 1, 3))
     __attr_access ((__write_only__, 2, 3));
@@ -399,7 +396,7 @@ extern char *ctermid (char *__s) __THROW;
 /* Return the name of the current user.  */
 extern char *cuserid (char *__s);
 
-extern int pthread_atfork (void (*__prepare) (void),
+int pthread_atfork (void (*__prepare) (void),
 			   void (*__parent) (void),
 			   void (*__child) (void)) __THROW;
 
@@ -424,7 +421,7 @@ int getentropy (void *__buffer, size_t __length) __wur
 
 extern off_t lseek (int __fd, int64_t __offset, int __whence);
 
-extern int close (int __fd);
+int close (int __fd);
 
 
 /* Read NBYTES into BUF from FD.  Return the
@@ -474,7 +471,7 @@ extern unsigned int sleep (unsigned int __seconds);
 
    This function is a cancellation point and therefore not marked with
    __THROW.  */
-extern int usleep (uint64_t __useconds);
+int usleep (uint64_t __useconds);
 
 
 /* NULL-terminated array of "NAME=VALUE" environment variables.  */
@@ -482,61 +479,61 @@ extern char **__environ;
 
 
 /* Terminate program execution with the low-order 8 bits of STATUS.  */
-extern void _exit (int __status) __attribute__ ((__noreturn__));
+void _exit (int __status) __attribute__ ((__noreturn__));
 
 
 
 /* Return the number of bytes in a page.  This is the system's page size,
    which is not necessarily the same as the hardware page size.  */
-extern int getpagesize (void)  __attribute__ ((__const__));
+int getpagesize (void)  __attribute__ ((__const__));
 
 
 
 /* Set the end of accessible data space (aka "the break") to ADDR.
    Returns zero on success and -1 for errors (with errno set).  */
-extern int brk (void *__addr);
+int brk (void *__addr);
 
 /* Increase or decrease the end of accessible data space by DELTA bytes.
    If successful, returns the address the previous end of data space
    (i.e. the beginning of the new space, if DELTA > 0);
    returns (void *) -1 for errors (with errno set).  */
-extern void *sbrk (uint64_t __delta);
+void *sbrk (uint64_t __delta);
 
 
 /* Execute PATH with arguments ARGV and environment from `environ'.  */
-extern int execv (const char *__path, char const *const __argv[]);
+int execv (const char *__path, char const *const __argv[]);
 
 /* Replace the current process, executing PATH with arguments ARGV and
    environment ENVP.  ARGV and ENVP are terminated by NULL pointers.  */
-extern int execve (const char *__path, char const *const __argv[],
+int execve (const char *__path, char const *const __argv[],
 		   char *const __envp[]);
 
 /* Execute PATH with all arguments after PATH until a NULL pointer,
    and the argument after that for environment.  */
-extern int execle (const char *__path, const char *__arg, ...);
+int execle (const char *__path, const char *__arg, ...);
 
 /* Execute PATH with all arguments after PATH until
    a NULL pointer and environment from `environ'.  */
-extern int execl (const char *__path, const char *__arg, ...);
+int execl (const char *__path, const char *__arg, ...);
 
 /* Execute FILE, searching in the `PATH' environment variable if it contains
    no slashes, with arguments ARGV and environment from `environ'.  */
-extern int execvp (const char *__file, char const *const __argv[]);
+int execvp (const char *__file, char const *const __argv[]);
 
-extern int execvpe(const char *file, char const *const argv[],
+int execvpe(const char *file, char const *const argv[],
                        char const *const envp[]);
 
 
 /* Execute FILE, searching in the `PATH' environment variable if
    it contains no slashes, with all arguments after FILE until a
    NULL pointer and environment from `environ'.  */
-extern int execlp (const char *__file, const char *__arg, ...);
+int execlp (const char *__file, const char *__arg, ...);
 
 
 
 
 /* Change the process's working directory to PATH.  */
-extern int chdir (const char *__path);
+int chdir (const char *__path);
 
 /* Get the pathname of the current working directory,
    and put it in SIZE bytes of BUF.  Returns NULL if the
@@ -589,16 +586,13 @@ extern uint64_t syscall (long int __sysno, const void* args, size_t args_sz);
 
 
 /* Duplicate FD, returning a new file descriptor on the same file.  */
-extern int dup (int __fd);
+int dup (int __fd);
 
 /* Duplicate FD to FD2, closing FD2 and making it open on the same file.  */
-extern int dup2 (int __fd, int __fd2);
+int dup2 (int __fd, int __fd2);
 
 
-typedef enum mode_t {
-   IFDIR = 0x4000,
-} mode_t;
-
+#include "sys/stat.h"
 
 
 int open (const char *pathname, int flags, mode_t mode);
@@ -613,15 +607,15 @@ int open (const char *pathname, int flags, mode_t mode);
 #define	F_OK	0		/* Test for existence.  */
 
 /* Test for access to NAME using the real UID and real GID.  */
-extern int access (const char* name, int type);
+int access (const char* name, int type);
 
 
 
 /* Truncate FILE to LENGTH bytes.  */
-extern int truncate (const char* file, off_t length);
+int truncate (const char* file, off_t length);
 
 /* Truncate the file FD is open on to LENGTH bytes.  */
-extern int ftruncate (int fd, off_t length);
+int ftruncate (int fd, off_t length);
 
 
 
@@ -629,7 +623,7 @@ extern int ftruncate (int fd, off_t length);
    If successful, two file descriptors are stored in PIPEDES;
    bytes written on PIPEDES[1] can be read from PIPEDES[0].
    Returns 0 if successful, -1 if not.  */
-extern int pipe (int pipedes[2]);
+int pipe (int pipedes[2]);
 
 
 
@@ -637,10 +631,10 @@ extern int pipe (int pipedes[2]);
 
    This function is a cancellation point and therefore not marked with
    __THROW.  */
-extern int fsync (int __fd);
+int fsync (int __fd);
 
 /* Make all changes done to all files actually appear on disk.  */
-extern void sync (void);
+void sync (void);
 
 
 
@@ -649,9 +643,12 @@ extern void sync (void);
 
    This function is a cancellation point and therefore not marked with
    __THROW.  */
-extern int pause (void);
+int pause (void);
 
 
+#ifdef __cplusplus
+}
+#endif
 
 
 #endif /* unistd.h  */

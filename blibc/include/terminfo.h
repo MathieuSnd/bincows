@@ -6,6 +6,11 @@
  */
 
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+
 typedef struct {
     int cols;
     int lines;
@@ -19,3 +24,8 @@ typedef struct {
 
 // read the current terminal info
 int terminfo_read(terminfo_t* info);
+
+
+#ifdef __cplusplus
+}
+#endif

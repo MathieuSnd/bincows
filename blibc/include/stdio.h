@@ -23,10 +23,14 @@
 #ifndef _STDIO_H
 #define _STDIO_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stddef.h>
 #include <stdarg.h>
 #include <stdint.h>
-#include <ssize_t.h>
+#include "sys/types.h"
 
 
 typedef struct FILE FILE;
@@ -81,9 +85,9 @@ extern FILE *stderr;		/* Standard error output stream.  */
 // unimplementable yet
 #if 0
 /* Remove file FILENAME.  */
-extern int remove (const char *__filename);
+int remove (const char *__filename);
 /* Rename file OLD to NEW.  */
-extern int rename (const char *__old, const char *__new);
+int rename (const char *__old, const char *__new);
 
 
 /* Create a temporary file and open it read/write.
@@ -120,7 +124,7 @@ extern char *tempnam (const char *__dir, const char *__pfx)
    cancellation point.  But due to similarity with an POSIX interface
    or due to the implementation it is a cancellation point and
    therefore not marked with __THROW.  */
-extern int fflush_unlocked (FILE *__stream);
+int fflush_unlocked (FILE *__stream);
 #endif
 
 
@@ -140,14 +144,14 @@ extern FILE *open_memstream (char **__bufloc, size_t *__sizeloc);
 
    This function is a possible cancellation point and therefore not
    marked with __THROW.  */
-extern int getchar (void);
+int getchar (void);
 
 /* These are defined in POSIX.1:1996.
 
    These functions are possible cancellation points and therefore not
    marked with __THROW.  */
-extern int getc_unlocked (FILE *__stream);
-extern int getchar_unlocked (void);
+int getc_unlocked (FILE *__stream);
+int getchar_unlocked (void);
 
 
 
@@ -173,14 +177,14 @@ extern size_t getdelim (char **__restrict __lineptr,
 /* These are defined in POSIX.1:1996.  */
 
 /* Acquire ownership of STREAM.  */
-extern void flockfile (FILE *__stream);
+void flockfile (FILE *__stream);
 
 /* Try to acquire ownership of STREAM but do not block if it is not
    possible.  */
-extern int ftrylockfile (FILE *__stream);
+int ftrylockfile (FILE *__stream);
 
 /* Relinquish the ownership granted for STREAM.  */
-extern void funlockfile (FILE *__stream);
+void funlockfile (FILE *__stream);
 #endif /* POSIX */
 
 
@@ -194,7 +198,7 @@ extern FILE *popen (const char *__command, const char *__modes);
 
    This function is a possible cancellation point and therefore not
    marked with __THROW.  */
-extern int pclose (FILE *__stream);
+int pclose (FILE *__stream);
 
 
 /* Return the name of the controlling terminal.  */
@@ -208,12 +212,12 @@ extern char *ctermid (char *__s);
 
    This function is a possible cancellation point and therefore not
    marked with __THROW.  */
-extern int fclose (FILE *__stream);
+int fclose (FILE *__stream);
 /* Flush STREAM, or all streams if STREAM is NULL.
 
    This function is a possible cancellation point and therefore not
    marked with __THROW.  */
-extern int fflush (FILE *__stream);
+int fflush (FILE *__stream);
 
 
 
@@ -238,33 +242,33 @@ extern FILE *fdopen (int __fd, const char *__modes);
 
 /* If BUF is NULL, make STREAM unbuffered.
    Else make it use buffer BUF, of size BUFSIZ.  */
-extern void setbuf (FILE *__restrict __stream, char *__restrict __buf);
+void setbuf (FILE *__restrict __stream, char *__restrict __buf);
 
 
 /* Make STREAM use buffering mode MODE.
    If BUF is not NULL, use N bytes of it for buffering;
    else allocate an internal buffer N bytes long.  */
-extern int setvbuf (FILE *__restrict __stream, char *__restrict __buf,
+int setvbuf (FILE *__restrict __stream, char *__restrict __buf,
 		    int __modes, size_t __n);
 
 /* If BUF is NULL, make STREAM unbuffered.
    Else make it use SIZE bytes of BUF for buffering.  */
-extern void setbuffer (FILE *__restrict __stream, char *__restrict __buf,
+void setbuffer (FILE *__restrict __stream, char *__restrict __buf,
 		       size_t __size);
 
 /* Make STREAM line-buffered.  */
-extern void setlinebuf (FILE *__stream);
+void setlinebuf (FILE *__stream);
 
 #include <stdio_printf.h>
 
 /* Read a character from STREAM.
    These functions are possible cancellation points and therefore not
    marked with __THROW.  */
-extern int fgetc (FILE *__stream);
+int fgetc (FILE *__stream);
 
 
-ssize_t getline(char **restrict lineptr, size_t *restrict n,
-                       FILE *restrict stream);
+ssize_t getline(char **__restrict__ lineptr, size_t *__restrict__ n,
+                       FILE *__restrict__ stream);
 
 
 #define getc fgetc
@@ -279,14 +283,14 @@ ssize_t getline(char **restrict lineptr, size_t *restrict n,
 
    These functions is a possible cancellation point and therefore not
    marked with __THROW.  */
-extern int fputc (int __c, FILE *__stream);
-extern int putc (int __c, FILE *__stream);
+int fputc (int __c, FILE *__stream);
+int putc (int __c, FILE *__stream);
 
 /* Write a character to stdout.
 
    This function is a possible cancellation point and therefore not
    marked with __THROW.  */
-extern int putchar (int __c);
+int putchar (int __c);
 
 
 /* Get a newline-terminated string of finite length from STREAM.
@@ -301,20 +305,20 @@ extern char *fgets (char *__restrict __s, int __n, FILE *__restrict __stream);
 
    This function is a possible cancellation point and therefore not
    marked with __THROW.  */
-extern int fputs (const char *__restrict __s, FILE *__restrict __stream);
+int fputs (const char *__restrict __s, FILE *__restrict __stream);
 
 /* Write a string, followed by a newline, to stdout.
 
    This function is a possible cancellation point and therefore not
    marked with __THROW.  */
-extern int puts (const char *__s);
+int puts (const char *__s);
 
 
 /* Push a character back onto the input buffer of STREAM.
 
    This function is a possible cancellation point and therefore not
    marked with __THROW.  */
-extern int ungetc (int __c, FILE *__stream);
+int ungetc (int __c, FILE *__stream);
 
 
 /* Read chunks of generic data from STREAM.
@@ -336,7 +340,7 @@ extern size_t fwrite (const void *__restrict __ptr, size_t __size,
 
    This function is a possible cancellation point and therefore not
    marked with __THROW.  */
-extern int fseek (FILE *__stream, long int __off, int __whence);
+int fseek (FILE *__stream, long int __off, int __whence);
 /* Return the current position of STREAM.
 
    This function is a possible cancellation point and therefore not
@@ -346,7 +350,7 @@ extern long int ftell (FILE *__stream);
 
    This function is a possible cancellation point and therefore not
    marked with __THROW.  */
-extern void rewind (FILE *__stream);
+void rewind (FILE *__stream);
 
 /* The Single Unix Specification, Version 2, specifies an alternative,
    more adequate interface for the two functions above which deal with
@@ -361,34 +365,37 @@ extern void rewind (FILE *__stream);
    This function is a possible cancellation point and therefore not
    marked with __THROW.  */
 
-extern int fgetpos (FILE *__restrict __stream, fpos_t *__restrict __pos);
+int fgetpos (FILE *__restrict __stream, fpos_t *__restrict __pos);
 /* Set STREAM's position.
 
    This function is a possible cancellation point and therefore not
    marked with __THROW.  */
-extern int fsetpos (FILE *__stream, const fpos_t *__pos);
+int fsetpos (FILE *__stream, const fpos_t *__pos);
 
 
 /* Clear the error and EOF indicators for STREAM.  */
-extern void clearerr (FILE *__stream);
+void clearerr (FILE *__stream);
 /* Return the EOF indicator for STREAM.  */
-extern int feof (FILE *__stream);
+int feof (FILE *__stream);
 /* Return the error indicator for STREAM.  */
-extern int ferror (FILE *__stream);
+int ferror (FILE *__stream);
 
 
 /* Print a message describing the meaning of the value of errno.
 
    This function is a possible cancellation point and therefore not
    marked with __THROW.  */
-extern void perror (const char* s);
+void perror (const char* s);
 
 
 /* Return the system file descriptor for STREAM.  */
-extern int fileno (FILE *__stream);
+int fileno (FILE *__stream);
 
 
 
 
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* <stdio.h> included.  */

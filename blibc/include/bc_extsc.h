@@ -8,6 +8,10 @@
 
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 
 #ifndef SIG_HANDLER_T
 
@@ -40,7 +44,7 @@ struct sigsetup {
  * any program. It can though be changed at any time
  * 
  */
-extern int sigsetup(struct sigsetup state);
+int sigsetup(struct sigsetup state);
 
 /**
  * return from a signal handler.
@@ -49,19 +53,23 @@ extern int sigsetup(struct sigsetup state);
  * return from a signal handler.
  * 
  */
-extern void sigreturn(void) __attribute__((noreturn));
+void sigreturn(void) __attribute__((noreturn));
 
 
 /**
  * send a signal to a process.
  * 0 on success, -1 on error.
  */
-extern int sigsend(int sig, int pid);
+int sigsend(int sig, int pid);
 
 
 typedef uint32_t fd_mask_t;
 
+#ifndef __cplusplus
 _Static_assert(MAX_SIGNALS % 8 == 0, "MAX_SIGNALS must be a multiple of 8");
+#else
+static_assert(MAX_SIGNALS % 8 == 0, "MAX_SIGNALS must be a multiple of 8");
+#endif
 
 /** 
  * executes a new task with the given argv.
@@ -70,7 +78,7 @@ _Static_assert(MAX_SIGNALS % 8 == 0, "MAX_SIGNALS must be a multiple of 8");
  * mask is a bitmask of file descriptors that are not
  * to inherit to the new process.
 */
-extern int forkexec(char const * const cmdline[], fd_mask_t mask);
+int forkexec(char const * const cmdline[], fd_mask_t mask);
 
 
 
@@ -84,20 +92,24 @@ extern int forkexec(char const * const cmdline[], fd_mask_t mask);
  * the function must call thread_exit
  * 
  */
-extern int _thread_create(void* entry, void* arg);
+int _thread_create(void* entry, void* arg);
 
 
 /**
  * this function is the only way to exit from a thread.
  */
-extern void __attribute__((noreturn)) _thread_exit(void);
+void __attribute__((noreturn)) _thread_exit(void);
 
 // return the tid of the current thread
-extern int _get_tid(void);
+int _get_tid(void);
 
 
-extern int futex_wait(void* addr, uint32_t value, uint64_t timeout);
-extern int futex_wake(void* addr, int num);
+int futex_wait(void* addr, uint32_t value, uint64_t timeout);
+int futex_wake(void* addr, int num);
+
+#ifdef __cplusplus
+}
+#endif
 
 
 #endif // BC_EXTSC_H

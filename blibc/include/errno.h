@@ -7,7 +7,15 @@
 
 */
 
-extern int errno;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#ifndef __cplusplus
+// @otodo fix
+int errno;
+#endif
 
 
 #define EPERM 1 /* Operation not permitted */
@@ -138,5 +146,9 @@ extern int errno;
 #define EQFULL 106 /* Interface output queue is full */
 #define ELAST 106 /* Must be equal largest errno */
 
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

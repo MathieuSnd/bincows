@@ -7,6 +7,10 @@
 */
 
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define SCHED_FIFO  0
 #define SCHED_RR    1
 #define SCHED_OTHER 2
@@ -16,8 +20,7 @@
 int sched_get_priority_max(int policy);
 int sched_get_priority_min(int policy);
 
-// for pid_t
-#include <unistd.h>
+#include "sys/types.h"
 
 struct sched_param {
     int sched_priority;
@@ -35,5 +38,9 @@ int sched_setparam(pid_t, const struct sched_param *);
 int sched_setscheduler(pid_t, int, const struct sched_param *);
 int sched_yield(void);
 
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif//_SCHED_H

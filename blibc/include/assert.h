@@ -1,8 +1,12 @@
 #ifndef ASSERT_H
 #define ASSERT_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-extern void __assert_fail(const char *expr, const char *file, int line, const char *func);
+
+void __assert_fail(const char *expr, const char *file, int line, const char *func);
 
 #define __ASSERT_FUNCTION __func__
 
@@ -19,5 +23,9 @@ extern void __assert_fail(const char *expr, const char *file, int line, const ch
 #define assert(expr) ((void)0)
 #endif
 
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

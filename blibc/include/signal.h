@@ -1,6 +1,11 @@
 #ifndef	SIGNAL_H
 #define	SIGNAL_H
 
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <signums.h>
 
 // for pid_t
@@ -22,7 +27,7 @@ typedef void (*sighandler_t)(int);
 /* Set the handler for the signal SIG to HANDLER, returning the old
    handler, or SIG_ERR on error.
 */
-extern sighandler_t signal(int sig, sighandler_t handler);
+sighandler_t signal(int sig, sighandler_t handler);
 
 // same as kill(get_pid(), sig)
 #define raise(sig) sigsend(getpid(), sig)
@@ -56,16 +61,16 @@ int sigdelset (sigset_t *set, int signo);
 int sigismember (const sigset_t *set, int signo);
 
 
-int sigprocmask(int how, const sigset_t *restrict set,
-                           sigset_t *restrict oldset);
+int sigprocmask(int how, const sigset_t *__restrict__ set,
+                           sigset_t *__restrict__ oldset);
 
 #define SIG_BLOCK 0
 #define SIG_UNBLOCK 1
 #define SIG_SETMASK 2
 
 
+#ifdef __cplusplus
+}
+#endif
 
 #endif	/* SIGNAL_H */
-
-
-

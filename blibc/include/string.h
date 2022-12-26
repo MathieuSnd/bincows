@@ -1,6 +1,11 @@
 #ifndef KSTRING_H
 #define KSTRING_H
 
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdint.h>
 #include <stddef.h>
 
@@ -45,5 +50,9 @@ char* strtok_r(char* __restrict__ str, const char* __restrict__ delim, char** __
 
 char *strerror(int errnum);
 
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif//KSTRING_H

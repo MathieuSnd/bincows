@@ -1,43 +1,51 @@
 #ifndef CTYPES_H
 #define CTYPES_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-extern int isalnum(int c);
+
+int isalnum(int c);
 
 // This function checks whether the passed character is alphabetic.
-extern int isalpha(int c);
+int isalpha(int c);
 // This function checks whether the passed character is control character.
-extern int iscntrl(int c);
+int iscntrl(int c);
 
 // This function checks whether the passed character is decimal digit.
-extern int isdigit(int c);
+int isdigit(int c);
 
 // This function checks whether the passed character has graphical representation using locale.
-extern int isgraph(int c);
+int isgraph(int c);
 
 // This function checks whether the passed character is lowercase letter.
-extern int islower(int c);
+int islower(int c);
 
 // This function checks whether the passed character is printable.
-extern int isprint(int c);
+int isprint(int c);
 
 // This function checks whether the passed character is a punctuation character.
-extern int ispunct(int c);
+int ispunct(int c);
 
 // This function checks whether the passed character is white-space.
-extern int isspace(int c);
+int isspace(int c);
 
 // This function checks whether the passed character is an uppercase letter.
-extern int isupper(int c);
+int isupper(int c);
 
 // This function checks whether the passed character is a hexadecimal digit.
-extern int isxdigit(int c);
+int isxdigit(int c);
 
-extern int tolower(int c);
+int tolower(int c);
 
-extern int toupper(int c);
+int toupper(int c);
 
-extern int isascii(int c);
+int isascii(int c);
 
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // CTYPES_H
