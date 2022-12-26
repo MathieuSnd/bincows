@@ -8,7 +8,7 @@ INCLUDE_DIR=../../blibc/include
 MAKE := make
 CC     := $(GNU_PREFIX)x86_64-elf-gcc
 LD     := $(GNU_PREFIX)x86_64-elf-ld
-
+CXX    := $(GNU_PREFIX)x86_64-elf-g++
 
 CFLAGS := -O3 -fno-inline \
 		  -I$(INCLUDE_DIR) -fno-omit-frame-pointer -fno-pie --freestanding -g
@@ -22,7 +22,8 @@ CFLAGS += -march=native
 
 
 CFILES := $(shell find ./ -type f -name '*.c')
-OBJS:= $(CFILES:.c=.o)
+CPPFILES := $(shell find ./ -type f -name '*.cpp')
+OBJS:= $(CFILES:.c=.o) $(CPPFILES:.cpp=.o)
 
 
 all: $(ELF)
@@ -36,12 +37,18 @@ host-dbg: host
 
 
 
+CPPFLAGS=$(CFLAGS) -fno-exceptions -fno-use-cxa-atexit
+
 
 $(ELF): $(OBJS)
 	$(LD)  $(OBJS) $(LDLIBS) -o $(ELF)
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
+
+
+%.o: %.cpp
+	$(CXX) -std=c++17 $(CPPFLAGS) -c $< -o $@
 
 
 clean: force_look
