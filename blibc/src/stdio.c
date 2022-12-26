@@ -84,13 +84,10 @@ void __stdio_init(void) {
 #define BUF_WR 2
 
 
-FILE *fopen (const char *restrict filename,
-		     const char *restrict modes
-) {
-
+// return -1 if invalid modes
+static
+int modes_to_flags(const char *restrict modes) {
     int flags = 0;
-    int fd;
-
 
     // compute flags
     if(modes[0] == 'r')
@@ -106,7 +103,7 @@ FILE *fopen (const char *restrict filename,
         flags |= O_APPEND;
     }
     else
-        return NULL;
+        return -1;
 
     int i = 1;
     
@@ -117,14 +114,13 @@ FILE *fopen (const char *restrict filename,
     if(modes[i] == '+')
         flags |= O_RDWR;
     else if(modes[i] != 0)
-        return NULL;
+        return -1;
     
+    return flags;
+}
 
-    fd = open(filename, flags, 0);
-    if(fd < 0) {
-        return NULL;
-    }
-
+static 
+FILE* create_file_struct(int fd, int flags) {
     FILE* file = malloc(sizeof(FILE));
     if(!file) {
         return NULL;
@@ -143,8 +139,46 @@ FILE *fopen (const char *restrict filename,
     file->buf_off = 0;
     file->buffer = malloc(BUFSIZ);
 
+    if(!file->buffer) {
+        free(file);
+        return NULL;
+    }
 
-    return file;                 
+
+    return file;
+
+}
+
+
+FILE *fopen (const char *restrict filename,
+		     const char *restrict modes
+) {
+
+    int flags = 0;
+    int fd;
+
+    flags = modes_to_flags(modes);
+    if(flags == -1)
+        return NULL;
+
+    fd = open(filename, flags, 0);
+    if(fd < 0) {
+        return NULL;
+    }
+
+    return create_file_struct(fd, flags);
+}
+
+
+FILE* fdopen(int fd, const char* modes) {
+    int flags = modes_to_flags(modes);
+    if(flags == -1)
+        return NULL;
+
+    if(fd < 0 || fd > FOPEN_MAX)
+        return NULL;
+
+    return create_file_struct(fd, flags);
 }
 
 
@@ -187,7 +221,6 @@ int fclose (FILE* stream) {
     }
     return stream;
 }
-
 
 
 
