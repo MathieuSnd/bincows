@@ -67,7 +67,6 @@ static void panic_handler_code(
     void NAME(uint32_t code) {\
         (void) code;\
         panic_handler(#NAME);\
-        __builtin_unreachable();\
     };\
     register_exception_handler(IRQN, NAME);\
 }
@@ -136,6 +135,13 @@ DECLARE_int_HANDLER(_int_handler45)
 DECLARE_int_HANDLER(_int_handler46)
 DECLARE_int_HANDLER(_int_handler47)
 DECLARE_int_HANDLER(_int_handler48)
+DECLARE_int_HANDLER(_int_handler49)
+DECLARE_int_HANDLER(_int_handler50)
+DECLARE_int_HANDLER(_int_handler51)
+DECLARE_int_HANDLER(_int_handler52)
+DECLARE_int_HANDLER(_int_handler53)
+DECLARE_int_HANDLER(_int_handler54)
+DECLARE_int_HANDLER(_int_handler55)
 
 #include "../lib/logging.h"
 static
@@ -282,7 +288,16 @@ void setup_isrs(void) {
     // timer IRQ
     set_irq_handler(48, _int_handler48);
 
-    for(int i = 49; i <= 254; i++)
+    set_irq_handler(49, _int_handler49);
+    set_irq_handler(50, _int_handler50);
+    set_irq_handler(51, _int_handler51);
+    set_irq_handler(52, _int_handler52);
+    set_irq_handler(53, _int_handler53);
+    set_irq_handler(54, _int_handler54);
+    set_irq_handler(55, _int_handler55);
+
+
+    for(int i = 56; i <= 254; i++)
         set_irq_handler(i, IRQ_dummy_handler);
 
     set_irq_handler(255, IRQ_LAPIC_spurious);

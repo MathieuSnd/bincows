@@ -112,6 +112,13 @@ create_int 45
 create_int 46
 create_int 47
 create_int 48
+create_int 49
+create_int 50
+create_int 51
+create_int 52
+create_int 53
+create_int 54
+create_int 55
 
 
 common_stub:
