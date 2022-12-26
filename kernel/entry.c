@@ -12,7 +12,7 @@
 #include "drivers/terminal/terminal.h"
 #include "drivers/video/video.h"
 #include "drivers/hpet.h"
-#include "drivers/ps2kb.h"
+#include "drivers/ps2.h"
 #include "drivers/pcie/pcie.h"
 #include "drivers/pcie/scan.h"
 
@@ -329,7 +329,7 @@ void kernel_main(struct boot_interface* bi) {
 
 
     pic_init();
-    ps2kb_init();
+    ps2_init();
 
 
     disk_part_t* part = find_main_part(bi);
@@ -350,8 +350,8 @@ void kernel_main(struct boot_interface* bi) {
     terminal_register_dev_file("term", terminal);
 
 
-    // /dev/ps2kb
-    ps2kb_register_dev_file("ps2kb");
+    // /dev/ps2
+    ps2_register_dev_file("ps2");
 
     // /mem/video
     video_create_file("video");

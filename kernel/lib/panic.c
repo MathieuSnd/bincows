@@ -1,7 +1,7 @@
 #include "panic.h"
 #include "../lib/sprintf.h"
 #include "../drivers/terminal/terminal.h"
-#include "../drivers/ps2kb.h"
+#include "../drivers/ps2.h"
 #include "../acpi/power.h"
 #include "../int/apic.h"
 #include "../memory/vmap.h"
@@ -85,7 +85,7 @@ clock_ns();
         "type ESCAPE to shutdown the computer.\n"
     );
     // do not make any interrupt
-    ps2kb_poll_wait_for_key(PS2KB_ESCAPE);
+    ps2_poll_wait_for_key(ps2_ESCAPE);
     shutdown();
 
     asm volatile("hlt");

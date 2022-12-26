@@ -3,7 +3,7 @@
 #include "../lib/sprintf.h"
 #include "../lib/panic.h"
 #include "../lib/logging.h"
-#include "../drivers/ps2kb.h"
+#include "../drivers/ps2.h"
 #include "../int/idt.h"
 #include "../memory/heap.h"
 #include <lai/helpers/pm.h>

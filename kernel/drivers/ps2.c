@@ -1,4 +1,4 @@
-#include "ps2kb.h"
+#include "ps2.h"
 #include "../lib/logging.h"
 #include "../lib/sprintf.h"
 #include "../int/irq.h"
@@ -50,7 +50,7 @@ static volatile unsigned buff_tail = 0, buff_head = 0;
 extern int lazy_shutdown;
 
 
-static int append_buffer_event(struct ps2_event* ev) {
+static int append_event(struct ps2_event* ev) {
     int len = sizeof(*ev);
     void* buf = ev;
     
@@ -62,7 +62,7 @@ static int append_buffer_event(struct ps2_event* ev) {
 
     if((buff_head < buff_tail && buff_head + len >= buff_tail)
     ||(buff_tail < buff_head && wrap_end >= (int)buff_tail)) {
-        log_warn("ps2 keyboard overrun");
+        log_warn("ps2 buffer overrun");
         return -1;
     }
     else {
@@ -141,6 +141,37 @@ static void command_byte(uint8_t b) {
     outb(0x64, b);
 }
 
+static int mouse_command(uint8_t b) {
+    // wait for the input bufer
+    // to be empty
+    while((inb(0x64) & 2) != 0)
+        asm volatile("pause");
+
+    outb(0x64, 0xD4);
+
+    while((inb(0x64) & 2) != 0)
+        asm volatile("pause");
+
+    outb(0x60, b);
+
+
+
+    while((inb(0x64) & 1) == 0)
+        asm volatile("pause");
+
+    uint8_t ack = inb(0x60);
+
+    // only the first byte matters, drop
+    // the rest
+    while(inb(0x64) & 1)
+        inb(0x60);
+
+    if(ack != 0xFA) // didn't acknowledge the command
+        return -1;
+    else // all good
+        return 0;
+}
+
 
 
 extern const char ps2_azerty_table_lowercase[];
@@ -165,7 +196,7 @@ void ps2_trigger_CPU_reset(void) {
     // reset command
 }
 
-void ps2kb_poll_wait_for_key(uint8_t key) {
+void ps2_poll_wait_for_key(uint8_t key) {
     while(get_byte() != key)
         ;
 }
@@ -194,7 +225,6 @@ static void process_byte(uint8_t b) {
 
     // if non 0, a sequence is running
     static int seq = 0;
-
 
     if(b == 0xFA) // ACK
         return;
@@ -293,11 +323,11 @@ static void process_byte(uint8_t b) {
 
 
     // @todo remove
-    if(ev.type == KEYRELEASED && ev.scancode == PS2KB_ESCAPE)
+    if(ev.type == KEYRELEASED && ev.scancode == ps2_ESCAPE)
         lazy_shutdown = 1;
 
     
-    append_buffer_event(&ev);
+    append_event(&ev);
 }
 
 
@@ -308,21 +338,121 @@ static void irq_handler(struct driver* dr) {
     (void) dr;
 
     uint8_t status = inb(0x64);
+
+    //if(status &)
     
     // sometimes, interrupts
     // are triggered eventhough no
     // key is pressed or released
-    if(status & 1)
+    while(status & 1) {
         process_byte(inb(0x60));
+        
+        status = inb(0x64);
+    }
 
     pic_eoi(1);
 }
 
-void ps2kb_init(void) {
+
+static void mouse_button_event(int buttons) {
+    static int button_state;
+
+    int pressed  = (~button_state &  buttons) & 0x03;
+    int released = ( button_state & ~buttons) & 0x03;
+
+    for(int i = 0; i < 3; i++) {
+        struct ps2_event ev = {
+            .mouse = {
+                .button = 1 << i,
+                .xrel = 0,
+                .yrel = 0
+            },
+        };
+        if(pressed & (1 << i)) {
+            ev.type = MOUSE_PRESSED;
+            append_event(&ev);
+        }
+        else if(released & (1 << i)) {
+            ev.type = MOUSE_RELEASED;
+            append_event(&ev);
+        } 
+    }
+
+    button_state = buttons;
+}
+
+
+static void mouse_wait(void) {
+    while((inb(0x64) & 1) == 0)
+        asm("pause");
+}
+
+static void mouse_read(void) {
+    mouse_wait();
+    uint8_t b0    = inb(0x60);  mouse_wait();
+    int16_t x_mov = inb(0x60);  mouse_wait();
+    int16_t y_mov = inb(0x60);
+
+
+    if((b0 & 8) == 0) {
+        
+        log_info("ps/2 mouse packet error %u", b0);
+        return;
+    }
+
+    // pressed / unpressed event
+    mouse_button_event(b0);
+
+    int x_sign = b0 & 0x10 ? 1 : 0;
+    int y_sign = b0 & 0x20 ? 1 : 0;
+
+
+    int x_overflow = b0 & 0x40;
+    int y_overflow = b0 & 0x80;
+
+    int16_t x_rel = x_mov - (x_sign << 8);
+    int16_t y_rel = y_mov - (y_sign << 8);
+
+    if(x_overflow)
+        x_rel *= 2;
+    if(y_overflow)
+        y_rel *= 2;
+
+
+    if(x_rel | y_rel) {
+        // cursor move 
+
+        struct ps2_event ev = {
+            .type = MOUSE_MOVE,
+            .mouse = {
+                .xrel = x_rel,
+                .yrel = -y_rel,
+                .button = 0,
+            } 
+        };
+        append_event(&ev);
+    }
+} 
+
+
+static void mouse_irq_handler(struct driver* unused) {
+    (void) unused;
+    uint8_t status = inb(0x64);
+
+    while(status & 1) {
+        mouse_read();
+        status = inb(0x64);
+    }
+
+    pic_eoi(12);
+}
+
+void ps2_init(void) {
     
     log_debug("init ps/2 keyboard...");
 
     register_irq(41, irq_handler, NULL);
+    register_irq(52, mouse_irq_handler, NULL);
     
     unsigned status = inb(0x64);
     if(status & 0xc0) {
@@ -331,22 +461,37 @@ void ps2kb_init(void) {
         return;
     }
 
-// enable ps2 through config byte
-    uint8_t config;
     command_byte(0x20); // read config byte command
-    config = get_byte();
+    uint8_t config = get_byte();
+    config |= 0x03;
+    config &= ~0x30; 
 
-    command_byte(0x6);
-    command_byte(config | 1);
+    command_byte(0x60);
+    while((inb(0x64) & 2) != 0)
+        asm volatile("pause");
+    
+    outb(0x60, config);
+
+
+
+    command_byte(0xAE); // enable 1st PS/2 port (keyboard)
+    command_byte(0xA8); // enable 2nd PS/2 port (mouse)
+
+
+    mouse_command(0xF6); // load defaults
+    mouse_command(0xF4); // enable ps2 mouse
+
+
     // flush output buffer
     flush_output_buffer();
 
+    // unmask IRQs
     pic_mask_irq(1, 0);
-
+    pic_mask_irq(12, 0);
 }
 
 
-static int ps2kb_read(void* arg, void* buf, size_t begin, size_t count) {
+static int ps2_read(void* arg, void* buf, size_t begin, size_t count) {
     (void) arg;
     (void) begin;
 
@@ -362,24 +507,24 @@ static int ps2kb_read(void* arg, void* buf, size_t begin, size_t count) {
     return rd;
 }
 
-static int ps2kb_write(void* arg, const void* buf, size_t begin, size_t count) {
+static int ps2_write(void* arg, const void* buf, size_t begin, size_t count) {
     (void) arg;
     (void) buf;
     (void) begin;
     (void) count;
-    log_warn("tried to write in read-only dev file /dev/ps2kb");
+    log_warn("tried to write in read-only dev file /dev/ps2");
     // unwritable
     return -1;
 }
 
 
-void ps2kb_register_dev_file(const char* filename) {
+void ps2_register_dev_file(const char* filename) {
 
 
     int r = devfs_map_device((devfs_file_interface_t){
         .arg   = NULL,
-        .read  = (void*)ps2kb_read,
-        .write = (void*)ps2kb_write,
+        .read  = (void*)ps2_read,
+        .write = (void*)ps2_write,
         .rights = {.read = 1, .write = 0, .seekable = 0},
         .file_size = ~0llu,
     }, filename);
