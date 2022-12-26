@@ -57,11 +57,11 @@ void pic_init(void) {
 	outb(PIC1_DATA, ICW4_8086);
 	outb(PIC2_DATA, ICW4_8086);
     // mask all interrupts
-	outb(PIC1_DATA, 0xff); 
+	outb(PIC1_DATA, 0xfb); 
 	outb(PIC2_DATA, 0xff); 
 
 
-	mask = 0xff;
+	mask = 0xfffb; // all masked except IRQ2
 	_sti();
 
 }
@@ -73,7 +73,6 @@ void pic_mask_irq(unsigned number, int do_mask) {
         mask |= 1 << number;
     else
         mask &= ~(1 << number);
-
 
     outb(PIC1_DATA, mask & 0xff);
     outb(PIC2_DATA, mask >> 8);
