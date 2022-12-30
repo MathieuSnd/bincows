@@ -152,7 +152,10 @@ void thread_add_exit_hook(thread_t* thread, exit_hook_fun_t hook);
 
 // the right process should be
 // locked and mapped before calling
-// this function
+// this function.
+//
+// The thread's process memory must be mapped 
+// for this operation.
 //
 // terminate a thread:
 // - call all exit hooks

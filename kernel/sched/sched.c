@@ -249,7 +249,7 @@ static void yield_irq_handler(struct driver* unused) {
  * and return a pointer on it.
  * The caller should have the interrupts disabled
  * 
- * the scheduler lock is aquired and not released
+ * the scheduler lock is acquired and not released
  * the caller is responsible for releasing the lock
  * after inserting the process in the list
  * 
@@ -550,7 +550,7 @@ int sched_kill_process(pid_t pid, int status) {
     // the entier operation is critical
     _cli();
 
-    // process is aquired there
+    // process is acquired there
     process_t* process = sched_get_process(pid);
     
 
@@ -560,12 +560,18 @@ int sched_kill_process(pid_t pid, int status) {
         return -1;
     }
 
+    volatile unsigned ntids = process->n_threads;
+    pid_t* tids = malloc(sizeof(pid_t) * process->n_threads);
+
 
     for(unsigned i = 0; i < process->n_threads; i++) {
         thread_t* thread = &process->threads[i];
-            // we do a lazy kill
+        // we do a lazy kill
 
         thread->should_exit = 1;
+
+        tids[i] = thread->tid;
+
 
         if(thread->state == RUNNING) {
             // @todo send an IPI to the thread cpu
@@ -575,6 +581,15 @@ int sched_kill_process(pid_t pid, int status) {
 
     spinlock_release(&process->lock);
     _sti();
+
+
+
+    // if the thread is blocked, wake it
+    for(unsigned i = 0; i < ntids; i++) {
+        sleep_cancel (pid, tids[i]);
+        sched_unblock(pid, tids[i]);
+    }
+    free(tids);
 
     // success
     return 0;
@@ -592,7 +607,16 @@ tid_t sched_create_thread(pid_t pid, void* entry, void* argument) {
     if(!proc)
         return 0;
 
-    tid_t tid = process_create_thread(proc, entry, argument);
+    tid_t tid;
+
+    // check that the current thread is not 
+    // being killed
+    thread_t* th = sched_get_thread_by_tid(proc, sched_current_tid());
+    if(th->should_exit) {
+        tid = -1;
+    }
+    else
+        tid = process_create_thread(proc, entry, argument);
 
 
     spinlock_release(&proc->lock);
@@ -748,29 +772,58 @@ void sched_free_killed_processes(void) {
 
 }
 
+static
+void soft_kill_processes(void) {
+    assert(current_pid == KERNEL_PID);
+
+    uint64_t rf = get_rflags();
+    // snapshot the pids
+    _cli();
+    
+    spinlock_acquire(&sched_lock);
+    
+    volatile int npids = n_processes - 1;
+    pid_t* pids = malloc(npids * sizeof(pid_t));
+    
+    for(unsigned i = 1; i < n_processes; i++) 
+        pids[i-1] = processes[i]->pid;
+
+    spinlock_release(&sched_lock);
+    set_rflags(rf);
+
+    // send SIGKILLs
+    for(int i = 0; i < npids; i++)  {
+        log_warn("sigkill %u", pids[i]);
+        int r = process_trigger_signal(pids[i], SIGKILL);
+        assert(!r);
+    }
+}
+
 
 void sched_cleanup(void) { 
-    _cli();
+    assert(current_pid == KERNEL_PID);
 
-    sched_running = 0;
 
-    // @todo: invoke sleep IPIs to 
-    // other CPUs
-
-    // start by setting current pid to 0
-    current_pid = KERNEL_PID;
-
+    soft_kill_processes();
     _sti();
+
+    // wait for the processes to close
+    for(int i = 0; i < 50; i++)
+        sched_yield();
+
 
     sched_free_killed_processes();
 
-    _cli();
 
+    _cli();
     spinlock_acquire(&sched_lock);
 
     cleanup_sleeping_threads();
 
     free_pqueue();
+
+    if(is_process_mapped(NULL))
+        process_unmap();
 
 
     // remove every process one by one
@@ -784,7 +837,8 @@ void sched_cleanup(void) {
 
 
         // free it
-        process_map(p);
+        if(p->pid != KERNEL_PID)
+            process_map(p);
 
         for(unsigned j = 0; j < p->n_threads; j++) {
             thread_t* t = &p->threads[j];
@@ -801,7 +855,7 @@ void sched_cleanup(void) {
 
         spinlock_release(&sched_lock);
         _sti();
-
+        
         free_process(p);
 
         // take the sched lock back
@@ -816,6 +870,7 @@ void sched_cleanup(void) {
     if(syscall_stacks)
         free(syscall_stacks);
 
+    sched_running = 0;
 
     spinlock_release(&sched_lock);
     _sti();
@@ -868,7 +923,7 @@ static void choose_next(process_t** pr, thread_t** th) {
     
     assert(proc); // assert that it exists.
     // the only way for a thread to exit is to
-    // be shceduled with the should_exit flag armed
+    // be scheduled with the should_exit flag armed
 
 
     thread_t* thread = sched_get_thread_by_tid(proc, thread_ids.tid);
@@ -1019,7 +1074,7 @@ int sched_block(void) {
 
     // test for futex signal
     t = sched_get_thread_by_tid(p, current_tid);
-    if(t->futex_signaled) {
+    if(t->futex_signaled || t->should_exit) {
         t->futex_signaled = 0;
 
         interrupted_block = 2;
@@ -1058,6 +1113,7 @@ void sched_kernel_wait(uint64_t ns) {
 
 
 void sched_unblock_thread(thread_t* t) {
+    assert(t != NULL);
 
     if(t->state != BLOCKED) {
         //log_info("unblocking unblocked thread");
@@ -1089,10 +1145,15 @@ void sched_unblock(pid_t pid, tid_t tid) {
         return;
 
     thread_t* t = sched_get_thread_by_tid(p, tid);
-    
-    //assert(t);
 
-    sched_unblock_thread(t);
+    if(!t) {
+        // the main thread is terminated,
+        // and the others are still there
+        // so the process is still in the
+        // process list
+    }
+    else
+        sched_unblock_thread(t);
 
 
     spinlock_release(&p->lock);
@@ -1154,9 +1215,17 @@ void schedule(void) {
 
         if(t->should_exit && !t->uninterruptible) {
             // lazy thread kill 
-            // lock the process
+            
+            // map the process to free virtual memory
+            int need_remap = !is_process_mapped(p);
+            
+            if(need_remap)
+                process_map(p);
 
             thread_terminate(t, t->exit_status);
+
+            if(need_remap)
+                process_unmap();
             
             // remove the element from the list
             *t = p->threads[p->n_threads - 1];
@@ -1206,8 +1275,18 @@ void schedule(void) {
         if(p->pid != 0)
             process_map(p);
     }
-    else if(p->pid != 0)
-        assert(is_process_mapped(p));
+    else if(p->pid != KERNEL_PID) {
+        if(!is_process_mapped(p)) {
+            // this situation happens when a thread needs
+            // its process memory to be mapped in order
+            // to be lazy freed. No process should be mapped
+            // at this point.
+            assert(!is_process_mapped(NULL));
+
+            // the current process needs to be remaped
+            process_map(p);
+        }
+    }
     else
         assert(!is_process_mapped(NULL));
 
@@ -1323,7 +1402,7 @@ static void kernel_process_shutdown(int do_reboot) {
 
     _cli();            
     assert(current_pid == KERNEL_PID);
-    process_t* p = sched_get_process(0);
+    process_t* p = sched_get_process(KERNEL_PID);
 
     assert(p);
     assert(p->n_threads == 1);
@@ -1422,8 +1501,6 @@ void kernel_process_entry(void) {
 
         
         if(lazy_shutdown) {
-            kernel_process_running = 1;
-
             kernel_process_shutdown(0);
         }
 

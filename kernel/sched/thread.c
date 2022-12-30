@@ -86,6 +86,8 @@ void thread_add_exit_hook(thread_t* thread, exit_hook_fun_t hook) {
 
 
 void thread_terminate(thread_t* thread, int status) {
+    assert(!thread->uninterruptible);
+    
     // call exit hooks
     for (size_t i = 0; i < thread->n_exit_hooks; i++)
         thread->exit_hooks[i](thread, status);
@@ -100,9 +102,8 @@ void thread_terminate(thread_t* thread, int status) {
     if(thread->pid != KERNEL_PID)
         xstate_free(thread->xstate);
 
-    // @todo free the thread stack
 
-    //unmap_pages(thread->stack.base, thread->stack.size << 12);
+    unmap_pages((uint64_t)thread->stack.base, thread->stack.size >> 12, 1);
 
 }
 

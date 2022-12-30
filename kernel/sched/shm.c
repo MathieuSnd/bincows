@@ -239,14 +239,12 @@ static uint64_t shm_alloc(size_t size) {
     );
 
     uint64_t master_pd = get_master_pd(temp);
+    uint64_t pd = get_pd(temp, 1);
 
     unmap_master_region(temp);
     physfree(master_pd);
 
 
-    // unmap_pages((uint64_t)temp, pages, 0);
-
-    uint64_t pd = get_pd(temp, 1);
 
     temp_release();
 
