@@ -49,6 +49,7 @@ void shutdown(void) {
 #ifdef USE_LAI
     log_debug("ACPI shutdown...");
     int error = lai_enter_sleep(5);
+    asm volatile("hlt");
     log_warn("LAI error %u", error);
     panic("ACPI shutdown failed");
 #else
