@@ -536,9 +536,6 @@ static void handle_long_filename_entry(
     // long filename entry
 
     memcpy(name_buf + 13 * order, longname, 13);
-
-    // make sure the string is null terminated
-    name_buf[13 * order + 13] = 0;
 }
 
 // return value:
@@ -664,6 +661,8 @@ dirent_t* fat32_read_dir(
         entries = realloc(entries,
                     sizeof(dirent_t) * (j + entries_per_cluster));
 
+        memset(entries + j, 0, sizeof(*entries) * entries_per_cluster);
+        
         read(part, cluster_begin(cluster, pr), buf, pr->cluster_size);
 
         for(unsigned i = 0; i < entries_per_cluster; i++) {
