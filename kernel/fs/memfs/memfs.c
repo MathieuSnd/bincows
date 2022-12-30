@@ -54,6 +54,7 @@ void memfs_register_file(const char* name, shmid_t id) {
     // @todo spinlock ????
 
     pr->files = realloc(pr->files, sizeof(memfsf_t) * (pr->n_files+1));
+    
     pr->files[pr->n_files++] = (memfsf_t) {
         .id = id,
         .name = strdup(name),
@@ -110,17 +111,18 @@ find_instance_by_hid(struct memfsf* file, int* index, handle_id_t hid) {
 
 
 
-static int open_instance(fs_t* restrict fs, uint64_t addr, handle_id_t hid) {
+static int memfs_open_instance(fs_t* restrict fs, uint64_t addr, handle_id_t hid) {
     shmid_t id = (shmid_t)addr;
 
     memfsf_t* file = find_file(fs, id);
 
+    log_debug("memfs_open_instance id %u", id);
+    stacktrace_print();
 
     // @todo locking ?
     assert(file);
 
     file_instance_t* present_fi = find_instance_by_pid(file, NULL);
-    assert(!present_fi);
 
     if(present_fi) {
         // the PID already opened an instance.
@@ -133,9 +135,11 @@ static int open_instance(fs_t* restrict fs, uint64_t addr, handle_id_t hid) {
 
     struct shm_instance* shm;
 
+    assert(id != NO_SHM);
     if(id == NO_SHM) {
-        // the shm is not created yet. lets do that mow
-        shm = shm_create(0, pid);
+        // the shm is not created yet. lets do that now
+        shm = shm_create(1, pid);
+        assert(shm);
         id = shm->target;
         file->id = id;
     }
@@ -344,20 +348,28 @@ static int update_dirent(struct fs* fs, uint64_t dir_addr,
 static int add_dirent(struct fs* restrict fs, uint64_t dir_addr, const char* name, 
                 uint64_t* dirent_addr, unsigned type) {
     (void)fs;
-    (void)dir_addr;
     (void)name;
     (void)dirent_addr;
     (void)type;
 
     assert(fs == memfs);
+    assert(sched_current_pid() != KERNEL_PID);
+
+    if(dir_addr != 0)
+        return -1;
 
     if(type != DT_REG)
         return -1;
 
-    *dirent_addr = 0;
-    memfs_register_file(name, NO_SHM);
+    struct shm_instance* shm = shm_create(1, sched_current_pid());
+    assert(shm);
+    int id = shm->target;
+
+    *dirent_addr = id;
+    log_debug("add %d", id);
+    memfs_register_file(name, id);
     
-    return -1;
+    return 0;
 }
 
 
@@ -416,7 +428,7 @@ fs_t* memfs_mount(void) {
 
     fs->open_file          = NULL;
     fs->close_file         = close_file;
-    fs->open_instance      = open_instance;
+    fs->open_instance      = memfs_open_instance;
     fs->close_instance     = close_instance;
     fs->read_file_sectors  = read;
     fs->write_file_sectors = write;
