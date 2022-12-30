@@ -6,6 +6,8 @@
 #include <SDL.h>
 
 #include <pthread.h>
+#include <sys/mman.h>
+#include <sys/types.h>
 #include <sys/events.h>
 
 extern "C" {
@@ -46,18 +48,21 @@ static void disable_events(void) {
 */
 struct ipc_t {
     FILE* cmd_f;
-    FILE* resp_f;
+    char* shared_name;
+    void* shared_base;
+    
 
     void close() {
         fclose(cmd_f);
-        fclose(resp_f);
+        shm_unlink(shared_name);
+        free(shared_name);
     }
 
     int read(bde_cmd& cmd) {
         return fread(&cmd, 1, sizeof(cmd), cmd_f) == sizeof(cmd);
     }
     int write(bde_resp& resp) {
-        return fwrite(&resp, 1, sizeof(resp), resp_f) == sizeof(resp);
+        
     }
 
 
@@ -68,33 +73,41 @@ struct ipc_t {
             - 1 - stdout /dev/term
             - 2 - extout pipe -> init
             - 3 - window command pipe write
-            - 4 - window response pipe read
+            - 4 - bde shared space
             -------------------------------
             - ? - window command pipe read
-            - ? - window response pipe write
         */
+       static int i = 0;
+       i++;
+       shared_name = (char*)malloc(128);
+       snprintf(shared_name, 128, "/bde__%u", i);
 
         int pipe_ends[2];
 
         pipe(pipe_ends);
         assert(pipe_ends[0] == 3);
-
         assert(pipe_ends[1] == 4);
 
-        pipe(pipe_ends);
 
-        int resp_pipe_read  = pipe_ends[0]; // read end
-        int resp_pipe_write = pipe_ends[1]; // write end
 
-        
+
         int cmd_pipe_read = dup(3);
         dup2(4, 3);
+        ::close(4);
+
+        int shared_fd = shm_open(shared_name, O_CREAT, static_cast<mode_t>(0));         
+        assert(shared_fd == 4);
+
+        shared_base = mmap(NULL, 0, 0, 0, 0, 0);
+        int r = ftruncate(shared_fd, sizeof(struct bde_shared_space));
         
-        
-        dup2(resp_pipe_read, 4);
-        ::close(resp_pipe_read);
 
         cmd_f  = fdopen(cmd_pipe_read,   "r");
+    }
+
+    void clean_lower_fds(void) {
+        ::close(3);
+        ::close(4);
     }
 };
 
@@ -258,6 +271,7 @@ static void execute_gui_program(const char* path, ipc_t* ipc) {
 }
 
 
+extern "C"
 int main(int argc, char** argv) {
 
     init_fd_layout();
