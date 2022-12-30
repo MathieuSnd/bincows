@@ -683,7 +683,7 @@ static dir_cache_ent_t *get_cache_entry(const char *path)
 
 
     // @todo: add vfs cache spinlock:
-    // aquire it there, and free it after 
+    // acquire it there, and free it after 
     // doing stuf with the returned entry
     assert(is_absolute(path));
 
@@ -1120,10 +1120,8 @@ int vfs_create(const char* path, int type) {
 
     assert(strlen(filename) > 0);
 
-
-    // if the parent directory
-    // is not a directory, or does not
-    // exist
+    // if the parent is not a directory, or 
+    // does not exist
     if(fs == FS_NO || parentdir.type != DT_DIR) {
         free(pathbuf);
         return 1;
