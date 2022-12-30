@@ -199,7 +199,7 @@ uint64_t search_or_insert_file(
 
 
 
-static struct file_ent* aquire_vfile(uint64_t vfile_id) {
+static struct file_ent* acquire_vfile(uint64_t vfile_id) {
     assert(!interrupt_enable());
     spinlock_acquire(&vfile_lock);
 
@@ -211,7 +211,8 @@ static struct file_ent* aquire_vfile(uint64_t vfile_id) {
         }
     }
 
-    panic("vfs_files: file not found");
+    log_debug("acquire_vfile: race condition");
+    return NULL;
 }
 
 static void release_vfile(void) {
@@ -231,7 +232,7 @@ static void register_handle_to_vfile(
     _cli();
 
     {
-        struct file_ent* file_ent = aquire_vfile(vfile_id);
+        struct file_ent* file_ent = acquire_vfile(vfile_id);
 
         // register the handle in the file entry
         file_ent->n_insts++;
@@ -339,13 +340,13 @@ file_handle_t* create_handler(
 static 
 void invalidate_handlers_buffer(
         struct file_ent* restrict ent,
-        file_handle_t* restrict protected 
+        file_handle_t* restrict self 
 ) {
     if(!ent->fs->cacheable)
         return;
 
     for(int i = 0; i < ent->n_insts; i++) {
-        if(ent->fhs[i] != protected)
+        if(ent->fhs[i] != self)
             ent->fhs[i]->buffer_valid = 0;
     }
 }
@@ -456,7 +457,7 @@ file_handle_t* vfs_handle_dup(file_handle_t* restrict from) {
     handle_id_t hid = handle_next_id();
     
     {
-        struct file_ent* e = aquire_vfile(vfile_id);
+        struct file_ent* e = acquire_vfile(vfile_id);
         addr = e->addr;
         release_vfile();
     }
@@ -465,8 +466,9 @@ file_handle_t* vfs_handle_dup(file_handle_t* restrict from) {
 
     int allowed;
     
-    if(fs->open_instance)
+    if(fs->open_instance) {
         allowed = fs->open_instance(fs, addr, hid);
+    }
     else
         allowed = 1;
 
@@ -600,7 +602,7 @@ void vfs_flush_file(file_handle_t *handle) {
 
     _cli();
     {
-        struct file_ent* vfile = aquire_vfile(handle->vfile_id);
+        struct file_ent* vfile = acquire_vfile(handle->vfile_id);
         flush(vfile);
 
         release_vfile();
@@ -610,18 +612,116 @@ void vfs_flush_file(file_handle_t *handle) {
 }
 
 
-/**
- * @todo
- */
-void vfs_close_file(file_handle_t *handle) {
+// these two functions ensure atomicity of
+// file accesses
+// return non-null on success, -1 on failure
+// this function can fail if the file is 
+// concurently closed
+// copy the file structure. It should only be 
+// modified by the file access owner.
+static int acquire_file_access(uint64_t vfile_id, file_t* copy) {
+    int accessed = 0;
 
+    assert(interrupt_enable());
+
+    assert(copy);
+
+    do {
+        _cli();
+        {
+            struct file_ent* vfile = acquire_vfile(vfile_id);
+
+            if(!vfile) {
+                _sti();
+                return -1;
+            }
+            accessed = vfile->accessed;
+            *copy = vfile->file;
+
+            vfile->accessed = 1;
+            release_vfile();
+            
+        }
+        _sti();
+
+        
+        if(accessed) {
+            sched_yield();
+        }
+
+        
+        // yield until the process is done
+    } while(accessed);
+
+
+    return 0;
+}
+
+static void release_file_access(uint64_t vfile_id) {
+
+    assert(interrupt_enable());
+
+    _cli();
+    {
+        struct file_ent* vfile = acquire_vfile(vfile_id);
+        assert(vfile->accessed);
+
+        // the file cannot be closed while it is accessed
+        assert(vfile);
+        vfile->accessed = 0;
+        
+        release_vfile();
+    }
+    _sti();
+}
+
+
+// the vfile to update must be acquired
+// already by this thread
+// the updater will not have his cache invalidated.
+// If it is unwanted, it should be set to NULL.
+static 
+void update_vfile(uint64_t vfile_id, const file_t* file, 
+                    file_handle_t* updater) {
+    assert(interrupt_enable());
+    _cli();
+    {
+        log_info("update vfile %u", sched_current_pid());
+        struct file_ent *vfile = acquire_vfile(vfile_id);
+
+        invalidate_handlers_buffer(vfile, updater);
+        
+        vfile->file_size = file->file_size;
+        vfile->addr      = file->addr;
+                
+        release_vfile();
+    }
+    _sti();
+}
+
+
+
+
+void vfs_close_file(file_handle_t *handle) {
 
     fs_t *fs = handle->fs;
 
     handle_id_t hid = handle->handle_id;
 
+    file_t file;
+    //log_warn("%u.%u close.acquire_file_access", sched_current_pid(),sched_current_tid());
+    int res = acquire_file_access(handle->vfile_id, &file);
+    //log_warn("%u.%u close.acquire_file_access OK", sched_current_pid(),sched_current_tid());
+
+    
+
+
+    if(res) { // couldn't acquire the file access
+        return; // @todo return an error
+    }
+
     _cli();
-    struct file_ent* restrict open_file = aquire_vfile(handle->vfile_id);
+    struct file_ent* restrict open_file = acquire_vfile(handle->vfile_id);
 
 
     if(fs->close_instance)
@@ -686,92 +786,18 @@ void vfs_close_file(file_handle_t *handle) {
             fs->close_file(fs, addr);
     }
     else {
-
         spinlock_release(&vfile_lock);
         _sti();
+        release_file_access(handle->vfile_id);
     }
-    /*
-    else {
-        int found = 0;
-        // remove the handle from the list
-        for(unsigned i = 0; i < open_file->n_insts + 1; i++) {
-            if(handle == open_file->fhs[i]) {
-                // found it!
-                // now make sure to remove it:
-                unsigned to_move = open_file->n_insts - i;
-
-                memmove(
-                    &open_file->fhs[i], 
-                    &open_file->fhs[i + 1],
-                    to_move * sizeof(file_handle_t *)
-                );
-
-                // we don't really need to shrink the buffer,
-                // it won't ever get very big, and a shrink
-                // would happend when the last file handle
-                // is closed or a new file handle is opened
-                
-                found = 1;
-
-                break;
-            }
-        }
-        // the handle is in the file list
-        assert(found);
-    }
-    */
 
 
-    
+    // @todo solve problem here
     free(handle);
     fs->n_open_files--;
 
 
     assert(fs->n_open_files >= 0);
-}
-
-
-
-// these two functions ensure atomicity of
-// file accesses
-
-static void aquire_file_access(uint64_t vfile_id) {
-    int accessed = 0;
-    
-    do {
-        _cli();
-        {
-            struct file_ent* vfile = aquire_vfile(vfile_id);
-            accessed = vfile->accessed;
-
-            vfile->accessed = 1;
-            release_vfile();
-            
-        }
-        _sti();
-
-        
-        if(accessed) {
-            sched_yield();
-        }
-
-        
-        // yield until the process is done
-    } while(accessed);
-}
-
-static void release_file_access(uint64_t vfile_id) {
-
-    assert(interrupt_enable());
-
-    _cli();
-    {
-                struct file_ent* vfile = aquire_vfile(vfile_id);
-        assert(vfile);
-                vfile->accessed = 0;
-                release_vfile();
-    }
-    _sti();
 }
 
 
@@ -789,38 +815,19 @@ int vfs_truncate_file(file_handle_t *handle, uint64_t size)
 
 
     file_t file;
-    // aquire vfile
-    {
-        _cli();
-        struct file_ent* f = aquire_vfile(handle->vfile_id);
-        f->accessed = 1;
-        file = f->file;
-        release_vfile();
-        _sti();
+    // acquire vfile access and fetch file
+    int res = acquire_file_access(handle->vfile_id, &file);
+
+    if(res) { // couldn't acquire the file access
+        return -1;
     }
 
-    int res = fs->truncate_file(fs, &file, size);
+    res = fs->truncate_file(fs, &file, size);
 
-    // release vfile
-    {
-        _cli();
-        struct file_ent* f = aquire_vfile(handle->vfile_id);
+    if(!res)
+        update_vfile(handle->vfile_id, &file, NULL);
 
-        // invalidate access granularity caches for this file
-        invalidate_handlers_buffer(f, NULL);
-        
-        // the operation can fail
-        if(!size) {
-            f->file_size = size;
-        }
-        f->addr = file.addr;
-
-
-        f->accessed = 0;
-        release_vfile();
-        _sti();
-    }
-
+    release_file_access(handle->vfile_id);
 
     return res;
 }
@@ -837,32 +844,29 @@ size_t vfs_read_file(void *ptr, size_t size,
     assert(stream);
     assert((uint64_t)ptr >= 0x1000);
 
-    if(!(stream->flags & VFS_READ))
+    if(!(stream->flags & VFS_READ)) {
+        log_info("MORUDEL");
         return -1;
+    }
 
-
-    aquire_file_access(stream->vfile_id);
-    
 
     void *const buf = stream->sector_buff;
 
     fs_t *fs = stream->fs;
-
-
-
-    uint64_t file_size;
-    {
-        _cli();
-        struct file_ent* vfile = aquire_vfile(stream->vfile_id);
-
-        file_size = vfile->file_size;
-        release_vfile();
-        _sti();
-    }
-
     unsigned granularity = fs->file_access_granularity;
-
     unsigned cachable = fs->cacheable;
+
+
+    file_t file;
+    int res = acquire_file_access(stream->vfile_id, &file);
+    
+    if(res) { // couldn't acquire the file access
+        log_warn("  HIENT");
+        return -1;
+    }
+    
+    uint64_t file_size = file.file_size;
+
 
     
     // file_size can be -1 for infinite files
@@ -951,14 +955,6 @@ size_t vfs_read_file(void *ptr, size_t size,
         read_buf = malloc(read_buf_size);
     }
 
-    file_t file;
-    {
-        _cli();
-        struct file_ent* vfile = aquire_vfile(stream->vfile_id);
-        file = vfile->file;
-        release_vfile();
-        _sti();
-    }
 
 
     int rd = fs->read_file_sectors(
@@ -1042,7 +1038,6 @@ size_t vfs_write_file(const void *ptr, size_t size,
         return 0;
     }
 
-    aquire_file_access(stream->vfile_id);
     
     assert(stream);
     assert((uint64_t)ptr >= 0x1000);
@@ -1059,17 +1054,15 @@ size_t vfs_write_file(const void *ptr, size_t size,
 
     // this filed is a copy.
     // if the file size is to be updated, we have to 
-    // reaquire the vfile.
-    
+    // reacquire the vfile.    
     file_t file_copy;
-    _cli();
-    {
-        struct file_ent* vfile = aquire_vfile(stream->vfile_id);
-        file_copy = vfile->file;
 
-        release_vfile();
+    int res = acquire_file_access(stream->vfile_id, &file_copy);
+
+    if(res) { // couldn't acquire the file access
+        return -1;
     }
-    _sti();
+
 
     if(stream->flags & VFS_APPEND) {
         set_stream_offset(stream, file_copy.file_size);
@@ -1257,28 +1250,20 @@ size_t vfs_write_file(const void *ptr, size_t size,
     stream->sector_offset = end_offset;
     stream->file_offset += size;
     stream->sector_count = stream->file_offset / granularity;
-    
-    if((file_copy.file_size != ~0llu && file_copy.file_size < stream->file_offset) // size update
-        || file_addr != file_copy.addr           // address update
-    ) {
+
+
+    int size_update = 0;
+    int address_update = file_addr != file_copy.addr;
+    if(file_copy.file_size != ~0llu 
+    && file_copy.file_size < stream->file_offset) {
+        size_update = 1;
         file_copy.file_size = stream->file_offset;
-        // update file size
-        // we need to reaquire the vfile
-        _cli();
-        {
-
-            struct file_ent *vfile = aquire_vfile(stream->vfile_id);
-            vfile->file_size = stream->file_offset;
-            vfile->addr      = file_copy.addr;
-            
-            invalidate_handlers_buffer(vfile, stream);
-            
-            release_vfile();
-        }
-        _sti();
     }
-
-
+    
+    
+    if(size_update || address_update) 
+        // update file size and address
+        update_vfile(stream->vfile_id, &file_copy, stream);
     
 
     release_file_access(stream->vfile_id);
@@ -1291,7 +1276,7 @@ size_t vfs_write_file(const void *ptr, size_t size,
 
 
 uint64_t vfs_seek_file(file_handle_t *restrict stream, uint64_t offset, int whence)
-{    
+{
     assert(interrupt_enable());
 
     if((stream->flags & VFS_SEEKABLE) == 0) {
@@ -1309,7 +1294,7 @@ uint64_t vfs_seek_file(file_handle_t *restrict stream, uint64_t offset, int when
         break;
     case SEEK_END:
         _cli();
-        absolute_offset += aquire_vfile(stream->vfile_id)->file_size;
+        absolute_offset += acquire_vfile(stream->vfile_id)->file_size;
         release_vfile();
         _sti();
         break;
@@ -1320,7 +1305,12 @@ uint64_t vfs_seek_file(file_handle_t *restrict stream, uint64_t offset, int when
         return -1;
     }
 
+    _cli();
+    acquire_vfile(stream->vfile_id);
+    // stream fields are protected by the vfile lock
     set_stream_offset(stream, absolute_offset);
+    release_vfile();
+    _sti();
 
     // everything is fine: return the absolute offset
     return absolute_offset;
@@ -1329,5 +1319,6 @@ uint64_t vfs_seek_file(file_handle_t *restrict stream, uint64_t offset, int when
 
 long vfs_tell_file(file_handle_t *restrict stream)
 {
+    // @todo acquire vfile to make this function atomic
     return stream->file_offset;
 }
