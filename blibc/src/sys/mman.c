@@ -14,15 +14,16 @@ static int npairs;
 struct shm_pair* pairs;
 
 
-
+static
 char* filename(const char* name) {
-    const char* str1 = "/shm";
+    const char* str1 = "/mem";
 
     // return str1 + name
-    char* ret = malloc(strlen(str1) + strlen(name));
+    char* ret = malloc(strlen(str1) + strlen(name) + 1);
 
     strcpy(ret, str1);
     strcat(ret, name);
+
     return ret;
 }
 

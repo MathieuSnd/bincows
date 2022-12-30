@@ -4,7 +4,7 @@
 #include <stdint.h>
 
 // @todo move to /dev/ps2
-#define SYS_EVENT_FILE "/dev/ps2kb"
+#define SYS_EVENT_FILE "/dev/ps2"
 
 // keys
 #define KEY_ESCAPE 1
