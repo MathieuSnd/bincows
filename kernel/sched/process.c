@@ -313,7 +313,7 @@ int create_kernel_process(process_t* process) {
         .exit_hooks = NULL,
         .n_exit_hooks = 0,
         .lock = 0,
-        .pid = 0,
+        .pid = KERNEL_PID,
         .tid = 1,
         .state = BLOCKED,
         .running_cpu_id = 0,
@@ -356,8 +356,8 @@ int create_kernel_process(process_t* process) {
         .n_threads = 1,
         .threads = threads,
         .page_dir_paddr = 0,
-        .pid  = 0,
-        .ppid = 0,
+        .pid  = KERNEL_PID,
+        .ppid = KERNEL_PID,
         .cwd  = strdup("/"), // root directory
         .program = NULL,
         .clock_begin = clock_ns(),
@@ -421,7 +421,7 @@ void free_process(process_t* process) {
     if(process->program)
         elf_free(process->program);
 
-    if(process->pid != 0) {
+    if(process->pid != KERNEL_PID) {
         // free process memory
         _cli();
         for(int i = 0; i < process->n_shms; i++)
@@ -800,6 +800,7 @@ int prepare_process_signal(process_t* process, int signal) {
     // disable pending bit
     process->sig_pending &= ~(1 << signal);
 
+
     // @todo make sure thread0 is not running on any core
     assert(process->n_threads >= 1);
     assert(process->threads[0].state != RUNNING);
@@ -982,7 +983,7 @@ int process_trigger_signal(pid_t pid, int signal) {
     if(!process) {
         // no such process
         set_rflags(rf);
-        log_warn("no proc");
+        log_debug("process closed concurrently with a signal");
         return -1;
     }
 
