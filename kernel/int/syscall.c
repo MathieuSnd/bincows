@@ -1271,7 +1271,7 @@ uint64_t sc_kill(process_t* proc, void* args, size_t args_sz) {
         return -1;
     }
 
-    if(pid == 0) {
+    if(pid == KERNEL_PID) {
         // @todo maybe signal to kernel thraed to 
         // shutdown / reboot / ...
         sc_warn("bad pid", args, args_sz);
@@ -1603,7 +1603,7 @@ struct sc_return syscall_main(uint8_t   scid,
     uint64_t res;
 
     if(!scid && scid >= SC_END) {
-        log_info("process %u, thread %u: bad syscall", sched_current_pid(), sched_current_tid());
+        log_debug("process %u, thread %u: bad syscall", sched_current_pid(), sched_current_tid());
         for(;;)
             asm ("hlt");
 
@@ -1622,7 +1622,7 @@ struct sc_return syscall_main(uint8_t   scid,
         assert(interrupt_enable());
 
 
-        //log_debug("%u.%u: %s - OK", sched_current_pid(), sched_current_tid(), scname[scid]);        
+        //log_debug("%u.%u: %s - OK", sched_current_pid(), sched_current_tid(), scname[scid]);
 
     }
 
