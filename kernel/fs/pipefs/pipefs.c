@@ -202,7 +202,7 @@ static int add_dirent(struct fs* restrict fs, uint64_t dir_addr, const char* nam
 }
 
 
-// aquires the file and disables interrupts if found
+// acquires the file and disables interrupts if found
 static pipefs_file_t* get_file(struct pipefs_priv* priv, id_t id) {
     uint64_t rf = get_rflags();
 
@@ -242,7 +242,6 @@ static pipefs_file_t* wait_for_buffer(struct pipefs_priv* priv, pipefs_file_t* f
     spinlock_release(&file->lock);
     _sti();
 
-
     // wait for the buffer to be filled
     if(sched_block()) {
         // signal triggered:
@@ -252,7 +251,7 @@ static pipefs_file_t* wait_for_buffer(struct pipefs_priv* priv, pipefs_file_t* f
     }
 
     // may be filled
-    // reaquire file
+    // reacquire file
     return get_file(priv, id);
 }
 
@@ -267,7 +266,7 @@ static void broadcast_waiters(pipefs_file_t* file) {
 }
 
 
-static int read(struct fs* restrict fs, const file_t* restrict fd,
+static int pipefs_read(struct fs* restrict fs, const file_t* restrict fd,
         void* restrict buf, uint64_t begin, size_t n)  {
 
     // unseekable file
@@ -678,7 +677,7 @@ fs_t* pipefs_mount(void) {
     fs->open_file          = NULL;
     fs->open_instance      = NULL;
     fs->close_instance     = NULL;
-    fs->read_file_sectors  = read;
+    fs->read_file_sectors  = pipefs_read;
     fs->write_file_sectors = write;
     fs->truncate_file      = truncate_file;
     fs->unmount            = unmount;
