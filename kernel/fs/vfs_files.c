@@ -878,7 +878,7 @@ size_t vfs_read_file(void *ptr, size_t size,
     uint64_t max_read = file_size - stream->file_offset;
 
     unsigned bsize = MIN(size, max_read);
-    const unsigned retsize = bsize;
+    unsigned retsize = bsize;
 
     if(bsize <= 0) {
         // nothing to read
@@ -985,6 +985,8 @@ size_t vfs_read_file(void *ptr, size_t size,
 
         read_buf_size = rd;
         bsize -= read_blocks - rd;
+
+        retsize = bsize;
     }
 
 
