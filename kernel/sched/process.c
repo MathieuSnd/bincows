@@ -983,7 +983,7 @@ int process_trigger_signal(pid_t pid, int signal) {
     if(!process) {
         // no such process
         set_rflags(rf);
-        log_debug("process closed concurrently with a signal");
+        log_debug("process %u exited concurrently with a signal", pid);
         return -1;
     }
 

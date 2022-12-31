@@ -1,3 +1,4 @@
+#include <stdatomic.h>
 #include "sched.h"
 #include "process.h"
 #include "../int/idt.h"
@@ -60,7 +61,7 @@ static tid_t current_tid = 0;
 static int currently_in_irq = 0;
 static int currently_in_nested_irq = 0;
 
-static int sched_running = 0;
+static atomic_int sched_running = 0;
 
 // 1 if the kernel process is doing
 // something important and doesn't 
@@ -793,7 +794,6 @@ void soft_kill_processes(void) {
 
     // send SIGKILLs
     for(int i = 0; i < npids; i++)  {
-        log_warn("sigkill %u", pids[i]);
         int r = process_trigger_signal(pids[i], SIGKILL);
         assert(!r);
     }
@@ -804,16 +804,20 @@ void sched_cleanup(void) {
     assert(current_pid == KERNEL_PID);
 
 
+    log_info("send sigkill to every process...");
     soft_kill_processes();
     _sti();
 
+    log_info("wait for processes to exit...");
+
     // wait for the processes to close
-    for(int i = 0; i < 50; i++)
+    for(int i = 0; i < 10; i++)
         sched_yield();
 
+    sched_running = 0;
 
     sched_free_killed_processes();
-
+    log_info("%u processes refused to exit", n_processes - 1);
 
     _cli();
     spinlock_acquire(&sched_lock);
@@ -870,7 +874,6 @@ void sched_cleanup(void) {
     if(syscall_stacks)
         free(syscall_stacks);
 
-    sched_running = 0;
 
     spinlock_release(&sched_lock);
     _sti();
