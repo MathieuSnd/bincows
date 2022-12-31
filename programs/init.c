@@ -7,25 +7,57 @@
 #include <bc_extsc.h>
 #include <pthread.h>
 
-#define EXTOUT_RD 4
+#define EXTOUT_FILENO 3
 
-#define SH_CMD "/bin/bde"
+#define SH_PATH "/bin/sh"
+#define DE_PATH "/bin/bde"
 
+
+// if the read_events falls,
+// the reader waits until the cond
+// is signaled
+static int read_events = 1;
+static pthread_mutex_t read_events_mutex;
+static pthread_cond_t  read_events_cond;
+
+
+#define OPCODE_PROCESS_EVENTS 1
+
+struct extout_cmd {
+    uint32_t opcode;
+    uint8_t cmd[32];
+};
 
 // extout thread
 void* extout_main(void* a) {
     while(1) {
-        uint32_t cmd;
+        struct extout_cmd cmd;
 
-        int res = read(EXTOUT_RD, &cmd, 4);
+        int res = read(4, &cmd, sizeof(cmd));
 
-        if(!res) {
-            return NULL;
+        if(res != sizeof(cmd)) {
+            break;
         }
 
-        // maybe do something
+        switch(cmd.opcode) {
+            case OPCODE_PROCESS_EVENTS:
+                if(cmd.cmd[0] == 0)
+                    read_events = 0;
+                else
+                    read_events = 1;
+                pthread_cond_signal(&read_events_cond);
+                break;
+            default:
+                // unrecognized
+                break;
+        };
     }
+
+    read_events = 1;
+    pthread_cond_signal(&read_events_cond);
+    return NULL;
 }
+
 
 
 
@@ -45,16 +77,19 @@ void open_stdout_stderr(void) {
     close(0);
 }
 
+static volatile int sigchld = 0;
 
-int main(int argc, char** argv) {
+void sigchld_h(int sig) {
+    sigchld = 1;
+}
 
-    open_stdout_stderr();
 
+void prepare_forkexec(void) {
     // user fd disposition:
     // 0: READ  read pipe end  - stdin   init -> user
     // 1: WRITE /dev/term      - stdout  user -> sys
     // 2: WRITE /dev/term      - stderr  user -> sys
-    // 3. WRITE pipe write end - extout  user -> init
+    // 3: WRITE pipe write end - extout  user -> init
 
 
     int pipe_stdin_fds[2];
@@ -85,30 +120,64 @@ int main(int argc, char** argv) {
 
 
     pipe_stdin_fds[1] = 6;
+}
+
+void close_pipes(void) {
+    close(0); // stdin
+    close(3); // extout write
+    close(4); // extout read
+    close(6); // stdin write
+}
 
 
+void execute(const char* path) {
+    const char* const sh_argv[] = {path, NULL};
 
-    const char* const sh_argv[] = {SH_CMD, NULL};
-
+    prepare_forkexec();
     // keep fds 0, 1, 2, 3
     forkexec(sh_argv, ~0x0f);
+    pthread_create(NULL, NULL, extout_main, NULL);
+}
+
+
+
+void read_events_loop(void) {
+    struct sys_event ev = {0};
+
 
     FILE* evfile = fopen(SYS_EVENT_FILE, "r");
 
     if(!evfile) {
-        printf("term: couldn't open system event file\n");
+        printf("init: couldn't open system event file\n");
         exit(1);
     }
-    close(3); // extout write
-    //close(0); // stdin read
 
-    //pthread_create(NULL, NULL, extout_main, NULL);
-    struct sys_event ev = {0};
+
     while(1) {
-        res = read(fileno(evfile), &ev, sizeof(ev));
-        if(res != sizeof(ev)) {
-            break;
+        if(!read_events) {
+            pthread_mutex_lock(&read_events_mutex);
+
+            while(!read_events) {
+                pthread_cond_wait(&read_events_cond, &read_events_mutex);
+            }   
+
+            pthread_mutex_unlock(&read_events_mutex);
         }
+        
+        if(sigchld)
+            break;
+
+        int res = read(fileno(evfile), &ev, sizeof(ev));
+        
+        if(sigchld)
+            break;
+
+
+        if(res != sizeof(ev)) {
+            printf("init: broken pipe %d\n", res);
+            exit(1);
+        }
+
 
         int ascii_key = (ev.type == KEYPRESSED) && ev.unix_sequence[0] != 0;
 
@@ -118,15 +187,39 @@ int main(int argc, char** argv) {
             res = write(6, ev.unix_sequence, strlen(ev.unix_sequence));
             if(res <= 0) {
                 printf("init: broken pipe %d\n", res);
-                break;
+                exit(1);
             }
         }
     }
 
-    close(0); // stdin read
-    close(1); // stdout write
-    close(2); // stderr write
-    close(4); // extout read
-    close(6); // stdin write
+    sigchld = 0;
+
+
     fclose(evfile);
+}
+
+
+int main(int argc, char** argv) {
+
+    open_stdout_stderr();
+
+    signal(SIGCHLD, sigchld_h);
+
+
+
+    pthread_mutex_init(&read_events_mutex, NULL);
+    pthread_cond_init(&read_events_cond, NULL);
+
+
+    while(1) {
+        execute(SH_PATH);
+        read_events_loop();
+        close_pipes();
+
+
+        execute(DE_PATH);
+        read_events_loop();
+        close_pipes();
+
+    }
 }
