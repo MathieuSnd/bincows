@@ -15,7 +15,7 @@
 const char* version_string = 
         "Welcome in the Bincows Shell!\n"
         "Version: " VERSION "\n"
-//        "Copyright (c) 2020-2021 \n"
+//        "Copyright (c) 2020-2022 \n"
         "see https://github.com/MathieuSnd/bincows\n"
         "type help to list commands\n\n"
 ;
@@ -34,7 +34,7 @@ static int execute(char* cmd);
 /*
  moved to /dev/init
 void init_stream(void) {
-    int __stdin  = open("/dev/ps2kb", 0,0);
+    int __stdin  = open("/dev/ps2", 0,0);
     int __stdout = open("/dev/term", 0,0);
     int __stderr = open("/dev/term", 0,0);
 
@@ -49,9 +49,9 @@ void init_stream(void) {
 
 
 void print_cow(void) {
-    int file = open("/boot/boot_message.txt", 0,0);
+    int file = open("/boot/boot_message.txt", O_RDONLY,0);
     if(file < 0) {
-        printf("/boot/cow not found\n");
+        printf("/boot/boot_message.txt not found\n");
         return;
     }
 
@@ -67,10 +67,14 @@ void print_cow(void) {
         return;
     }
 
-    size_t n = read(file, buf, file_size);
+    int n = read(file, buf, file_size);
+
+    if(n <= 0) {
+        printf("shell error: couldn't read file %s", 
+        "/boot/boot_message.txt");
+    }
 
     buf[n] = '\0';
-
     printf("%s\n", buf);
 
     free(buf);
@@ -608,10 +612,7 @@ void exec_script(const char* path) {
 
 
 int main(int argc, char** argv) {
-    //init_stream();
-    
     signal(SIGCHLD, sigchld_handler);
-
 
     // current working directory
     cwd = getcwd(NULL, 0);
