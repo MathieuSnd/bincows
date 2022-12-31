@@ -861,7 +861,6 @@ size_t vfs_read_file(void *ptr, size_t size,
     int res = acquire_file_access(stream->vfile_id, &file);
     
     if(res) { // couldn't acquire the file access
-        log_warn("  HIENT");
         return -1;
     }
     

@@ -116,9 +116,6 @@ static int memfs_open_instance(fs_t* restrict fs, uint64_t addr, handle_id_t hid
 
     memfsf_t* file = find_file(fs, id);
 
-    log_debug("memfs_open_instance id %u", id);
-    stacktrace_print();
-
     // @todo locking ?
     assert(file);
 
