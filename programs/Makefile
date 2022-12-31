@@ -9,6 +9,7 @@ include Makefile.config
 CFILES :=$(shell echo *.c)
 EFILES := $(CFILES:.c=.elf)
 BIN_DIR := ../build/bin/
+ETC_DIR := ../build/etc/
 
 
 
@@ -36,7 +37,8 @@ all: $(EFILES) txe bde
 	cp init.elf $(BIN_DIR)/init
 	cp echo.elf $(BIN_DIR)/echo
 	cp txe/txe.elf $(BIN_DIR)/txe
-	cp bde/bde.elf $(BIN_DIR)/bde
+	cp bde/bde.elf $(BIN_DIR)/bde	
+	cp -r ../resources/bde $(ETC_DIR)/bde
 
 %.elf: %.c
 	$(CC) $(CFLAGS) -c $< -o $@.o

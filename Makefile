@@ -30,14 +30,16 @@ QEMU_ARGS := -bios $(QEMU_BIOS_FILE)   \
 			 -m    $(QEMU_RAM_MB)      \
 			 -D    $(QEMU_LOG_FILE)    \
 			 $(QEMU_GRAPHICS_OPTIONS)  \
-			 -d int                    \
 			 -M q35                    \
+			 -cpu host \
+			 -accel kvm \
 			 -monitor stdio            \
 			 -no-reboot  -no-shutdown  \
 			 -device nvme,drive=NVME1,serial=deadbeef \
 			-drive format=raw,if=none,id=NVME1,file=$(IMAGE_FILE) \
 			 $(QEMU_EXTRA_OPTIONS)
 			
+# -cpu Icelake-Server \
 
 run_qemu: compile image_file local_disk_install
 	$(QEMU_PATH) $(QEMU_ARGS)
@@ -97,8 +99,6 @@ image_file: kernel $(IMAGE_FILE)
 	rm -rf img_mount
 
 
-	echo ok
-
 
 remount_disk:
 	sudo losetup -P $(USED_LOOPBACK) $(IMAGE_FILE)
@@ -116,7 +116,7 @@ demount_disk:
 
 
 
-kernel: force_look
+kernel: lai force_look
 	$(MAKE) -C ./kernel/ $(KERNEL_TARGET)
 
 clean:
@@ -140,6 +140,7 @@ limine_efi_install:
 all:
 	mkdir -p ./build/
 	mkdir -p ./build/bin
+	mkdir -p ./build/etc
 	mkdir -p ./build/var/log
 	mkdir -p ./build/boot
 	mkdir -p ./build/EFI/BOOT
@@ -159,7 +160,7 @@ all:
 
 #LDFLAGS := -shared -fno-pie -fno-pic
 CFLAGS := -O3 -mgeneral-regs-only -Wall -Wextra -mno-red-zone \
-		  -ffreestanding -Iinclude/ -fno-pie -fno-stack-protector -fno-pic -g
+			-ffreestanding -Iinclude/ -fno-pie -fno-stack-protector -fno-pic -g
 
 lai: 
 	make -C lai
